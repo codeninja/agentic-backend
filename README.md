@@ -115,7 +115,7 @@ For existing systems:
 
 ## Status
 
-Early development. Concepts drawn from production systems at Tractian, Trust Radius, and ninja-adk.
+Early development.
 
 ## Tech Stack
 
