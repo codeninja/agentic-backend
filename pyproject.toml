@@ -9,6 +9,7 @@ dependencies = [
     "ninja-cli",
     "ninja-auth",
     "ninja-models",
+    "ninja-agents",
     "ninja-api",
     "ninja-setup-assistant",
     "ninja-test-lib",
@@ -26,6 +27,7 @@ ninja-api = { workspace = true }
 ninja-setup-assistant = { workspace = true }
 ninja-test-lib = { workspace = true }
 ninja-models = { workspace = true }
+ninja-agents = { workspace = true }
 ninja-test-app = { workspace = true }
 
 [dependency-groups]

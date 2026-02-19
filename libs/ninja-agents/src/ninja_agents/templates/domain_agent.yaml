@@ -1,0 +1,18 @@
+# ADK Domain Agent Template
+# LLM-powered agent for cross-entity reasoning within a domain
+name: "domain_agent_{{ domain_name | lower }}"
+description: "Domain agent for {{ domain_name }} — cross-entity reasoning"
+model:
+  provider: "{{ model_provider }}"
+  name: "{{ model_name }}"
+reasoning_level: "{{ reasoning_level }}"
+temperature: {{ temperature }}
+data_agents:
+  {% for entity in entities %}
+  - "data_agent_{{ entity | lower }}"
+  {% endfor %}
+system_prompt: |
+  You are a domain expert for {{ domain_name }}.
+  You manage entities: {{ entities | join(', ') }}.
+  Delegate CRUD operations to your data agents.
+  Use reasoning to resolve ambiguous or cross-entity queries.
