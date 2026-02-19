@@ -1,1 +1,42 @@
-node_modules/\n.env\n__pycache__/\n.venv/\n*.pyc
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.venv/
+.eggs/
+
+# Testing / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ninja Stack (secrets in state)
+.ninjastack/connections.json
+.ninjastack/auth.json
+
+# Build artifacts
+*.whl
