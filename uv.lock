@@ -9,6 +9,8 @@ members = [
     "ninja-auth",
     "ninja-core",
     "ninja-setup-assistant",
+    "ninja-test-app",
+    "ninja-test-lib",
 ]
 
 [[package]]
@@ -20,6 +22,8 @@ dependencies = [
     { name = "ninja-auth" },
     { name = "ninja-core" },
     { name = "ninja-setup-assistant" },
+    { name = "ninja-test-app" },
+    { name = "ninja-test-lib" },
 ]
 
 [package.dev-dependencies]
@@ -36,6 +40,8 @@ requires-dist = [
     { name = "ninja-auth", editable = "libs/ninja-auth" },
     { name = "ninja-core", editable = "libs/ninja-core" },
     { name = "ninja-setup-assistant", editable = "apps/ninja-setup-assistant" },
+    { name = "ninja-test-app", editable = "apps/ninja-test-app" },
+    { name = "ninja-test-lib", editable = "libs/ninja-test-lib" },
 ]
 
 [package.metadata.requires-dev]
@@ -204,6 +210,32 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "ninja-core", editable = "libs/ninja-core" }]
+
+[[package]]
+name = "ninja-test-app"
+version = "0.1.0"
+source = { editable = "apps/ninja-test-app" }
+dependencies = [
+    { name = "ninja-core" },
+    { name = "ninja-test-lib" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "ninja-test-lib", editable = "libs/ninja-test-lib" },
+]
+
+[[package]]
+name = "ninja-test-lib"
+version = "0.1.0"
+source = { editable = "libs/ninja-test-lib" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.0" }]
 
 [[package]]
 name = "packaging"

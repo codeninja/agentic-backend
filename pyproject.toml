@@ -9,6 +9,8 @@ dependencies = [
     "ninja-auth",
     "ninja-api",
     "ninja-setup-assistant",
+    "ninja-test-lib",
+    "ninja-test-app",
 ]
 
 [tool.uv.workspace]
@@ -19,6 +21,8 @@ ninja-core = { workspace = true }
 ninja-auth = { workspace = true }
 ninja-api = { workspace = true }
 ninja-setup-assistant = { workspace = true }
+ninja-test-lib = { workspace = true }
+ninja-test-app = { workspace = true }
 
 [dependency-groups]
 dev = [
