@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "ninja-core",
+    "ninja-cli",
     "ninja-auth",
     "ninja-models",
     "ninja-api",
@@ -19,6 +20,7 @@ members = ["libs/*", "apps/*"]
 
 [tool.uv.sources]
 ninja-core = { workspace = true }
+ninja-cli = { workspace = true }
 ninja-auth = { workspace = true }
 ninja-api = { workspace = true }
 ninja-setup-assistant = { workspace = true }
