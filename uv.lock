@@ -15,6 +15,12 @@ members = [
 name = "agentic-backend"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "ninja-api" },
+    { name = "ninja-auth" },
+    { name = "ninja-core" },
+    { name = "ninja-setup-assistant" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -25,6 +31,12 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [
+    { name = "ninja-api", editable = "apps/ninja-api" },
+    { name = "ninja-auth", editable = "libs/ninja-auth" },
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "ninja-setup-assistant", editable = "apps/ninja-setup-assistant" },
+]
 
 [package.metadata.requires-dev]
 dev = [

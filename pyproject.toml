@@ -4,10 +4,21 @@ version = "0.1.0"
 description = "Ninja Stack — schema-first agentic backend framework"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ninja-core",
+    "ninja-auth",
+    "ninja-api",
+    "ninja-setup-assistant",
+]
 
 [tool.uv.workspace]
 members = ["libs/*", "apps/*"]
+
+[tool.uv.sources]
+ninja-core = { workspace = true }
+ninja-auth = { workspace = true }
+ninja-api = { workspace = true }
+ninja-setup-assistant = { workspace = true }
 
 [dependency-groups]
 dev = [
