@@ -1,21 +1,17 @@
-"""Ninja Core — Agentic Schema Definition models."""
+"""ASD schema models — the DNA of every Ninja Stack project."""
 
-from ninja_core.schema import (
-    AgentConfig,
-    AgenticSchema,
-    Cardinality,
-    DomainSchema,
+from ninja_core.schema.agent import AgentConfig, ReasoningLevel
+from ninja_core.schema.domain import DomainSchema
+from ninja_core.schema.entity import (
     EmbeddingConfig,
     EntitySchema,
     FieldConstraint,
     FieldSchema,
     FieldType,
-    ReasoningLevel,
-    RelationshipSchema,
-    RelationshipType,
     StorageEngine,
 )
-from ninja_core.serialization import load_schema, save_schema
+from ninja_core.schema.project import AgenticSchema
+from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
 
 __all__ = [
     "AgentConfig",
@@ -31,6 +27,4 @@ __all__ = [
     "RelationshipSchema",
     "RelationshipType",
     "StorageEngine",
-    "load_schema",
-    "save_schema",
 ]
