@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+
+echo "🧪 Running tests before push..."
+make test
+
+if [ $? -ne 0 ]; then
+    echo "❌ Tests failed. Push blocked."
+    exit 1
+fi
+
+echo "✅ All tests passed."

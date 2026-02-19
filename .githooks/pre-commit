@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -e
+
+# Get staged .py files
+STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
+
+if [ -n "$STAGED" ]; then
+    echo "🔧 Running ruff fix + format on staged Python files..."
+    echo "$STAGED" | xargs uv run ruff check --fix --quiet
+    echo "$STAGED" | xargs uv run ruff format --quiet
+    echo "$STAGED" | xargs git add
+fi

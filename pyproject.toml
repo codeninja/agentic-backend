@@ -1,7 +1,46 @@
 [project]
 name = "agentic-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Ninja Stack — schema-first agentic backend framework"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ninja-core",
+    "ninja-auth",
+    "ninja-api",
+    "ninja-setup-assistant",
+    "ninja-test-lib",
+    "ninja-test-app",
+]
+
+[tool.uv.workspace]
+members = ["libs/*", "apps/*"]
+
+[tool.uv.sources]
+ninja-core = { workspace = true }
+ninja-auth = { workspace = true }
+ninja-api = { workspace = true }
+ninja-setup-assistant = { workspace = true }
+ninja-test-lib = { workspace = true }
+ninja-test-app = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["libs/*/tests", "apps/*/tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

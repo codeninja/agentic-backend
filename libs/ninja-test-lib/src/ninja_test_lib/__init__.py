@@ -1,0 +1,1 @@
+"""ninja-test-lib library."""
