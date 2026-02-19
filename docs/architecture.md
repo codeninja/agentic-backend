@@ -14,6 +14,7 @@ graph TD
     subgraph "Deployment Layer (Apps)"
         UI[Agentic Chat / CRUD UI]
         API[FastAPI / GraphQL Shell]
+        AuthGate[Ninja Auth Gateway]
         CLI[Ninja CLI]
     end
 
@@ -24,6 +25,7 @@ graph TD
     end
 
     subgraph "Logic & Persistence Layer (Libraries)"
+        LibAuth[libs/ninja-auth]
         LibA[libs/domain-logistics]
         LibB[libs/domain-billing]
         Core[libs/ninja-core]
@@ -37,10 +39,14 @@ graph TD
     end
 
     %% Flow
-    UI --> API
+    UI --> AuthGate
+    AuthGate --> API
     API --> Coordinator
     Coordinator --> DomainA
     Coordinator --> DomainB
+    
+    AuthGate --> LibAuth
+    LibAuth --> SQL
     
     DomainA --> LibA
     DomainB --> LibB
@@ -102,11 +108,14 @@ The `.ninjastack/schema.json` is the source of truth. It defines:
 - **Ticket 3.2**: Implement **Vector/Semantic Search Integration** as a first-class tool for all agents.
 - **Ticket 3.3**: Implement **Graph-RAG Bootstrapper**. Automatically populate Neo4j based on ASD relationships.
 
-### Milestone 4: The Composition (The "Apps")
-**Objective**: Deploy the stack.
-- **Ticket 4.1**: Implement `ninjastack create app`. Generates thin FastAPI/GraphQL shells that compose the domain libs.
-- **Ticket 4.2**: Implement **Unified Chat UI**. A standard agentic interface that connects to the Coordinator Agents.
-- **Ticket 4.3**: Implement **K8s/Helm Deployment Generator**. Standardized manifests for the whole polyglot stack.
+### Milestone 5: The Ninja Auth Gateway
+**Objective**: Secure the stack with a pluggable identity layer.
+- **Ticket 5.1**: Implement `libs/ninja-auth` core. Define unified User/Session/Identity interfaces.
+- **Ticket 5.2**: Implement Auth Strategy Modules:
+    - `OAuth2Strategy` (Google/GitHub).
+    - `BearerStrategy` (JWT/Auth0).
+    - `IdentityStrategy` (User registration, login, password management).
+- **Ticket 5.3**: Implement `NinjaAuthGateway`. A middleware/shell that sits in front of all agentic routes to enforce policy and context injection (who is the user?).
 
 ---
 
