@@ -1,126 +1,45 @@
-# Agentic Backend
+# Agentic Backend: The Orchestrator
 
-Schema-first agentic backend framework. Point at a database, get a full agentic backend + UI.
+The **Agentic Backend** is a schema-first framework designed to transform traditional data layers into unified agentic architectures. It serves as the **Orchestrator** for the 'Unified Agentic Pipeline', managing everything from database introspection to the deployment of Model Context Protocol (MCP) tools.
 
-## Vision
+## Unified Pipeline Vision
 
-Replace or migrate traditional backends to an agentic architecture through automated introspection:
+This project implements a seamless 'Schema-first Single Source of Truth' architecture:
 
-1. **Connect to existing database** — introspect schema
-2. **Auto-generate the stack** — models, agents, GQL layer, prompts
-3. **Spin up UIs** — CRUD data viewer + agentic chat interface
-4. **Migrate legacy code** — extract business logic from existing source into agents
+`DB Schema` → `Pydantic Models` → `REST/GQL Layer` → `GQL-to-MCP Bridge` → `Agent Tools`
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│         Use Case Router (Agentic/Deterministic)     │
-└─────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────┐
-│              Use Case Coordinators                   │
-│  ┌─────────────┬─────────────┬─────────────┐        │
-│  │   Domain    │   Domain    │   Domain    │        │
-│  │   Agent     │   Agent     │   Agent     │        │
-│  └─────────────┴─────────────┴─────────────┘        │
-└─────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────┐
-│                   Data Agents                        │
-│  ┌─────────────┬─────────────┬─────────────┐        │
-│  │    User     │   Address   │   Product   │        │
-│  │   Agent     │   Agent     │   Agent     │        │
-│  └─────────────┴─────────────┴─────────────┘        │
-└─────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────┐
-│                   GQL Data Layer                     │
-└─────────────────────────────────────────────────────┘
-                          │
-                    ┌─────┴─────┐
-                    │    DB     │
-                    └───────────┘
-```
+By pointing this orchestrator at a database, you get a full stack of agents capable of understanding, querying, and mutating your data with high reliability.
 
 ## Agent Hierarchy
 
-### Use Case Coordinators
-- Top-level orchestration for complex workflows
-- Parallel delegation to domain agents
-- Primary interface for conversational users
-- Example: Shopping cart coordinator (check inventory, process payment, fulfill order)
+The backend organizes intelligence into a clear hierarchy:
 
-### Domain Agents
-- Understand cross-entity relationships within a domain
-- Compose multiple data agents
-- Example: User Domain Agent contains User + Address agents, knows users have addresses
+1.  **Use Case Coordinators**: Top-level orchestrators for complex workflows (e.g., "Onboard a new customer"). They delegate to Domain Agents.
+2.  **Domain Agents**: Experts in specific business domains (e.g., "Orders", "Users"). They understand relationships and compose multiple Data Agents.
+3.  **Data Agents**: Entity-level experts. They provide granular CRUD operations and entity-specific logic via the GQL/MCP bridge.
 
-### Data Agents
-- Single-entity experts
-- CRUD operations + entity-specific business logic
-- Interface with GQL layer
-- Not all agents need LLM — many are deterministic data fetchers
+## Core Principles
 
-## Design Principles
+*   **Schema-first**: The data model is the source of truth. All models, agents, and GQL schemas are derived from it.
+*   **Data Tolerance**: A robust boundary layer handles "dirty" data through type coercion, defaults, and progressive strictness.
+*   **LLM where it matters**: Deterministic paths stay deterministic; LLMs are reserved for reasoning, ambiguity, and complex orchestration.
+*   **GQL -> MCP Bridge**: Uses the `gql-mcp-bridge` concept to turn any GraphQL operation into a standard MCP tool, making the backend instantly usable by any agentic system.
 
-- **Schema-first** — data model is source of truth, everything derives from it
-- **Explicit > implicit** — clear ownership, typed contracts
-- **Composition > inheritance** — agents compose up the hierarchy
-- **LLM where it matters** — reserve reasoning for ambiguity, keep hot paths deterministic
-- **Tolerance for dirty data** — boundary layer handles schema drift, coercion, missing fields
+## Project Structure
 
-## Data Tolerance
+*   `src/`: Core implementation (Python/uv for introspection, Node/pnpm for GQL/Bridge).
+*   `docs/`: Deep-dive documentation on architecture and design patterns.
+*   `implementation_plans/`: Step-by-step blueprints for new features and integrations.
 
-Real-world data is messy. The boundary layer handles:
+## Getting Started
 
-- **Missing fields** — convention-based defaults
-- **Type coercion** — int↔string, flexible timestamps
-- **Schema drift** — especially for schemaless databases (MongoDB)
-- **Progressive strictness** — log coercions, tighten rules based on observed patterns
+### Prerequisites
+*   [uv](https://github.com/astral-sh/uv) (Python package manager)
+*   [pnpm](https://pnpm.io/) (Node package manager)
 
-## Generation Pipeline
+### Installation
+1.  Clone the repo.
+2.  Follow instructions in `src/README.md` (coming soon) to connect your database.
 
-```
-DB Schema Introspection
-        ↓
-Pydantic Models (per table)
-        ↓
-Data Agents (per entity)
-        ↓
-Domain Agents (inferred from FK relationships)
-        ↓
-Use Case Coordinators (common patterns)
-        ↓
-GQL Layer (auto-generated)
-        ↓
-UIs: CRUD Viewer + Agentic Chat
-```
-
-## Migration Path
-
-For existing systems:
-
-1. Generate agentic layer from schema
-2. Introspect existing source code for business logic
-3. Extract validation, workflows, edge cases into agents
-4. Surface unknowns for human review
-5. Shadow mode alongside old system, flag divergences
-6. Progressive cutover
-
-## Two Interfaces
-
-- **CRUD UI** — traditional data viewer, familiar, "human last resort"
-- **Chat UI** — conversational interface to any agent, domain, or coordinator
-
-## Status
-
-Early development.
-
-## Tech Stack
-
-TBD — likely Python, Pydantic, Google ADK, GraphQL
-
-## License
-
-TBD
+## Status: Revival in Progress
+The project is currently being restructured to align with the unified pipeline vision. See `implementation_plans/001-unified-pipeline.md` for details.
