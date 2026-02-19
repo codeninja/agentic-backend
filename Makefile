@@ -1,4 +1,4 @@
-.PHONY: test lint format coverage hooks clean
+.PHONY: test lint format coverage hooks clean new-lib new-app
 
 # Testing
 test:
@@ -19,6 +19,13 @@ hooks:
 	git config core.hooksPath .githooks
 	chmod +x .githooks/*
 	@echo "Git hooks configured."
+
+# Scaffolding
+new-lib:
+	@scripts/new_lib.sh $(NAME)
+
+new-app:
+	@scripts/new_app.sh $(NAME)
 
 # Cleanup
 clean:
