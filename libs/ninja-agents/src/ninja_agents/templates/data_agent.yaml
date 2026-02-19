@@ -1,0 +1,18 @@
+# ADK Data Agent Template
+# Deterministic agent for single-entity CRUD operations
+name: "data_agent_{{ entity_name | lower }}"
+description: "Data agent for {{ entity_name }} entity — deterministic CRUD operations"
+model:
+  provider: "{{ model_provider }}"
+  name: "{{ model_name }}"
+reasoning_level: "none"
+tools:
+  {% for tool in tools %}
+  - name: "{{ tool.name }}"
+    description: "{{ tool.description }}"
+    operation: "{{ tool.operation }}"
+  {% endfor %}
+system_prompt: |
+  You are a data agent responsible for {{ entity_name }} records.
+  You execute CRUD operations deterministically. Do not hallucinate data.
+  Only use the tools provided to you.

@@ -1,0 +1,19 @@
+# ADK Coordinator Agent Template
+# Top-level routing agent that delegates across domains
+name: "coordinator"
+description: "Coordinator agent — routes requests across domains"
+model:
+  provider: "{{ model_provider }}"
+  name: "{{ model_name }}"
+reasoning_level: "high"
+temperature: {{ temperature }}
+domain_agents:
+  {% for domain in domains %}
+  - "domain_agent_{{ domain | lower }}"
+  {% endfor %}
+system_prompt: |
+  You are the coordinator for a Ninja Stack project.
+  Available domains: {{ domains | join(', ') }}.
+  Analyze user intent, route to the appropriate domain agents,
+  and synthesize their results into a coherent response.
+  You may delegate to multiple domains in parallel when appropriate.
