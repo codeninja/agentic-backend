@@ -108,14 +108,24 @@ The `.ninjastack/schema.json` is the source of truth. It defines:
 - **Ticket 3.2**: Implement **Vector/Semantic Search Integration** as a first-class tool for all agents.
 - **Ticket 3.3**: Implement **Graph-RAG Bootstrapper**. Automatically populate Neo4j based on ASD relationships.
 
+### Milestone 4: Composition, APIs & Deployment
+**Objective**: Generate the consumer-facing layers and deploy the stack.
+- **Ticket 4.1**: Implement **GraphQL Layer Generator** (`libs/ninja-gql`). Auto-generate Strawberry types, queries, mutations, and subscriptions from the ASD. → Plan 008
+- **Ticket 4.2**: Implement **UI Generator** (`libs/ninja-ui`). CRUD data viewer and agentic chat interface. → Plan 009
+- **Ticket 4.3**: Implement **K8s/Helm Deployment Pipeline** (`libs/ninja-deploy`). ASD-driven infrastructure provisioning and CI/CD generation. → Plan 010
+
 ### Milestone 5: The Ninja Auth Gateway
 **Objective**: Secure the stack with a pluggable identity layer.
 - **Ticket 5.1**: Implement `libs/ninja-auth` core. Define unified User/Session/Identity interfaces.
-- **Ticket 5.2**: Implement Auth Strategy Modules:
-    - `OAuth2Strategy` (Google/GitHub).
-    - `BearerStrategy` (JWT/Auth0).
-    - `IdentityStrategy` (User registration, login, password management).
-- **Ticket 5.3**: Implement `NinjaAuthGateway`. A middleware/shell that sits in front of all agentic routes to enforce policy and context injection (who is the user?).
+- **Ticket 5.2**: Implement Auth Strategy Modules (OAuth2, Bearer/JWT, API Key, Identity/Registration).
+- **Ticket 5.3**: Implement `NinjaAuthGateway`. Middleware for policy enforcement and user context injection.
+→ Plan 007
+
+### Cross-Cutting Plans
+- **Plan 006**: Data Tolerance & Boundary Layer (`libs/ninja-boundary`).
+- **Plan 011**: LiteLLM & Model Integration (`libs/ninja-models`).
+- **Plan 012**: Monorepo Build System & Library Testing Infrastructure.
+- **Plan 013**: Agent Orchestration & ADK Integration Patterns (`libs/ninja-agents`).
 
 ---
 
