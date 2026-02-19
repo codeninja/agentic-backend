@@ -1,45 +1,169 @@
-# Agentic Backend: The Orchestrator
+# Agentic Backend
 
-The **Agentic Backend** is a schema-first framework designed to transform traditional data layers into unified agentic architectures. It serves as the **Orchestrator** for the 'Unified Agentic Pipeline', managing everything from database introspection to the deployment of Model Context Protocol (MCP) tools.
+Schema-first agentic backend framework. Point at a database, get a full agentic backend + UI.
 
-## Unified Pipeline Vision
+## Vision
 
-This project implements a seamless 'Schema-first Single Source of Truth' architecture:
+Replace or migrate traditional backends to an agentic architecture through automated introspection or conversational design:
 
-`DB Schema` → `Pydantic Models` → `REST/GQL Layer` → `GQL-to-MCP Bridge` → `Agent Tools`
+1. **Introspection Mode (Bolt-on)**: Connect to existing databases (SQL, NoSQL, Graph, Vector) and auto-generate the Ninja Stack.
+2. **Conversation Mode (Greenfield)**: Converse with the Ninja Setup Assistant to define your domain; it writes the schemas and provisions the tech stack for you.
+3. **Hybrid Mode**: Bolt on to an existing system, then use the agent to expand the schema or migrate logic.
+4. **Auto-generate the Ninja Stack**: Models, agents, GQL layer, and prompts are derived from the Agentic Schema Definition (ASD).
+5. **Spin up UIs**: CRUD data viewer + agentic chat interface.
 
-By pointing this orchestrator at a database, you get a full stack of agents capable of understanding, querying, and mutating your data with high reliability.
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│         Use Case Router (Agentic/Deterministic)     │
+└─────────────────────────────────────────────────────┘
+                          │
+┌─────────────────────────────────────────────────────┐
+│              Use Case Coordinators                   │
+│  ┌─────────────┬─────────────┬─────────────┐        │
+│  │   Domain    │   Domain    │   Domain    │        │
+│  │   Agent     │   Agent     │   Agent     │        │
+│  └─────────────┴─────────────┴─────────────┘        │
+└─────────────────────────────────────────────────────┘
+                          │
+┌───────────────────────────────────────────────────────────┐
+│                   Data Agents (Polyglot)                  │
+│  ┌─────────────┬─────────────┬─────────────┬───────────┐  │
+│  │    User     │   Address   │   Product   │ Semantic  │  │
+│  │   Agent     │   Agent     │   Agent     │ Context   │  │
+│  └─────────────┴─────────────┴─────────────┴───────────┘  │
+└───────────────────────────────────────────────────────────┘
+                          │
+┌───────────────────────────────────────────────────────────┐
+│               Unified Persistence Layer                   │
+│      (SQL / NoSQL / Graph / Vector / External API)        │
+└───────────────────────────────────────────────────────────┘
+              ┌─────┴─────┬──────────┬──────────┐
+              │    DB     │  Vector  │  Graph   │
+              │(SQL/NoSQL)│  Store   │   DB     │
+              └───────────┴──────────┴──────────┘
+```
 
 ## Agent Hierarchy
 
-The backend organizes intelligence into a clear hierarchy:
+### Use Case Coordinators
+- Top-level orchestration for complex workflows
+- Parallel delegation to domain agents
+- Primary interface for conversational users
+- Example: Shopping cart coordinator (check inventory, process payment, fulfill order)
 
-1.  **Use Case Coordinators**: Top-level orchestrators for complex workflows (e.g., "Onboard a new customer"). They delegate to Domain Agents.
-2.  **Domain Agents**: Experts in specific business domains (e.g., "Orders", "Users"). They understand relationships and compose multiple Data Agents.
-3.  **Data Agents**: Entity-level experts. They provide granular CRUD operations and entity-specific logic via the GQL/MCP bridge.
+### Domain Agents
+- Understand cross-entity relationships within a domain
+- Compose multiple data agents
+- Use **Graph-RAG** to navigate multi-hop relationships and semantic clusters
+- Example: User Domain Agent contains User + Address agents, knows users have addresses
 
-## Core Principles
+### Data Agents
+- Single-entity experts
+- CRUD operations + entity-specific business logic
+- Interface with the Persistence Layer
+- Not all agents need LLM — many are deterministic data fetchers
 
-*   **Schema-first**: The data model is the source of truth. All models, agents, and GQL schemas are derived from it.
-*   **Data Tolerance**: A robust boundary layer handles "dirty" data through type coercion, defaults, and progressive strictness.
-*   **LLM where it matters**: Deterministic paths stay deterministic; LLMs are reserved for reasoning, ambiguity, and complex orchestration.
-*   **GQL -> MCP Bridge**: Uses the `gql-mcp-bridge` concept to turn any GraphQL operation into a standard MCP tool, making the backend instantly usable by any agentic system.
+## Design Principles
 
-## Project Structure
+- **Library-First Development**: All business logic, domain models, and agent behaviors live in granular, modular libraries. Applications are pure composition; they contain zero business logic.
+- **Composition over Application**: Deployable units are assembled from versioned libraries by the build system.
+- **AI-First Persistence**: Vector and Graph stores are first-class storage targets. Every entity has an optional embedding and a node in the global knowledge graph.
+- **Polyglot Introspection**: Support for Postgres (SQL), MongoDB (NoSQL), Neo4j (Graph), and direct Vector-only entities.
+- **Graph-Native Reasoning**: Native support for Graph-RAG for complex relationship traversal.
+- **Schema-first**: The data model is the source of truth; everything derives from it.
+- **Explicit > implicit**: Clear ownership, typed contracts.
+- **LLM where it matters**: Reserve reasoning for ambiguity, keep hot paths deterministic.
+- **Tolerance for dirty data**: Boundary layer handles schema drift, coercion, missing fields.
 
-*   `src/`: Core implementation (Python/uv for introspection, Node/pnpm for GQL/Bridge).
-*   `docs/`: Deep-dive documentation on architecture and design patterns.
-*   `implementation_plans/`: Step-by-step blueprints for new features and integrations.
+## Usage: The Ninja CLI
 
-## Getting Started
-
-### Prerequisites
-*   [uv](https://github.com/astral-sh/uv) (Python package manager)
-*   [pnpm](https://pnpm.io/) (Node package manager)
+The Ninja Stack is managed via a unified CLI. 
 
 ### Installation
-1.  Clone the repo.
-2.  Follow instructions in `src/README.md` (coming soon) to connect your database.
+```bash
+uv tool install ninjastack
+```
 
-## Status: Revival in Progress
-The project is currently being restructured to align with the unified pipeline vision. See `implementation_plans/001-unified-pipeline.md` for details.
+### Commands
+- **`ninjastack init`**: Spawns the Conversational Setup Assistant. Handles DB introspection or greenfield schema design. Creates the `.ninjastack/` directory.
+- **`ninjastack sync`**: Runs the polyglot introspection and code generation engine. Syncs the `.ninjastack/` state with your `libs/` and `apps/`.
+- **`ninjastack create [app|lib|agent]`**: Scaffolds new components into the monorepo following the composition-first pattern.
+- **`ninjastack serve [app]`**: Starts a local development server for a specific app (FastAPI, CRUD UI, etc.).
+- **`ninjastack deploy [app]`**: Triggers the K8s/Helm deployment workflow.
+
+## Project State: `.ninjastack/`
+
+All project metadata, the Agentic Schema Definition (ASD), and connection profiles are stored in the `.ninjastack/` directory at the project root. This ensures the environment is reproducible and the Ninja agents have a persistent "anchor" for the project's evolution.
+
+
+## Multi-Engine Support
+
+### Relational (Postgres/MySQL)
+- Foreign-key based relationship mapping.
+- Structured GQL schema generation.
+
+### Document (MongoDB/DynamoDB)
+- Schema inference from sample sets.
+- Nested object flattening for agent tools.
+
+### Graph (Neo4j/FalkorDB)
+- Native relationship traversal.
+- Knowledge Graph construction from polyglot sources.
+
+### Vector (Chroma/Milvus/Pinecone)
+- Semantic search as a native tool for every Data Agent.
+- "Long-term entity memory" integrated into the persistence layer.
+
+## Graph-RAG & Discovery
+
+The backend doesn't just store data; it maps it:
+
+1. **Extraction**: Automated entity and relationship extraction from structured and unstructured sources.
+2. **Indexing**: Graph-native indexing (communities, clusters) for high-level thematic queries.
+3. **Traversal**: Agents use graph traversal to answer "Why" and "How" by following semantic and hard links across the polyglot stack.
+
+## Data Tolerance
+
+Real-world data is messy. The boundary layer handles:
+
+- **Missing fields** — convention-based defaults
+- **Type coercion** — int↔string, flexible timestamps
+- **Schema drift** — especially for schemaless databases (MongoDB)
+- **Progressive strictness** — log coercions, tighten rules based on observed patterns
+
+## Generation Pipeline
+
+```
+Polyglot Introspection (SQL/NoSQL/Vector)
+        ↓
+Pydantic Models (Unified Representation)
+        ↓
+Data Agents (per entity)
+        ↓
+Domain Agents (inferred from FKs or semantic links)
+        ↓
+Use Case Coordinators (common patterns)
+        ↓
+GQL Layer (auto-generated)
+        ↓
+UIs: CRUD Viewer + Agentic Chat
+```
+
+## Status
+
+Early development.
+
+## Tech Stack
+
+- **Core Platform**: Google Gemini (Pro/Flash)
+- **Agentic Framework**: Google ADK (Agent Development Kit)
+- **Model Interoperability**: LiteLLM integration via ADK connectors (Ollama, OpenAI, Anthropic support)
+- **Core Languages**: Python (Backend/Agents), Pydantic (Contracts)
+- **Persistence**: SQLAlchemy (SQL), Motor/Beanie (Mongo), Neo4j (Graph), Chroma/Milvus (Vector)
+- **API**: FastAPI, Strawberry (GraphQL)
+
+## License
+
+TBD
