@@ -1,0 +1,182 @@
+name: Project Board Transitions
+
+on:
+  create:
+  pull_request:
+    types: [opened, closed, ready_for_review, converted_to_draft]
+
+env:
+  PROJECT_ID: "PVT_kwHNOkLOAT6Qtg"
+  STATUS_FIELD_ID: "PVTSSF_lAHNOkLOAT6Qts4Pf31M"
+  STATUS_IN_PROGRESS: "47fc9ee4"
+  STATUS_IN_REVIEW: "2c6ab56e"
+  STATUS_DONE: "98236657"
+
+jobs:
+  branch-created:
+    if: github.event_name == 'create' && github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract issue number from branch
+        id: extract
+        run: |
+          BRANCH="${{ github.event.ref }}"
+          # Match feat/issue-N-*, fix/issue-N-*, or feat/N-*
+          if [[ "$BRANCH" =~ (feat|fix|chore|dx|ci|test)/issue-([0-9]+) ]] || [[ "$BRANCH" =~ (feat|fix|chore|dx|ci|test)/([0-9]+)- ]]; then
+            echo "issue_number=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+            echo "Found issue #${BASH_REMATCH[2]} from branch $BRANCH"
+          else
+            echo "No issue number found in branch: $BRANCH"
+            echo "issue_number=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Move issue to In Progress
+        if: steps.extract.outputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        run: |
+          ISSUE_NUMBER=${{ steps.extract.outputs.issue_number }}
+
+          # Get the project item ID for this issue
+          ITEM_ID=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $number) {
+                  projectItems(first: 10) {
+                    nodes {
+                      id
+                      project { id }
+                    }
+                  }
+                }
+              }
+            }' -f owner="${{ github.repository_owner }}" -f repo="agentic-backend" -F number="$ISSUE_NUMBER" \
+            --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id")
+
+          if [ -z "$ITEM_ID" ]; then
+            echo "Issue #$ISSUE_NUMBER not found on project board"
+            exit 0
+          fi
+
+          # Update status to In Progress
+          gh api graphql -f query='
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $projectId
+                itemId: $itemId
+                fieldId: $fieldId
+                value: {singleSelectOptionId: $value}
+              }) {
+                projectV2Item { id }
+              }
+            }' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$STATUS_FIELD_ID" -f value="$STATUS_IN_PROGRESS"
+
+          echo "✅ Moved issue #$ISSUE_NUMBER to In Progress"
+
+  pr-opened:
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract issue numbers from PR
+        id: extract
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          TITLE="${{ github.event.pull_request.title }}"
+          # Extract all issue numbers from "closes #N" or "Closes #N" patterns
+          ISSUES=$(echo "$TITLE $BODY" | grep -oP '(?i)closes?\s+#\K[0-9]+' | sort -u | tr '\n' ' ')
+          echo "issues=$ISSUES" >> "$GITHUB_OUTPUT"
+          echo "Found issues: $ISSUES"
+
+      - name: Move issues to In Review
+        if: steps.extract.outputs.issues != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        run: |
+          for ISSUE_NUMBER in ${{ steps.extract.outputs.issues }}; do
+            ITEM_ID=$(gh api graphql -f query='
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) {
+                    projectItems(first: 10) {
+                      nodes {
+                        id
+                        project { id }
+                      }
+                    }
+                  }
+                }
+              }' -f owner="${{ github.repository_owner }}" -f repo="agentic-backend" -F number="$ISSUE_NUMBER" \
+              --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id")
+
+            if [ -z "$ITEM_ID" ]; then
+              echo "Issue #$ISSUE_NUMBER not found on project board, skipping"
+              continue
+            fi
+
+            gh api graphql -f query='
+              mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId
+                  itemId: $itemId
+                  fieldId: $fieldId
+                  value: {singleSelectOptionId: $value}
+                }) {
+                  projectV2Item { id }
+                }
+              }' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$STATUS_FIELD_ID" -f value="$STATUS_IN_REVIEW"
+
+            echo "✅ Moved issue #$ISSUE_NUMBER to In Review"
+          done
+
+  pr-merged:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract issue numbers from PR
+        id: extract
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          TITLE="${{ github.event.pull_request.title }}"
+          ISSUES=$(echo "$TITLE $BODY" | grep -oP '(?i)closes?\s+#\K[0-9]+' | sort -u | tr '\n' ' ')
+          echo "issues=$ISSUES" >> "$GITHUB_OUTPUT"
+
+      - name: Move issues to Done
+        if: steps.extract.outputs.issues != ''
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+        run: |
+          for ISSUE_NUMBER in ${{ steps.extract.outputs.issues }}; do
+            ITEM_ID=$(gh api graphql -f query='
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) {
+                    projectItems(first: 10) {
+                      nodes {
+                        id
+                        project { id }
+                      }
+                    }
+                  }
+                }
+              }' -f owner="${{ github.repository_owner }}" -f repo="agentic-backend" -F number="$ISSUE_NUMBER" \
+              --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id")
+
+            if [ -z "$ITEM_ID" ]; then
+              echo "Issue #$ISSUE_NUMBER not found on project board, skipping"
+              continue
+            fi
+
+            gh api graphql -f query='
+              mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId
+                  itemId: $itemId
+                  fieldId: $fieldId
+                  value: {singleSelectOptionId: $value}
+                }) {
+                  projectV2Item { id }
+                }
+              }' -f projectId="$PROJECT_ID" -f itemId="$ITEM_ID" -f fieldId="$STATUS_FIELD_ID" -f value="$STATUS_DONE"
+
+            echo "✅ Moved issue #$ISSUE_NUMBER to Done"
+          done
