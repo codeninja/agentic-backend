@@ -1,8 +1,9 @@
-"""Ninja Auth — pluggable authentication gateway."""
+"""Ninja Auth — pluggable authentication gateway with RBAC."""
 
 from ninja_auth.agent_context import (
     clear_user_context,
     current_user_context,
+    require_domain_access,
     require_permission,
     require_role,
     require_user_context,
@@ -11,6 +12,15 @@ from ninja_auth.agent_context import (
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_auth.gateway import AuthGateway, get_user_context
+from ninja_auth.rbac import (
+    BUILTIN_ROLES,
+    Action,
+    RBACConfig,
+    RBACPolicy,
+    RoleDefinition,
+    permission_matches,
+    require_domain_permission,
+)
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from ninja_auth.strategies.bearer import BearerStrategy
 from ninja_auth.strategies.identity import IdentityStrategy
@@ -18,16 +28,24 @@ from ninja_auth.strategies.oauth2 import OAuth2Strategy
 
 __all__ = [
     "ANONYMOUS_USER",
+    "Action",
     "ApiKeyStrategy",
     "AuthConfig",
     "AuthGateway",
     "BearerStrategy",
+    "BUILTIN_ROLES",
     "IdentityStrategy",
     "OAuth2Strategy",
+    "RBACConfig",
+    "RBACPolicy",
+    "RoleDefinition",
     "UserContext",
     "clear_user_context",
     "current_user_context",
     "get_user_context",
+    "permission_matches",
+    "require_domain_access",
+    "require_domain_permission",
     "require_permission",
     "require_role",
     "require_user_context",

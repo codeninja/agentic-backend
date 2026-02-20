@@ -12,6 +12,7 @@ from starlette.responses import JSONResponse, Response
 from ninja_auth.agent_context import set_user_context
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
+from ninja_auth.rbac import RBACPolicy
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from ninja_auth.strategies.bearer import BearerStrategy
 
@@ -27,6 +28,7 @@ class AuthGateway(BaseHTTPMiddleware):
         self.config = config or AuthConfig()
         self._bearer = BearerStrategy(self.config.bearer)
         self._apikey = ApiKeyStrategy(self.config.api_key)
+        self._rbac = RBACPolicy(self.config.rbac)
 
     def _is_public_path(self, path: str) -> bool:
         """Check if the request path matches any configured public path pattern."""
@@ -49,6 +51,9 @@ class AuthGateway(BaseHTTPMiddleware):
                 content={"detail": "Authentication required"},
             )
 
+        # Enrich user context with RBAC-resolved permissions
+        user_ctx = self._enrich_permissions(user_ctx)
+
         # Inject user context into request state and contextvar for agent tools
         request.state.user_context = user_ctx
         set_user_context(user_ctx)
@@ -67,6 +72,22 @@ class AuthGateway(BaseHTTPMiddleware):
             return ctx
 
         return None
+
+    def _enrich_permissions(self, ctx: UserContext) -> UserContext:
+        """Resolve role-based permissions and merge them into the user context."""
+        if not self._rbac.enabled or not ctx.roles:
+            return ctx
+        role_perms = self._rbac.permissions_for_roles(ctx.roles)
+        if not role_perms:
+            return ctx
+        # Merge role-resolved permissions with any already present
+        merged = list(ctx.permissions)
+        seen = set(merged)
+        for p in role_perms:
+            if p not in seen:
+                seen.add(p)
+                merged.append(p)
+        return ctx.model_copy(update={"permissions": merged})
 
 
 def get_user_context(request: Request) -> UserContext:
