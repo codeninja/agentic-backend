@@ -4,7 +4,8 @@ import json
 import tempfile
 
 import pytest
-from ninja_persistence.connections import ConnectionManager, ConnectionProfile
+from pydantic import ValidationError
+from ninja_persistence.connections import ConnectionManager, ConnectionProfile, InvalidConnectionURL
 
 
 def test_connection_profile_creation():
@@ -68,6 +69,73 @@ def test_get_sql_engine():
     assert engine is not None
     # Should return the same engine on repeated calls
     assert mgr.get_sql_engine("default") is engine
+
+
+# --- URL Validation Tests ---
+
+
+class TestURLValidation:
+    """Tests for connection URL validation (issue #48)."""
+
+    def test_sqlite_empty_path_rejected(self):
+        with pytest.raises(ValidationError, match="missing database path"):
+            ConnectionProfile(engine="sql", url="sqlite:///")
+
+    def test_sqlite_aiosqlite_empty_path_rejected(self):
+        with pytest.raises(ValidationError, match="missing database path"):
+            ConnectionProfile(engine="sql", url="sqlite+aiosqlite:///")
+
+    def test_sqlite_memory_accepted(self):
+        p = ConnectionProfile(engine="sql", url="sqlite:///:memory:")
+        assert ":memory:" in p.url
+
+    def test_sqlite_aiosqlite_memory_accepted(self):
+        p = ConnectionProfile(engine="sql", url="sqlite+aiosqlite:///:memory:")
+        assert ":memory:" in p.url
+
+    def test_sqlite_file_path_accepted(self):
+        p = ConnectionProfile(engine="sql", url="sqlite:///tmp/test.db")
+        assert p.url == "sqlite:///tmp/test.db"
+
+    def test_sqlite_absolute_path_accepted(self):
+        p = ConnectionProfile(engine="sql", url="sqlite:////absolute/path/db.sqlite")
+        assert p.url == "sqlite:////absolute/path/db.sqlite"
+
+    def test_postgres_missing_host_rejected(self):
+        with pytest.raises(ValidationError, match="missing hostname"):
+            ConnectionProfile(engine="sql", url="postgresql:///dbname")
+
+    def test_postgres_missing_dbname_rejected(self):
+        with pytest.raises(ValidationError, match="missing database name"):
+            ConnectionProfile(engine="sql", url="postgresql://localhost/")
+
+    def test_postgres_valid_accepted(self):
+        p = ConnectionProfile(engine="sql", url="postgresql+asyncpg://user:pass@localhost:5432/mydb")
+        assert "mydb" in p.url
+
+    def test_mongodb_missing_host_rejected(self):
+        with pytest.raises(ValidationError, match="missing hostname"):
+            ConnectionProfile(engine="mongo", url="mongodb:///")
+
+    def test_mongodb_valid_accepted(self):
+        p = ConnectionProfile(engine="mongo", url="mongodb://localhost:27017/test")
+        assert "localhost" in p.url
+
+    def test_mysql_missing_host_rejected(self):
+        with pytest.raises(ValidationError, match="missing hostname"):
+            ConnectionProfile(engine="sql", url="mysql:///dbname")
+
+    def test_unknown_scheme_passes(self):
+        """Unknown schemes should not be rejected — extensibility."""
+        p = ConnectionProfile(engine="graph", url="neo4j://localhost:7687")
+        assert p.url == "neo4j://localhost:7687"
+
+    def test_validation_error_message_is_actionable(self):
+        with pytest.raises(ValidationError) as exc_info:
+            ConnectionProfile(engine="sql", url="sqlite:///")
+        msg = str(exc_info.value)
+        assert "sqlite:///:memory:" in msg
+        assert "sqlite:///relative.db" in msg or "sqlite:////absolute" in msg
 
 
 async def test_close_all():

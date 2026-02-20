@@ -5,9 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+
+class InvalidConnectionURL(ValueError):
+    """Raised when a connection URL is malformed or missing required components."""
 
 
 class ConnectionProfile(BaseModel):
@@ -16,6 +21,44 @@ class ConnectionProfile(BaseModel):
     engine: str = Field(description="Storage engine type: sql, mongo, graph, vector.")
     url: str = Field(description="Connection URL / DSN.")
     options: dict[str, Any] = Field(default_factory=dict, description="Engine-specific options.")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        """Validate the connection URL has required components."""
+        parsed = urlparse(v)
+        scheme = parsed.scheme.split("+")[0]  # e.g. "sqlite+aiosqlite" -> "sqlite"
+
+        if scheme == "sqlite":
+            # sqlite:///:memory: is valid (path = "/:memory:")
+            # sqlite:///path/to/db.sqlite is valid
+            # sqlite:/// (empty path after authority) is NOT valid
+            db_path = parsed.path
+            if not db_path or db_path == "/":
+                raise InvalidConnectionURL(
+                    f"Invalid SQLite URL '{v}': missing database path. "
+                    "Use 'sqlite:////absolute/path.db', 'sqlite:///relative.db', "
+                    "or 'sqlite:///:memory:' for an in-memory database."
+                )
+        elif scheme in ("postgresql", "postgres", "mysql", "mariadb"):
+            if not parsed.hostname:
+                raise InvalidConnectionURL(
+                    f"Invalid database URL '{v}': missing hostname. "
+                    f"Expected format: '{scheme}://user:pass@host:port/dbname'"
+                )
+            if not parsed.path or parsed.path == "/":
+                raise InvalidConnectionURL(
+                    f"Invalid database URL '{v}': missing database name. "
+                    f"Expected format: '{scheme}://user:pass@host:port/dbname'"
+                )
+        elif scheme in ("mongodb", "mongodb+srv"):
+            if not parsed.hostname:
+                raise InvalidConnectionURL(
+                    f"Invalid MongoDB URL '{v}': missing hostname. "
+                    "Expected format: 'mongodb://host:port/dbname'"
+                )
+
+        return v
 
 
 class ConnectionManager:
