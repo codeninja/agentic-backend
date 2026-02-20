@@ -15,7 +15,7 @@ dependencies = [
     "ninja-test-lib",
     "ninja-test-app",
     "ninja-introspect",
-    "ninja-boundary",
+    "ninja-codegen",
 ]
 
 [tool.uv.workspace]
@@ -32,7 +32,7 @@ ninja-models = { workspace = true }
 ninja-agents = { workspace = true }
 ninja-test-app = { workspace = true }
 ninja-introspect = { workspace = true }
-ninja-boundary = { workspace = true }
+ninja-codegen = { workspace = true }
 
 [dependency-groups]
 dev = [

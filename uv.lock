@@ -15,6 +15,7 @@ members = [
     "ninja-auth",
     "ninja-boundary",
     "ninja-cli",
+    "ninja-codegen",
     "ninja-core",
     "ninja-introspect",
     "ninja-models",
@@ -31,8 +32,8 @@ dependencies = [
     { name = "ninja-agents" },
     { name = "ninja-api" },
     { name = "ninja-auth" },
-    { name = "ninja-boundary" },
     { name = "ninja-cli" },
+    { name = "ninja-codegen" },
     { name = "ninja-core" },
     { name = "ninja-introspect" },
     { name = "ninja-models" },
@@ -54,8 +55,8 @@ requires-dist = [
     { name = "ninja-agents", editable = "libs/ninja-agents" },
     { name = "ninja-api", editable = "apps/ninja-api" },
     { name = "ninja-auth", editable = "libs/ninja-auth" },
-    { name = "ninja-boundary", editable = "libs/ninja-boundary" },
     { name = "ninja-cli", editable = "libs/ninja-cli" },
+    { name = "ninja-codegen", editable = "libs/ninja-codegen" },
     { name = "ninja-core", editable = "libs/ninja-core" },
     { name = "ninja-introspect", editable = "libs/ninja-introspect" },
     { name = "ninja-models", editable = "libs/ninja-models" },
@@ -2284,6 +2285,25 @@ requires-dist = [
     { name = "ninja-core", editable = "libs/ninja-core" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "typer", specifier = ">=0.15" },
+]
+
+[[package]]
+name = "ninja-codegen"
+version = "0.1.0"
+source = { editable = "libs/ninja-codegen" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "ninja-cli" },
+    { name = "ninja-core" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "ninja-cli", editable = "libs/ninja-cli" },
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "pydantic", specifier = ">=2.0" },
 ]
 
 [[package]]
