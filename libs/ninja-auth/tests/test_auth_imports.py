@@ -17,7 +17,13 @@ def test_public_api_exports():
         IdentityStrategy,
         OAuth2Strategy,
         UserContext,
+        clear_user_context,
+        current_user_context,
         get_user_context,
+        require_permission,
+        require_role,
+        require_user_context,
+        set_user_context,
     )
 
     assert all(
@@ -30,6 +36,12 @@ def test_public_api_exports():
             IdentityStrategy,
             OAuth2Strategy,
             UserContext,
+            clear_user_context,
+            current_user_context,
             get_user_context,
+            require_permission,
+            require_role,
+            require_user_context,
+            set_user_context,
         ]
     )

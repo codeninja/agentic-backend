@@ -7,7 +7,7 @@ from ninja_auth.config import BearerConfig
 from ninja_auth.strategies.bearer import BearerStrategy
 from starlette.testclient import TestClient
 
-SECRET = "test-secret-key"
+SECRET = "test-secret-key-that-is-at-least-32-bytes-long"
 
 
 def _make_token(payload: dict, secret: str = SECRET, algorithm: str = "HS256") -> str:
@@ -42,7 +42,7 @@ def test_bearer_expired_token():
 def test_bearer_invalid_signature():
     config = BearerConfig(secret_key=SECRET, algorithm="HS256")
     strategy = BearerStrategy(config)
-    token = _make_token({"sub": "user1"}, secret="wrong-secret")
+    token = _make_token({"sub": "user1"}, secret="wrong-secret-key-that-is-32-bytes-long!")
     ctx = strategy.validate_token(token)
     assert ctx is None
 

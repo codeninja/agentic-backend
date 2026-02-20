@@ -9,6 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from ninja_auth.agent_context import set_user_context
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_auth.strategies.apikey import ApiKeyStrategy
@@ -36,6 +37,7 @@ class AuthGateway(BaseHTTPMiddleware):
         # Allow public paths through without auth
         if self._is_public_path(request.url.path):
             request.state.user_context = ANONYMOUS_USER
+            set_user_context(ANONYMOUS_USER)
             return await call_next(request)
 
         # Try each strategy in order
@@ -47,8 +49,9 @@ class AuthGateway(BaseHTTPMiddleware):
                 content={"detail": "Authentication required"},
             )
 
-        # Inject user context into request state for downstream access
+        # Inject user context into request state and contextvar for agent tools
         request.state.user_context = user_ctx
+        set_user_context(user_ctx)
         return await call_next(request)
 
     async def _try_authenticate(self, request: Request) -> UserContext | None:

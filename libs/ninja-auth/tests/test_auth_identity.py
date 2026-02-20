@@ -6,7 +6,7 @@ from ninja_auth.strategies.identity import IdentityStrategy
 
 
 def _make_strategy(**kwargs) -> IdentityStrategy:
-    config = IdentityConfig(token_secret="test-secret", **kwargs)
+    config = IdentityConfig(token_secret="test-secret-key-at-least-32-bytes!!", **kwargs)
     return IdentityStrategy(config)
 
 
@@ -63,7 +63,7 @@ def test_identity_issue_token():
     token = strategy.issue_token(ctx)
     assert isinstance(token, str)
 
-    payload = jwt.decode(token, "test-secret", algorithms=["HS256"])
+    payload = jwt.decode(token, "test-secret-key-at-least-32-bytes!!", algorithms=["HS256"])
     assert payload["sub"] == ctx.user_id
     assert payload["email"] == "user@example.com"
 

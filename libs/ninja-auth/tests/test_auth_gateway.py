@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-SECRET = "gw-test-secret"
+SECRET = "gw-test-secret-key-at-least-32-bytes-long!"
 
 
 def _build_app(config: AuthConfig | None = None) -> Starlette:
