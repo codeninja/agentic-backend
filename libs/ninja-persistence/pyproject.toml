@@ -1,0 +1,24 @@
+[project]
+name = "ninja-persistence"
+version = "0.1.0"
+description = "Unified polyglot persistence layer for Ninja Stack"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.0",
+    "ninja-core",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+]
+
+[project.optional-dependencies]
+mongo = ["motor>=3.0"]
+graph = ["neo4j>=5.0"]
+chroma = ["chromadb>=0.4"]
+milvus = ["pymilvus>=2.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ninja_persistence"]
