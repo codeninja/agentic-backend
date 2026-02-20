@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from ninja_auth.rbac import RBACConfig
+
 
 class OAuth2ProviderConfig(BaseModel):
     """Configuration for a single OAuth2 provider."""
@@ -56,6 +58,7 @@ class AuthConfig(BaseModel):
     bearer: BearerConfig = Field(default_factory=BearerConfig)
     api_key: ApiKeyConfig = Field(default_factory=ApiKeyConfig)
     identity: IdentityConfig = Field(default_factory=IdentityConfig)
+    rbac: RBACConfig = Field(default_factory=RBACConfig)
 
     @classmethod
     def from_file(cls, path: str | Path = ".ninjastack/auth.json") -> AuthConfig:
