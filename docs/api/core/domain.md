@@ -1,0 +1,1 @@
+::: ninja_core.schema.domain

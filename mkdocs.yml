@@ -1,0 +1,151 @@
+site_name: NinjaStack Docs
+site_description: Schema-first agentic backend framework documentation
+site_url: https://codeninja.github.io/agentic-backend/docs/
+site_dir: site/docs
+repo_url: https://github.com/codeninja/agentic-backend
+repo_name: codeninja/agentic-backend
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/ninja
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+
+plugins:
+  - search
+  - section-index
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths: [libs/ninja-core/src, libs/ninja-agents/src, libs/ninja-auth/src,
+                  libs/ninja-codegen/src, libs/ninja-persistence/src, libs/ninja-introspect/src,
+                  libs/ninja-gql/src, libs/ninja-boundary/src, libs/ninja-graph/src,
+                  libs/ninja-deploy/src, libs/ninja-cli/src, libs/ninja-ui/src,
+                  apps/ninja-setup-assistant/src, apps/ninja-api/src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            members_order: source
+            docstring_style: google
+            docstring_section_style: spacy
+            merge_init_into_class: true
+            show_signature_annotations: true
+            separate_signature: true
+            signature_crossrefs: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      base_path: ['.']
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Installation: getting-started/installation.md
+    - Quickstart: getting-started/quickstart.md
+    - Concepts: getting-started/concepts.md
+  - Architecture:
+    - architecture/index.md
+    - Agent Hierarchy: architecture/agent-hierarchy.md
+    - Agentic Schema Definition: architecture/asd.md
+    - Code Generation Pipeline: architecture/codegen.md
+    - Auth & RBAC: architecture/auth-rbac.md
+    - Persistence Layer: architecture/persistence.md
+  - API Reference:
+    - api/index.md
+    - Core Schema:
+      - api/core/entity.md
+      - api/core/domain.md
+      - api/core/relationship.md
+      - api/core/agent-config.md
+      - api/core/project.md
+    - Agents:
+      - api/agents/base.md
+      - api/agents/tools.md
+      - api/agents/tracing.md
+      - api/agents/orchestrator.md
+    - Auth:
+      - api/auth/gateway.md
+      - api/auth/rbac.md
+      - api/auth/context.md
+      - api/auth/strategies.md
+    - Code Generation:
+      - api/codegen/engine.md
+      - api/codegen/generators.md
+    - Persistence:
+      - api/persistence/index.md
+    - Introspection:
+      - api/introspect/index.md
+    - GraphQL:
+      - api/graphql/index.md
+  - Examples:
+    - examples/index.md
+    - Schema Definition: examples/01-schema.md
+    - Code Generation: examples/02-codegen.md
+    - Data Agents: examples/03-data-agents.md
+    - Domain Agents: examples/04-domain-agents.md
+    - Auth & RBAC: examples/05-auth-rbac.md
+    - End-to-End: examples/06-end-to-end.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/codeninja/agentic-backend
