@@ -76,7 +76,7 @@ Respond in this exact markdown format:
     body = json.dumps({
         "model": "gpt-5.2",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 3000,
+        "max_completion_tokens": 3000,
         "temperature": 0.2,
     }).encode()
 

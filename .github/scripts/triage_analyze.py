@@ -74,7 +74,7 @@ Respond in this exact markdown format:
     body = json.dumps({
         "model": "gpt-5.2",
         "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 2000,
+        "max_completion_tokens": 2000,
         "temperature": 0.2,
     }).encode()
 
@@ -86,7 +86,12 @@ Respond in this exact markdown format:
             "Content-Type": "application/json",
         },
     )
-    resp = urllib.request.urlopen(req)
+    try:
+        resp = urllib.request.urlopen(req)
+    except urllib.request.HTTPError as e:
+        error_body = e.read().decode()
+        print(f"OpenAI API error {e.code}: {error_body}", file=sys.stderr)
+        sys.exit(1)
     result = json.loads(resp.read())
     analysis = result["choices"][0]["message"]["content"]
 
