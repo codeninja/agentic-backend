@@ -1,37 +1,68 @@
 """Base agent classes — DataAgent, DomainAgent, CoordinatorAgent.
 
-All follow ADK patterns with scoped tool access and tracing.
+DataAgent extends ADK ``BaseAgent`` for deterministic CRUD (no LLM).
+DomainAgent and CoordinatorAgent wrap ADK ``LlmAgent`` with scoped
+sub-agents and tools, preserving the Ninja Stack delegation hierarchy.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import AsyncGenerator
+from typing import Any, Callable
 
+from google.adk.agents import BaseAgent, LlmAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events import Event
 from ninja_core.schema.agent import AgentConfig, ReasoningLevel
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
+from pydantic import model_validator
 
-from ninja_agents.tools import ToolDefinition, generate_crud_tools, invoke_tool
+from ninja_agents.tools import generate_crud_tools, invoke_tool
 from ninja_agents.tracing import TraceContext
 
+# Default model for LLM-powered agents (Gemini via ADK).
+_DEFAULT_MODEL = "gemini-2.5-pro"
 
-class DataAgent:
+# Map reasoning levels to model identifiers.
+_REASONING_MODEL: dict[ReasoningLevel, str] = {
+    ReasoningLevel.NONE: "",
+    ReasoningLevel.LOW: "gemini-2.0-flash",
+    ReasoningLevel.MEDIUM: "gemini-2.5-flash",
+    ReasoningLevel.HIGH: _DEFAULT_MODEL,
+}
+
+
+class DataAgent(BaseAgent):
     """Deterministic agent that owns a single entity.
 
-    Performs CRUD operations via its scoped tool set.
-    No LLM calls unless reasoning_level is explicitly set above NONE.
+    Extends ADK ``BaseAgent`` — performs CRUD operations via its scoped
+    tool set without LLM calls (unless reasoning_level is explicitly raised).
     """
 
-    def __init__(
-        self,
-        entity: EntitySchema,
-        config: AgentConfig | None = None,
-        tools: list[ToolDefinition] | None = None,
-    ) -> None:
-        self.entity = entity
-        self.config = config or AgentConfig(reasoning_level=ReasoningLevel.NONE)
-        self.name = f"data_agent_{entity.name.lower()}"
-        self._tools = {t.name: t for t in (tools or generate_crud_tools(entity))}
+    entity: EntitySchema
+    config: AgentConfig = AgentConfig(reasoning_level=ReasoningLevel.NONE)
+    tools: list[Callable[..., Any]] = []  # type: ignore[assignment]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _derive_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            entity = data.get("entity")
+            if isinstance(entity, EntitySchema):
+                data.setdefault("name", f"data_agent_{entity.name.lower()}")
+                data.setdefault(
+                    "description",
+                    f"Data agent for {entity.name} — deterministic CRUD",
+                )
+        return data
+
+    def model_post_init(self, __context: Any) -> None:
+        super().model_post_init(__context)
+        if not self.tools:
+            self.tools = generate_crud_tools(self.entity)
+        # Build internal lookup by function __name__.
+        self._tool_map: dict[str, Callable[..., Any]] = {t.__name__: t for t in self.tools}
 
     @property
     def uses_llm(self) -> bool:
@@ -39,30 +70,61 @@ class DataAgent:
 
     @property
     def tool_names(self) -> list[str]:
-        return list(self._tools.keys())
+        return list(self._tool_map.keys())
 
-    def get_tool(self, name: str) -> ToolDefinition | None:
-        return self._tools.get(name)
+    def get_tool(self, name: str) -> Callable[..., Any] | None:
+        return self._tool_map.get(name)
 
-    def execute(self, tool_name: str, trace: TraceContext | None = None, **kwargs: Any) -> Any:
-        """Execute a tool by name. Raises KeyError if tool is not in scope."""
-        tool = self._tools.get(tool_name)
+    def execute(
+        self,
+        tool_name: str,
+        trace: TraceContext | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Execute a tool by name.  Raises ``KeyError`` if not in scope."""
+        tool = self._tool_map.get(tool_name)
         if tool is None:
             raise KeyError(f"Tool '{tool_name}' not in scope for agent '{self.name}'. Available: {self.tool_names}")
         span = trace.start_span(self.name) if trace else None
         try:
-            result = invoke_tool(tool, span=span, **kwargs)
-            return result
+            return invoke_tool(tool, span=span, **kwargs)
         finally:
             if trace:
                 trace.finish_span(self.name)
+
+    # -- ADK BaseAgent contract ------------------------------------------
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        """Deterministic execution: read the requested tool + args from
+        session state, run the tool, and yield a single result event."""
+        tool_name: str = ctx.session.state.get("tool_name", "")
+        tool_kwargs: dict[str, Any] = ctx.session.state.get("tool_kwargs", {})
+
+        tool = self._tool_map.get(tool_name)
+        if tool is None:
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                content=f"Unknown tool: {tool_name}",
+            )
+            return
+
+        result = tool(**tool_kwargs)
+        ctx.session.state["result"] = result
+        yield Event(
+            author=self.name,
+            invocation_id=ctx.invocation_id,
+            content=str(result),
+        )
 
 
 class DomainAgent:
     """LLM-powered agent that owns a domain (group of entities).
 
-    Delegates to its DataAgents for actual CRUD, uses LLM for
-    reasoning over cross-entity queries and ambiguity resolution.
+    Wraps an ADK ``LlmAgent`` whose ``sub_agents`` are the domain's
+    ``DataAgent`` instances.  Provides convenience methods for synchronous
+    delegation and execution that work without an LLM call (useful for
+    testing and deterministic paths).
     """
 
     def __init__(
@@ -74,7 +136,19 @@ class DomainAgent:
         self.domain = domain
         self.config = config or domain.agent_config
         self.name = f"domain_agent_{domain.name.lower()}"
-        self._data_agents = {da.entity.name: da for da in data_agents}
+        self._data_agents: dict[str, DataAgent] = {da.entity.name: da for da in data_agents}
+
+        model = _REASONING_MODEL.get(self.config.reasoning_level, _DEFAULT_MODEL)
+        self.agent = LlmAgent(
+            name=self.name,
+            model=model,
+            description=f"Domain agent for {domain.name}",
+            instruction=(
+                f"You are the {domain.name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."
+            ),
+            tools=[],
+            sub_agents=list(data_agents),
+        )
 
     @property
     def uses_llm(self) -> bool:
@@ -94,25 +168,21 @@ class DomainAgent:
         trace: TraceContext | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Delegate a tool call to a DataAgent. Raises KeyError if entity not in domain."""
+        """Delegate a tool call to a DataAgent.  Raises ``KeyError`` if
+        the entity is not in this domain."""
         da = self._data_agents.get(entity_name)
         if da is None:
             raise KeyError(f"Entity '{entity_name}' not in domain '{self.domain.name}'. Available: {self.entity_names}")
         if trace:
             trace.start_span(self.name)
         try:
-            result = da.execute(tool_name, trace=trace, **kwargs)
-            return result
+            return da.execute(tool_name, trace=trace, **kwargs)
         finally:
             if trace:
                 trace.finish_span(self.name)
 
     def execute(self, request: str, trace: TraceContext | None = None) -> dict[str, Any]:
-        """Process a domain-level request.
-
-        In a full implementation, this would use LLM to plan which
-        DataAgents to call. Here we return a structured stub.
-        """
+        """Process a domain-level request (stub — full impl uses LLM)."""
         if trace:
             trace.start_span(self.name)
         try:
@@ -131,8 +201,9 @@ class DomainAgent:
 class CoordinatorAgent:
     """Top-level routing agent that delegates to DomainAgents.
 
-    Uses LLM for intent classification, plan execution,
-    and result synthesis across domains.
+    Wraps an ADK ``LlmAgent`` whose ``sub_agents`` are the underlying
+    ``DomainAgent.agent`` instances.  Uses LLM for intent classification
+    and result synthesis.
     """
 
     def __init__(
@@ -142,7 +213,20 @@ class CoordinatorAgent:
     ) -> None:
         self.config = config or AgentConfig(reasoning_level=ReasoningLevel.HIGH)
         self.name = "coordinator"
-        self._domain_agents = {da.domain.name: da for da in domain_agents}
+        self._domain_agents: dict[str, DomainAgent] = {da.domain.name: da for da in domain_agents}
+
+        model = _REASONING_MODEL.get(self.config.reasoning_level, _DEFAULT_MODEL)
+        self.agent = LlmAgent(
+            name=self.name,
+            model=model,
+            description="Coordinator that routes requests across domains",
+            instruction=(
+                "You are the top-level coordinator. Classify the user's intent "
+                "and delegate to the appropriate domain agent."
+            ),
+            tools=[],
+            sub_agents=[da.agent for da in domain_agents],
+        )
 
     @property
     def domain_names(self) -> list[str]:
@@ -159,7 +243,7 @@ class CoordinatorAgent:
     ) -> dict[str, Any]:
         """Route a request to specific domains and collect results.
 
-        For parallel execution, use Orchestrator.fan_out() instead.
+        For parallel execution use ``Orchestrator.fan_out()`` instead.
         """
         results: dict[str, Any] = {}
         for domain_name in target_domains:
@@ -169,3 +253,36 @@ class CoordinatorAgent:
                 continue
             results[domain_name] = da.execute(request, trace=trace)
         return results
+
+
+# -- Factory functions (pure ADK) -----------------------------------------------
+
+
+def create_domain_agent(
+    domain: DomainSchema,
+    data_agents: list[DataAgent],
+) -> LlmAgent:
+    """Factory: create a bare ADK LlmAgent for a domain."""
+    model = _REASONING_MODEL.get(domain.agent_config.reasoning_level, _DEFAULT_MODEL)
+    return LlmAgent(
+        name=f"domain_agent_{domain.name.lower()}",
+        model=model,
+        description=f"Domain agent for {domain.name} — cross-entity reasoning",
+        instruction=(f"You are the {domain.name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."),
+        tools=[],
+        sub_agents=list(data_agents),
+    )
+
+
+def create_coordinator_agent(
+    domain_agents: list[DomainAgent],
+) -> LlmAgent:
+    """Factory: create a bare ADK LlmAgent coordinator."""
+    return LlmAgent(
+        name="coordinator",
+        model=_DEFAULT_MODEL,
+        description="Coordinator that routes requests across domains",
+        instruction=("Classify the user's intent and delegate to the appropriate domain agent."),
+        tools=[],
+        sub_agents=[da.agent for da in domain_agents],
+    )

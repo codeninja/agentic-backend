@@ -1,6 +1,7 @@
 """Tests for tracing / observability."""
 
 import time
+from types import SimpleNamespace
 
 from ninja_agents.tracing import AgentSpan, TraceContext
 
@@ -61,6 +62,28 @@ class TestTraceContext:
         assert len(d["spans"][0]["tool_calls"]) == 1
         assert d["spans"][0]["tool_calls"][0]["tool_name"] == "order_get"
         assert d["spans"][0]["tool_calls"][0]["success"] is True
+
+    def test_record_adk_event_captures_tokens(self) -> None:
+        trace = TraceContext()
+        trace.start_span("my_agent")
+        # Simulate an ADK event with usage_metadata
+        event = SimpleNamespace(
+            author="my_agent",
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=50,
+                candidates_token_count=25,
+            ),
+        )
+        trace.record_adk_event(event)
+        trace.finish_span("my_agent")
+        assert trace.total_input_tokens == 50
+        assert trace.total_output_tokens == 25
+
+    def test_record_adk_event_no_metadata(self) -> None:
+        trace = TraceContext()
+        event = SimpleNamespace(author="agent", usage_metadata=None)
+        trace.record_adk_event(event)
+        assert trace.total_input_tokens == 0
 
 
 class TestAgentSpan:

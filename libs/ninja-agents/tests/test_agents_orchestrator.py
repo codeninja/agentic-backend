@@ -1,6 +1,7 @@
 """Tests for parallel fan-out orchestration."""
 
 import pytest
+from google.adk.agents import ParallelAgent
 from ninja_agents.base import CoordinatorAgent, DataAgent, DomainAgent
 from ninja_agents.orchestrator import Orchestrator
 from ninja_agents.tracing import TraceContext
@@ -16,12 +17,24 @@ class TestOrchestrator:
         billing_domain: DomainSchema,
         logistics_domain: DomainSchema,
     ) -> Orchestrator:
-        da_order = DataAgent(order_entity)
-        da_ship = DataAgent(shipment_entity)
+        da_order = DataAgent(entity=order_entity)
+        da_ship = DataAgent(entity=shipment_entity)
         billing = DomainAgent(billing_domain, data_agents=[da_order])
         logistics = DomainAgent(logistics_domain, data_agents=[da_ship])
         coordinator = CoordinatorAgent(domain_agents=[billing, logistics])
         return Orchestrator(coordinator)
+
+    def test_build_parallel_agent(
+        self,
+        order_entity: EntitySchema,
+        shipment_entity: EntitySchema,
+        billing_domain: DomainSchema,
+        logistics_domain: DomainSchema,
+    ) -> None:
+        orch = self._build_orchestrator(order_entity, shipment_entity, billing_domain, logistics_domain)
+        parallel = orch.build_parallel_agent()
+        assert isinstance(parallel, ParallelAgent)
+        assert len(parallel.sub_agents) == 2
 
     @pytest.mark.asyncio
     async def test_fan_out_parallel(
