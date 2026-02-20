@@ -36,7 +36,7 @@ def test_generate_models(tmp_path, order_entity, product_entity):
 
 
 def test_generate_agents(tmp_path, order_entity, product_entity, billing_domain, inventory_domain):
-    """Generate DataAgent and DomainAgent stubs."""
+    """Generate DataAgent, DomainAgent, and CoordinatorAgent code using real ADK classes."""
     paths = generate_agents([order_entity, product_entity], [billing_domain, inventory_domain], tmp_path)
 
     assert len(paths) > 0
@@ -45,17 +45,40 @@ def test_generate_agents(tmp_path, order_entity, product_entity, billing_domain,
     assert (agents_dir / "product_agent.py").exists()
     assert (agents_dir / "billing_agent.py").exists()
     assert (agents_dir / "inventory_agent.py").exists()
+    assert (agents_dir / "coordinator_agent.py").exists()
 
-    # Check data agent content
+    # Check data agent imports real ADK classes
     order_agent = (agents_dir / "order_agent.py").read_text()
+    assert "from ninja_agents.base import DataAgent" in order_agent
+    assert "from ninja_agents.tools import generate_crud_tools" in order_agent
     assert "ORDER_ENTITY" in order_agent
-    assert "create_order_data_agent" in order_agent
+    assert "order_data_agent = DataAgent(" in order_agent
+    assert "generate_crud_tools(ORDER_ENTITY)" in order_agent
     assert "AUTO-GENERATED" in order_agent
 
-    # Check domain agent content
+    # Check domain agent imports real ADK classes
     billing_agent = (agents_dir / "billing_agent.py").read_text()
+    assert "from ninja_agents.base import DataAgent, DomainAgent" in billing_agent
     assert "BILLING_DOMAIN" in billing_agent
     assert "create_billing_domain_agent" in billing_agent
+    assert "-> DomainAgent:" in billing_agent
+    assert "ReasoningLevel.MEDIUM" in billing_agent
+
+    # Check coordinator agent wires domains
+    coordinator = (agents_dir / "coordinator_agent.py").read_text()
+    assert "from ninja_agents.base import CoordinatorAgent, DomainAgent" in coordinator
+    assert "create_coordinator" in coordinator
+    assert "create_billing_domain_agent" in coordinator
+    assert "create_inventory_domain_agent" in coordinator
+    assert "ReasoningLevel.HIGH" in coordinator
+
+    # Check __init__.py re-exports
+    init_content = (agents_dir / "__init__.py").read_text()
+    assert "order_data_agent" in init_content
+    assert "product_data_agent" in init_content
+    assert "create_billing_domain_agent" in init_content
+    assert "create_inventory_domain_agent" in init_content
+    assert "create_coordinator" in init_content
 
 
 def test_generate_graphql(tmp_path, order_entity, product_entity):

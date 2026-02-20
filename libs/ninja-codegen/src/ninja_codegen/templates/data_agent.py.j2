@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+from ninja_agents.base import DataAgent
+from ninja_agents.tools import generate_crud_tools
+from ninja_core.schema.agent import AgentConfig, ReasoningLevel
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 
 
@@ -39,15 +42,12 @@ from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, Stora
 {% endif %}
 )
 
+# CRUD tools for {{ entity.name }}
+{{ entity.name | upper }}_TOOLS = generate_crud_tools({{ entity.name | upper }}_ENTITY)
 
-def create_{{ entity.name | lower }}_data_agent():
-    """Create a DataAgent for {{ entity.name }}.
-
-    Usage:
-        from ninja_agents import DataAgent
-        agent = DataAgent({{ entity.name | upper }}_ENTITY)
-    """
-    # Import here to avoid hard dependency on ninja-agents at module level
-    from ninja_agents import DataAgent
-
-    return DataAgent({{ entity.name | upper }}_ENTITY)
+# Instantiate the DataAgent (ADK BaseAgent subclass)
+{{ entity.name | lower }}_data_agent = DataAgent(
+    entity={{ entity.name | upper }}_ENTITY,
+    config=AgentConfig(reasoning_level=ReasoningLevel.NONE),
+    tools={{ entity.name | upper }}_TOOLS,
+)

@@ -1,4 +1,4 @@
-"""Generate DataAgent and DomainAgent stubs from ASD definitions."""
+"""Generate DataAgent, DomainAgent, and CoordinatorAgent code from ASD definitions."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from .base import get_template_env, write_generated_file
 
 
 def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
-    """Generate a DataAgent stub for a single entity.
+    """Generate a DataAgent file for a single entity.
 
     Args:
         entity: The entity schema to generate from.
@@ -30,7 +30,7 @@ def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
 
 
 def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
-    """Generate a DomainAgent stub for a single domain.
+    """Generate a DomainAgent file for a single domain.
 
     Args:
         domain: The domain schema to generate from.
@@ -48,12 +48,32 @@ def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
     return file_path
 
 
+def generate_coordinator(domains: list[DomainSchema], output_dir: Path) -> Path:
+    """Generate a CoordinatorAgent file wiring all domain agents.
+
+    Args:
+        domains: List of domain schemas to wire together.
+        output_dir: Directory to write the generated file into.
+
+    Returns:
+        Path to the generated file.
+    """
+    env = get_template_env()
+    template = env.get_template("coordinator_agent.py.j2")
+    domain_names = [d.name for d in domains]
+    content = template.render(domains=domains, domain_names=domain_names)
+
+    file_path = output_dir / "coordinator_agent.py"
+    write_generated_file(file_path, content)
+    return file_path
+
+
 def generate_agents(
     entities: list[EntitySchema],
     domains: list[DomainSchema],
     output_dir: Path,
 ) -> list[Path]:
-    """Generate all agent stubs (data + domain).
+    """Generate all agent files (data + domain + coordinator).
 
     Args:
         entities: List of entity schemas.
@@ -76,8 +96,7 @@ def generate_agents(
         path = generate_data_agent(entity, agents_dir)
         paths.append(path)
         init_lines.append(
-            f"from .{entity.name.lower()}_agent import {entity.name.upper()}_ENTITY"
-            f", create_{entity.name.lower()}_data_agent"
+            f"from .{entity.name.lower()}_agent import {entity.name.upper()}_ENTITY, {entity.name.lower()}_data_agent"
         )
 
     # Generate domain agents
@@ -88,6 +107,12 @@ def generate_agents(
             f"from .{domain.name.lower()}_agent import {domain.name.upper()}_DOMAIN"
             f", create_{domain.name.lower()}_domain_agent"
         )
+
+    # Generate coordinator agent
+    if domains:
+        path = generate_coordinator(domains, agents_dir)
+        paths.append(path)
+        init_lines.append("from .coordinator_agent import create_coordinator")
 
     if entities or domains:
         init_lines.append("")

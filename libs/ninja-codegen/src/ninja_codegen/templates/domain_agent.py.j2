@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from ninja_core.schema.domain import DomainSchema
+from ninja_agents.base import DataAgent, DomainAgent
 from ninja_core.schema.agent import AgentConfig, ReasoningLevel
+from ninja_core.schema.domain import DomainSchema
 
 
 # Domain definition for {{ domain.name }}
@@ -15,7 +16,7 @@ from ninja_core.schema.agent import AgentConfig, ReasoningLevel
     agent_config=AgentConfig(
         model_provider={{ domain.agent_config.model_provider | repr }},
         model_name={{ domain.agent_config.model_name | repr }},
-        reasoning_level=ReasoningLevel.{{ domain.agent_config.reasoning_level.value }},
+        reasoning_level=ReasoningLevel.{{ domain.agent_config.reasoning_level.name }},
 {% if domain.agent_config.temperature != 0.7 %}
         temperature={{ domain.agent_config.temperature }},
 {% endif %}
@@ -31,19 +32,14 @@ from ninja_core.schema.agent import AgentConfig, ReasoningLevel
 ENTITY_NAMES: list[str] = {{ domain.entities | repr }}
 
 
-def create_{{ domain.name | lower }}_domain_agent(data_agents: list | None = None):
+def create_{{ domain.name | lower }}_domain_agent(data_agents: list[DataAgent] | None = None) -> DomainAgent:
     """Create a DomainAgent for {{ domain.name }}.
 
     Args:
         data_agents: List of DataAgent instances for entities in this domain.
                      If None, you must provide them before using the agent.
-
-    Usage:
-        from ninja_agents import DataAgent, DomainAgent
-        # Create data agents for each entity in this domain
-        agents = [DataAgent(entity) for entity in entities]
-        domain_agent = DomainAgent({{ domain.name | upper }}_DOMAIN, data_agents=agents)
     """
-    from ninja_agents import DomainAgent
-
-    return DomainAgent({{ domain.name | upper }}_DOMAIN, data_agents=data_agents or [])
+    return DomainAgent(
+        domain={{ domain.name | upper }}_DOMAIN,
+        data_agents=data_agents or [],
+    )
