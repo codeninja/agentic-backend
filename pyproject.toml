@@ -14,6 +14,7 @@ dependencies = [
     "ninja-core",
     "ninja-introspect",
     "ninja-models",
+    "ninja-persistence",
     "ninja-setup-assistant",
     "ninja-test-app",
     "ninja-test-lib",
@@ -32,6 +33,7 @@ ninja-codegen = { workspace = true }
 ninja-core = { workspace = true }
 ninja-introspect = { workspace = true }
 ninja-models = { workspace = true }
+ninja-persistence = { workspace = true }
 ninja-setup-assistant = { workspace = true }
 ninja-test-app = { workspace = true }
 ninja-test-lib = { workspace = true }
