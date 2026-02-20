@@ -160,14 +160,10 @@ get_prioritized_todo_issues() {
         local labels
         labels=$(gh issue view "$num" --repo "$REPO" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null)
 
-        # Skip critical — reserved for humans
-        if echo "$labels" | grep -q "priority: critical"; then
-            log "  🚫 #$num is priority: critical (human-only) — skipping"
-            continue
-        fi
-
         local weight=50  # default: untagged = medium
-        if echo "$labels" | grep -q "priority: high"; then
+        if echo "$labels" | grep -q "priority: critical"; then
+            weight=1
+        elif echo "$labels" | grep -q "priority: high"; then
             weight=10
         elif echo "$labels" | grep -q "priority: medium"; then
             weight=50
@@ -217,7 +213,8 @@ Your task:
 2. Read the implementation plans in docs/ and implementation_plans/
 3. Examine the source code in libs/ and apps/
 4. Identify: security vulnerabilities, logic flaws, missing implementations vs the vision, broken integrations
-5. For EACH issue found, create a GitHub issue using: gh issue create --repo $REPO --title '<title>' --label 'bug' --body '<detailed body>'
+5. For EACH issue found, create a GitHub issue using: gh issue create --repo $REPO --title '<title>' --label 'bug' --label 'priority: <high|medium|low>' --body '<detailed body>'
+   IMPORTANT: NEVER use 'priority: critical' — that label is reserved for human-created tickets only. Use 'priority: high' as your maximum.
 6. After creating each issue, add it to project board 4: gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url>
 7. Do NOT create duplicates — first run: gh issue list --repo $REPO --state open --json title,number
    and check existing titles before creating new ones
