@@ -148,6 +148,38 @@ clean_pids() {
     echo -n "$alive" > "$PIDS_FILE"
 }
 
+# Get Todo issues sorted by priority (high > medium > low), excluding critical (human-only)
+get_prioritized_todo_issues() {
+    local todo_nums
+    todo_nums=$(issues_by_status "Todo")
+    [[ -z "$todo_nums" ]] && return
+
+    # Fetch labels for each issue and sort by priority
+    local sorted=""
+    for num in $todo_nums; do
+        local labels
+        labels=$(gh issue view "$num" --repo "$REPO" --json labels -q '[.labels[].name] | join(",")' 2>/dev/null)
+
+        # Skip critical — reserved for humans
+        if echo "$labels" | grep -q "priority: critical"; then
+            log "  🚫 #$num is priority: critical (human-only) — skipping"
+            continue
+        fi
+
+        local weight=50  # default: untagged = medium
+        if echo "$labels" | grep -q "priority: high"; then
+            weight=10
+        elif echo "$labels" | grep -q "priority: medium"; then
+            weight=50
+        elif echo "$labels" | grep -q "priority: low"; then
+            weight=90
+        fi
+        sorted+="${weight} ${num}"$'\n'
+    done
+
+    echo "$sorted" | sort -n | awk '{print $2}' | grep -v '^$'
+}
+
 # Get issue title
 get_issue_title() {
     gh issue view "$1" --repo "$REPO" --json title -q '.title' 2>/dev/null
@@ -217,13 +249,13 @@ phase_implement() {
         return
     fi
 
-    # Prioritize rejected tickets first
+    # Prioritize rejected tickets first, then todo sorted by priority
     local rejected_issues
     rejected_issues=$(issues_by_status "Rejected")
     local todo_issues
-    todo_issues=$(issues_by_status "Todo")
+    todo_issues=$(get_prioritized_todo_issues)
 
-    # Merge: rejected first, then todo
+    # Merge: rejected first, then prioritized todo
     local all_issues
     all_issues=$(echo -e "${rejected_issues}\n${todo_issues}" | grep -v '^$')
 
