@@ -1,168 +1,225 @@
-# Agentic Backend
+<p align="center">
+  <h1 align="center">🥷 NinjaStack</h1>
+  <p align="center">
+    <strong>Schema-first agentic backend framework.</strong><br>
+    Point at a database, get a full agentic backend with AI agents, GraphQL, auth, and UI.
+  </p>
+  <p align="center">
+    <a href="https://codeninja.github.io/agentic-backend/">Homepage</a> ·
+    <a href="https://codeninja.github.io/agentic-backend/docs/">Documentation</a> ·
+    <a href="https://codeninja.github.io/agentic-backend/docs/examples/">Examples</a>
+  </p>
+</p>
 
-Schema-first agentic backend framework. Point at a database, get a full agentic backend + UI.
+---
 
-## Vision
+## What is NinjaStack?
 
-Replace or migrate traditional backends to an agentic architecture through automated introspection or conversational design:
+NinjaStack transforms database schemas into fully functional agentic backends. Define your data model once — through database introspection or conversational design — and the framework generates AI agents, GraphQL APIs, authentication, RBAC, and deployment manifests.
 
-1. **Introspection Mode (Bolt-on)**: Connect to existing databases (SQL, NoSQL, Graph, Vector) and auto-generate the Ninja Stack.
-2. **Conversation Mode (Greenfield)**: Converse with the Ninja Setup Assistant to define your domain; it writes the schemas and provisions the tech stack for you.
-3. **Hybrid Mode**: Bolt on to an existing system, then use the agent to expand the schema or migrate logic.
-4. **Auto-generate the Ninja Stack**: Models, agents, GQL layer, and prompts are derived from the Agentic Schema Definition (ASD).
-5. **Spin up UIs**: CRUD data viewer + agentic chat interface.
+```bash
+# Connect to your database, discover the schema
+ninjastack introspect --db postgres://localhost/myapp
+
+# Generate everything: models, agents, GraphQL, auth
+ninjastack sync
+
+# Run your agentic backend
+ninjastack serve
+# → Agentic backend at http://localhost:8000
+# → GraphQL playground at /graphql
+# → Agent chat at /chat
+```
+
+No database yet? Chat with the AI setup assistant to design your schema through natural dialogue:
+
+```bash
+ninjastack init --interactive
+# "I need a bookstore with books, customers, orders, and reviews..."
+```
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔍 **Database Introspection** | Auto-discover entities from PostgreSQL, MongoDB, Neo4j, or vector stores |
+| 🤖 **ADK Agent Generation** | Google ADK agents with scoped CRUD tools per entity |
+| 🧬 **Agentic Schema Definition** | Typed, composable schema language — your single source of truth |
+| 🔐 **Auth & RBAC** | Pluggable auth (OAuth2, JWT, API keys) with declarative role-based permissions |
+| 📊 **GraphQL Generation** | Strawberry types, queries, and mutations from schema |
+| 💬 **Conversational Setup** | Design your schema through natural dialogue with Gemini |
+| 🎯 **Tool Scoping** | Each agent only sees its own tools — no leaking across boundaries |
+| 🚀 **K8s Deployment** | Helm charts and manifests generated automatically |
+| 🔄 **Polyglot Persistence** | Unified layer across SQL, NoSQL, graph, and vector databases |
 
 ## Architecture
 
+NinjaStack organizes agents in a three-tier hierarchy with explicit ownership at every level:
+
 ```
-┌─────────────────────────────────────────────────────┐
-│         Use Case Router (Agentic/Deterministic)     │
-└─────────────────────────────────────────────────────┘
-                          │
-┌─────────────────────────────────────────────────────┐
-│              Use Case Coordinators                   │
-│  ┌─────────────┬─────────────┬─────────────┐        │
-│  │   Domain    │   Domain    │   Domain    │        │
-│  │   Agent     │   Agent     │   Agent     │        │
-│  └─────────────┴─────────────┴─────────────┘        │
-└─────────────────────────────────────────────────────┘
-                          │
-┌───────────────────────────────────────────────────────────┐
-│                   Data Agents (Polyglot)                  │
-│  ┌─────────────┬─────────────┬─────────────┬───────────┐  │
-│  │    User     │   Address   │   Product   │ Semantic  │  │
-│  │   Agent     │   Agent     │   Agent     │ Context   │  │
-│  └─────────────┴─────────────┴─────────────┴───────────┘  │
-└───────────────────────────────────────────────────────────┘
-                          │
-┌───────────────────────────────────────────────────────────┐
-│               Unified Persistence Layer                   │
-│      (SQL / NoSQL / Graph / Vector / External API)        │
-└───────────────────────────────────────────────────────────┘
-              ┌─────┴─────┬──────────┬──────────┐
-              │    DB     │  Vector  │  Graph   │
-              │(SQL/NoSQL)│  Store   │   DB     │
-              └───────────┴──────────┴──────────┘
+                    ┌──────────────────────────┐
+                    │   Coordinator Agent       │  Routes across domains
+                    │   (LLM · gemini-2.5-pro)  │  Intent classification
+                    └─────────┬────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+    ┌─────────┴─────────┐          ┌─────────┴─────────┐
+    │  Catalog Domain    │          │  Commerce Domain   │
+    │  (gemini-2.5-flash)│          │  (gemini-2.5-pro)  │
+    └──┬──────────┬─────┘          └──┬──────────┬─────┘
+       │          │                   │          │
+   ┌───┴───┐ ┌───┴───┐          ┌───┴───┐ ┌───┴───┐
+   │ Book  │ │Review │          │Customer│ │ Order │    Data Agents
+   │ Agent │ │ Agent │          │ Agent  │ │ Agent │    (deterministic
+   └───┬───┘ └───┬───┘          └───┬───┘ └───┬───┘     no LLM)
+       │         │                  │         │
+    ┌──┴─────────┴──────────────────┴─────────┴──┐
+    │         Unified Persistence Layer           │
+    │   SQL  ·  MongoDB  ·  Neo4j  ·  ChromaDB   │
+    └─────────────────────────────────────────────┘
 ```
 
-## Agent Hierarchy
+- **Data Agents** — Deterministic CRUD. No LLM. One entity, scoped tools. Fast and testable.
+- **Domain Agents** — LLM-powered. Own a business domain. Delegate to data agents. Configurable reasoning.
+- **Coordinator** — Top-level router. Classifies intent. Synthesizes cross-domain results.
 
-### Use Case Coordinators
-- Top-level orchestration for complex workflows
-- Parallel delegation to domain agents
-- Primary interface for conversational users
-- Example: Shopping cart coordinator (check inventory, process payment, fulfill order)
+> 📚 [Full architecture docs →](https://codeninja.github.io/agentic-backend/docs/architecture/)
 
-### Domain Agents
-- Understand cross-entity relationships within a domain
-- Compose multiple data agents
-- Use **Graph-RAG** to navigate multi-hop relationships and semantic clusters
-- Example: User Domain Agent contains User + Address agents, knows users have addresses
+## Quick Start
 
-### Data Agents
-- Single-entity experts
-- CRUD operations + entity-specific business logic
-- Interface with the Persistence Layer
-- Not all agents need LLM — many are deterministic data fetchers
+### Prerequisites
 
-## Design Principles
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) package manager
 
-- **Library-First Development**: All business logic, domain models, and agent behaviors live in granular, modular libraries. Applications are pure composition; they contain zero business logic.
-- **Composition over Application**: Deployable units are assembled from versioned libraries by the build system.
-- **AI-First Persistence**: Vector and Graph stores are first-class storage targets. Every entity has an optional embedding and a node in the global knowledge graph.
-- **Polyglot Introspection**: Support for Postgres (SQL), MongoDB (NoSQL), Neo4j (Graph), and direct Vector-only entities.
-- **Graph-Native Reasoning**: Native support for Graph-RAG for complex relationship traversal.
-- **Schema-first**: The data model is the source of truth; everything derives from it.
-- **Explicit > implicit**: Clear ownership, typed contracts.
-- **LLM where it matters**: Reserve reasoning for ambiguity, keep hot paths deterministic.
-- **Tolerance for dirty data**: Boundary layer handles schema drift, coercion, missing fields.
+### Install from source
 
-## Usage: The Ninja CLI
-
-The Ninja Stack is managed via a unified CLI. 
-
-### Installation
 ```bash
-uv tool install ninjastack
+git clone https://github.com/codeninja/agentic-backend.git
+cd agentic-backend
+uv sync
 ```
 
-### Commands
-- **`ninjastack init`**: Spawns the Conversational Setup Assistant. Handles DB introspection or greenfield schema design. Creates the `.ninjastack/` directory.
-- **`ninjastack sync`**: Runs the polyglot introspection and code generation engine. Syncs the `.ninjastack/` state with your `libs/` and `apps/`.
-- **`ninjastack create [app|lib|agent]`**: Scaffolds new components into the monorepo following the composition-first pattern.
-- **`ninjastack serve [app]`**: Starts a local development server for a specific app (FastAPI, CRUD UI, etc.).
-- **`ninjastack deploy [app]`**: Triggers the K8s/Helm deployment workflow.
+### Run the examples
 
-## Project State: `.ninjastack/`
+All examples use a bookstore domain and work without any API keys:
 
-All project metadata, the Agentic Schema Definition (ASD), and connection profiles are stored in the `.ninjastack/` directory at the project root. This ensures the environment is reproducible and the Ninja agents have a persistent "anchor" for the project's evolution.
+```bash
+# Schema definition
+PYTHONPATH=examples/bookstore uv run python examples/bookstore/01_schema_definition.py
 
+# Data agents (deterministic CRUD)
+PYTHONPATH=examples/bookstore uv run python examples/bookstore/03_data_agents.py
 
-## Multi-Engine Support
-
-### Relational (Postgres/MySQL)
-- Foreign-key based relationship mapping.
-- Structured GQL schema generation.
-
-### Document (MongoDB/DynamoDB)
-- Schema inference from sample sets.
-- Nested object flattening for agent tools.
-
-### Graph (Neo4j/FalkorDB)
-- Native relationship traversal.
-- Knowledge Graph construction from polyglot sources.
-
-### Vector (Chroma/Milvus/Pinecone)
-- Semantic search as a native tool for every Data Agent.
-- "Long-term entity memory" integrated into the persistence layer.
-
-## Graph-RAG & Discovery
-
-The backend doesn't just store data; it maps it:
-
-1. **Extraction**: Automated entity and relationship extraction from structured and unstructured sources.
-2. **Indexing**: Graph-native indexing (communities, clusters) for high-level thematic queries.
-3. **Traversal**: Agents use graph traversal to answer "Why" and "How" by following semantic and hard links across the polyglot stack.
-
-## Data Tolerance
-
-Real-world data is messy. The boundary layer handles:
-
-- **Missing fields** — convention-based defaults
-- **Type coercion** — int↔string, flexible timestamps
-- **Schema drift** — especially for schemaless databases (MongoDB)
-- **Progressive strictness** — log coercions, tighten rules based on observed patterns
-
-## Generation Pipeline
-
-```
-Polyglot Introspection (SQL/NoSQL/Vector)
-        ↓
-Pydantic Models (Unified Representation)
-        ↓
-Data Agents (per entity)
-        ↓
-Domain Agents (inferred from FKs or semantic links)
-        ↓
-Use Case Coordinators (common patterns)
-        ↓
-GQL Layer (auto-generated)
-        ↓
-UIs: CRUD Viewer + Agentic Chat
+# Full end-to-end pipeline
+PYTHONPATH=examples/bookstore uv run python examples/bookstore/06_end_to_end.py
 ```
 
-## Status
+| # | Example | What It Demonstrates |
+|---|---------|---------------------|
+| 1 | [Schema Definition](examples/bookstore/01_schema_definition.py) | Entities, fields, relationships, domains |
+| 2 | [Code Generation](examples/bookstore/02_code_generation.py) | Generate models, agents, GraphQL from schema |
+| 3 | [Data Agents](examples/bookstore/03_data_agents.py) | Deterministic CRUD, tool scoping, tracing |
+| 4 | [Domain Agents](examples/bookstore/04_domain_agents.py) | LLM-powered orchestration and delegation |
+| 5 | [Auth & RBAC](examples/bookstore/05_auth_rbac.py) | Identity, JWT tokens, role-based permissions |
+| 6 | [End-to-End](examples/bookstore/06_end_to_end.py) | Full pipeline: schema → agents → auth → query |
 
-Early development.
+### Optional: Enable LLM features
+
+Data agents, code generation, and RBAC work without an API key. For LLM-powered features (domain agents, conversational setup):
+
+```bash
+export GOOGLE_API_KEY="your-gemini-api-key"
+```
+
+## Project Structure
+
+NinjaStack is a modular monorepo of 15 focused packages:
+
+```
+agentic-backend/
+├── libs/                          # Reusable libraries
+│   ├── ninja-core/                # ASD schema models (entity, domain, relationship)
+│   ├── ninja-agents/              # ADK agents (DataAgent, DomainAgent, Coordinator)
+│   ├── ninja-auth/                # Auth gateway, strategies, RBAC
+│   ├── ninja-codegen/             # Jinja2 code generation engine
+│   ├── ninja-introspect/          # Database schema discovery
+│   ├── ninja-persistence/         # Unified polyglot persistence
+│   ├── ninja-gql/                 # Strawberry GraphQL generation
+│   ├── ninja-boundary/            # Data tolerance & coercion
+│   ├── ninja-graph/               # Graph-RAG bootstrapper
+│   ├── ninja-models/              # Pydantic model generation
+│   ├── ninja-deploy/              # K8s/Helm deployment pipeline
+│   ├── ninja-ui/                  # CRUD viewer & chat UI generation
+│   └── ninja-cli/                 # CLI tooling
+├── apps/                          # Deployable applications
+│   ├── ninja-api/                 # FastAPI server
+│   └── ninja-setup-assistant/     # Gemini-powered conversational setup
+├── examples/                      # Bookstore walkthrough (6 examples)
+├── docs/                          # MkDocs source
+└── site/                          # Landing page + built docs
+```
 
 ## Tech Stack
 
-- **Core Platform**: Google Gemini (Pro/Flash)
-- **Agentic Framework**: Google ADK (Agent Development Kit)
-- **Model Interoperability**: LiteLLM integration via ADK connectors (Ollama, OpenAI, Anthropic support)
-- **Core Languages**: Python (Backend/Agents), Pydantic (Contracts)
-- **Persistence**: SQLAlchemy (SQL), Motor/Beanie (Mongo), Neo4j (Graph), Chroma/Milvus (Vector)
-- **API**: FastAPI, Strawberry (GraphQL)
+| Layer | Technology |
+|-------|-----------|
+| Language | Python 3.12+ · Pydantic v2 |
+| Agents | Google ADK · LiteLLM (model-agnostic) |
+| API | FastAPI · Strawberry GraphQL |
+| Auth | JWT · OAuth2 · API Keys · bcrypt |
+| Persistence | SQLAlchemy · Motor/Beanie · Neo4j · ChromaDB |
+| Deploy | Kubernetes · Helm |
+| Package Mgmt | uv |
+
+## Contributing
+
+### Setup
+
+```bash
+git clone https://github.com/codeninja/agentic-backend.git
+cd agentic-backend
+uv sync
+```
+
+### Run tests
+
+```bash
+# Full suite
+uv run pytest
+
+# Specific library
+uv run pytest libs/ninja-core/
+uv run pytest libs/ninja-agents/
+uv run pytest libs/ninja-auth/
+
+# With coverage
+uv run pytest --cov
+```
+
+### Project conventions
+
+- **Commits**: [Conventional Commits](https://www.conventionalcommits.org/) — `feat(ninja-agents): add tool scoping`
+- **Branches**: `feat/issue-<N>-description` from `main`
+- **PRs**: One feature per PR, linked to an issue
+- **Tests**: Every library has its own test suite. All tests must pass before merge.
+- **Code generation**: Templates live in `libs/ninja-codegen/src/ninja_codegen/templates/`
+- **Adding a library**: Create under `libs/`, add to root `pyproject.toml` workspace members
+
+### Build docs locally
+
+```bash
+uv run mkdocs serve
+# → http://localhost:8000
+```
+
+## Links
+
+- 🏠 **Homepage**: [codeninja.github.io/agentic-backend](https://codeninja.github.io/agentic-backend/)
+- 📚 **Documentation**: [codeninja.github.io/agentic-backend/docs](https://codeninja.github.io/agentic-backend/docs/)
+- 📖 **Examples**: [examples/bookstore/](examples/bookstore/)
+- 🐛 **Issues**: [github.com/codeninja/agentic-backend/issues](https://github.com/codeninja/agentic-backend/issues)
 
 ## License
 
