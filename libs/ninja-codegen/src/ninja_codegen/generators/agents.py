@@ -1,17 +1,42 @@
-"""Generate DataAgent and DomainAgent stubs from ASD definitions."""
+"""Generate ADK DataAgent and DomainAgent definitions from ASD."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from ninja_core.schema.agent import ReasoningLevel
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
 
-from .base import get_template_env, write_generated_file
+from .base import build_fields_meta, get_template_env, write_generated_file
+
+# Map reasoning levels to model identifiers (mirrors ninja_agents.base).
+_REASONING_MODEL: dict[ReasoningLevel, str] = {
+    ReasoningLevel.NONE: "",
+    ReasoningLevel.LOW: "gemini-2.0-flash",
+    ReasoningLevel.MEDIUM: "gemini-2.5-flash",
+    ReasoningLevel.HIGH: "gemini-2.5-pro",
+}
+
+_DEFAULT_MODEL = "gemini-2.5-pro"
+
+
+def _build_create_params(entity: EntitySchema) -> str:
+    """Build the dict literal for create tool params (non-PK fields)."""
+    parts: list[str] = []
+    for f in entity.fields:
+        if not f.primary_key:
+            parts.append(f"{f.name!r}: {f.name}")
+    return ", ".join(parts)
+
+
+def _resolve_model(domain: DomainSchema) -> str:
+    """Resolve the LLM model name from a domain's reasoning level."""
+    return _REASONING_MODEL.get(domain.agent_config.reasoning_level, _DEFAULT_MODEL)
 
 
 def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
-    """Generate a DataAgent stub for a single entity.
+    """Generate an ADK BaseAgent subclass for a single entity.
 
     Args:
         entity: The entity schema to generate from.
@@ -22,7 +47,13 @@ def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
     """
     env = get_template_env()
     template = env.get_template("data_agent.py.j2")
-    content = template.render(entity=entity)
+    fields_meta = build_fields_meta(entity)
+    create_params = _build_create_params(entity)
+    content = template.render(
+        entity=entity,
+        fields_meta=fields_meta,
+        create_params=create_params,
+    )
 
     file_path = output_dir / f"{entity.name.lower()}_agent.py"
     write_generated_file(file_path, content)
@@ -30,7 +61,7 @@ def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
 
 
 def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
-    """Generate a DomainAgent stub for a single domain.
+    """Generate an ADK LlmAgent instantiation for a single domain.
 
     Args:
         domain: The domain schema to generate from.
@@ -41,7 +72,20 @@ def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
     """
     env = get_template_env()
     template = env.get_template("domain_agent.py.j2")
-    content = template.render(domain=domain)
+
+    model_name = _resolve_model(domain)
+    domain_description = domain.description or f"{domain.name} domain expert"
+    instruction = (
+        domain.agent_config.system_prompt
+        or f"You are the {domain.name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."
+    )
+
+    content = template.render(
+        domain=domain,
+        model_name=model_name,
+        domain_description=domain_description,
+        instruction=instruction,
+    )
 
     file_path = output_dir / f"{domain.name.lower()}_agent.py"
     write_generated_file(file_path, content)
@@ -53,7 +97,7 @@ def generate_agents(
     domains: list[DomainSchema],
     output_dir: Path,
 ) -> list[Path]:
-    """Generate all agent stubs (data + domain).
+    """Generate all ADK agent definitions (data + domain).
 
     Args:
         entities: List of entity schemas.
@@ -76,18 +120,14 @@ def generate_agents(
         path = generate_data_agent(entity, agents_dir)
         paths.append(path)
         init_lines.append(
-            f"from .{entity.name.lower()}_agent import {entity.name.upper()}_ENTITY"
-            f", create_{entity.name.lower()}_data_agent"
+            f"from .{entity.name.lower()}_agent import {entity.name}DataAgent, {entity.name.upper()}_TOOLS"
         )
 
     # Generate domain agents
     for domain in domains:
         path = generate_domain_agent(domain, agents_dir)
         paths.append(path)
-        init_lines.append(
-            f"from .{domain.name.lower()}_agent import {domain.name.upper()}_DOMAIN"
-            f", create_{domain.name.lower()}_domain_agent"
-        )
+        init_lines.append(f"from .{domain.name.lower()}_agent import {domain.name.lower()}_domain_agent")
 
     if entities or domains:
         init_lines.append("")

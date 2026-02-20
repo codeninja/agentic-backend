@@ -4,46 +4,40 @@
 
 from __future__ import annotations
 
-from ninja_core.schema.domain import DomainSchema
-from ninja_core.schema.agent import AgentConfig, ReasoningLevel
+from google.adk.agents import LlmAgent
 
+{% for entity_name in domain.entities %}
+from .{{ entity_name | lower }}_agent import {{ entity_name }}DataAgent, {{ entity_name | upper }}_TOOLS
+{% endfor %}
 
-# Domain definition for {{ domain.name }}
-{{ domain.name | upper }}_DOMAIN = DomainSchema(
-    name={{ domain.name | repr }},
-    entities={{ domain.entities | repr }},
-    agent_config=AgentConfig(
-        model_provider={{ domain.agent_config.model_provider | repr }},
-        model_name={{ domain.agent_config.model_name | repr }},
-        reasoning_level=ReasoningLevel.{{ domain.agent_config.reasoning_level.value }},
-{% if domain.agent_config.temperature != 0.7 %}
-        temperature={{ domain.agent_config.temperature }},
-{% endif %}
-{% if domain.agent_config.system_prompt %}
-        system_prompt={{ domain.agent_config.system_prompt | repr }},
-{% endif %}
-    ),
-{% if domain.description %}
-    description={{ domain.description | repr }},
-{% endif %}
-)
+# ---------------------------------------------------------------------------
+# Reasoning model: {{ model_name }}
+# ---------------------------------------------------------------------------
 
 ENTITY_NAMES: list[str] = {{ domain.entities | repr }}
 
+# Collect tools from all data agents in this domain
+{{ domain.name | upper }}_TOOLS: list = [
+{% for entity_name in domain.entities %}
+    *{{ entity_name | upper }}_TOOLS,
+{% endfor %}
+]
 
-def create_{{ domain.name | lower }}_domain_agent(data_agents: list | None = None):
-    """Create a DomainAgent for {{ domain.name }}.
+# Sub-agents: one DataAgent per entity
+{{ domain.name | upper }}_SUB_AGENTS: list = [
+{% for entity_name in domain.entities %}
+    {{ entity_name }}DataAgent(
+        name="data_agent_{{ entity_name | lower }}",
+        description="Data agent for {{ entity_name }} — deterministic CRUD",
+    ),
+{% endfor %}
+]
 
-    Args:
-        data_agents: List of DataAgent instances for entities in this domain.
-                     If None, you must provide them before using the agent.
-
-    Usage:
-        from ninja_agents import DataAgent, DomainAgent
-        # Create data agents for each entity in this domain
-        agents = [DataAgent(entity) for entity in entities]
-        domain_agent = DomainAgent({{ domain.name | upper }}_DOMAIN, data_agents=agents)
-    """
-    from ninja_agents import DomainAgent
-
-    return DomainAgent({{ domain.name | upper }}_DOMAIN, data_agents=data_agents or [])
+{{ domain.name | lower }}_domain_agent = LlmAgent(
+    name="domain_agent_{{ domain.name | lower }}",
+    model={{ model_name | repr }},
+    description={{ domain_description | repr }},
+    instruction={{ instruction | repr }},
+    tools={{ domain.name | upper }}_TOOLS,
+    sub_agents={{ domain.name | upper }}_SUB_AGENTS,
+)

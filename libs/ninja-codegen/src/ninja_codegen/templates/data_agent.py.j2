@@ -4,50 +4,85 @@
 
 from __future__ import annotations
 
-from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
+from collections.abc import AsyncGenerator
+from typing import Any
+
+from google.adk.agents import BaseAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events import Event
 
 
-# Entity definition for {{ entity.name }}
-{{ entity.name | upper }}_ENTITY = EntitySchema(
-    name={{ entity.name | repr }},
-    storage_engine={{ entity.storage_engine.value | repr }},
-    fields=[
-{% for field in entity.fields %}
-        FieldSchema(
-            name={{ field.name | repr }},
-            field_type=FieldType.{{ field.field_type.value }},
-{% if field.primary_key %}
-            primary_key=True,
-{% endif %}
-{% if field.nullable %}
-            nullable=True,
-{% endif %}
-{% if field.unique %}
-            unique=True,
-{% endif %}
-{% if field.indexed %}
-            indexed=True,
-{% endif %}
-        ),
-{% endfor %}
-    ],
-{% if entity.description %}
-    description={{ entity.description | repr }},
-{% endif %}
-{% if entity.collection_name %}
-    collection_name={{ entity.collection_name | repr }},
-{% endif %}
-)
+# ---------------------------------------------------------------------------
+# CRUD tools — plain functions with type hints and docstrings.
+# ADK auto-generates tool schemas from function signatures + docstrings.
+# ---------------------------------------------------------------------------
+
+def {{ entity.name | lower }}_get(id: str) -> dict[str, Any]:
+    """Retrieve a single {{ entity.name }} by ID."""
+    return {"entity": {{ entity.name | repr }}, "operation": "get", "params": {"id": id}}
 
 
-def create_{{ entity.name | lower }}_data_agent():
-    """Create a DataAgent for {{ entity.name }}.
+def {{ entity.name | lower }}_list(limit: int = 25, offset: int = 0) -> dict[str, Any]:
+    """List {{ entity.name }} records with optional pagination."""
+    return {"entity": {{ entity.name | repr }}, "operation": "list", "params": {"limit": limit, "offset": offset}}
 
-    Usage:
-        from ninja_agents import DataAgent
-        agent = DataAgent({{ entity.name | upper }}_ENTITY)
-    """
-    # Import here to avoid hard dependency on ninja-agents at module level
-    from ninja_agents import DataAgent
 
-    return DataAgent({{ entity.name | upper }}_ENTITY)
+def {{ entity.name | lower }}_create({% for field in fields_meta %}{% if not field.primary_key %}{{ field.name }}: {{ field.python_type }}{% if field.nullable %} | None = None{% endif %}{% if not loop.last %}, {% endif %}{% endif %}{% endfor %}) -> dict[str, Any]:
+    """Create a new {{ entity.name }} record."""
+    return {"entity": {{ entity.name | repr }}, "operation": "create", "params": { {{ create_params }} }}
+
+
+def {{ entity.name | lower }}_update(id: str, **kwargs: Any) -> dict[str, Any]:
+    """Update an existing {{ entity.name }} record."""
+    return {"entity": {{ entity.name | repr }}, "operation": "update", "params": {"id": id, **kwargs}}
+
+
+def {{ entity.name | lower }}_delete(id: str) -> dict[str, Any]:
+    """Delete a {{ entity.name }} record by ID."""
+    return {"entity": {{ entity.name | repr }}, "operation": "delete", "params": {"id": id}}
+
+
+def {{ entity.name | lower }}_search_semantic(query: str, limit: int = 10) -> dict[str, Any]:
+    """Semantic search across {{ entity.name }} records."""
+    return {"entity": {{ entity.name | repr }}, "operation": "search_semantic", "params": {"query": query, "limit": limit}}
+
+
+{{ entity.name | upper }}_TOOLS: list = [
+    {{ entity.name | lower }}_get,
+    {{ entity.name | lower }}_list,
+    {{ entity.name | lower }}_create,
+    {{ entity.name | lower }}_update,
+    {{ entity.name | lower }}_delete,
+    {{ entity.name | lower }}_search_semantic,
+]
+
+
+# ---------------------------------------------------------------------------
+# ADK BaseAgent subclass — deterministic CRUD dispatch (no LLM).
+# ---------------------------------------------------------------------------
+
+class {{ entity.name }}DataAgent(BaseAgent):
+    """Deterministic data agent for {{ entity.name }} entity."""
+
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
+        """Dispatch to the requested CRUD tool via session state."""
+        tool_name: str = ctx.session.state.get("tool_name", "")
+        tool_kwargs: dict[str, Any] = ctx.session.state.get("tool_kwargs", {})
+
+        tool_map = {t.__name__: t for t in {{ entity.name | upper }}_TOOLS}
+        tool = tool_map.get(tool_name)
+        if tool is None:
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                content=f"Unknown tool: {tool_name}",
+            )
+            return
+
+        result = tool(**tool_kwargs)
+        ctx.session.state["result"] = result
+        yield Event(
+            author=self.name,
+            invocation_id=ctx.invocation_id,
+            content=str(result),
+        )
