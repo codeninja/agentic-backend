@@ -5,34 +5,36 @@ description = "Ninja Stack — schema-first agentic backend framework"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "ninja-core",
-    "ninja-cli",
-    "ninja-auth",
-    "ninja-models",
     "ninja-agents",
     "ninja-api",
-    "ninja-setup-assistant",
-    "ninja-test-lib",
-    "ninja-test-app",
-    "ninja-introspect",
+    "ninja-auth",
+    "ninja-boundary",
+    "ninja-cli",
     "ninja-codegen",
+    "ninja-core",
+    "ninja-introspect",
+    "ninja-models",
+    "ninja-setup-assistant",
+    "ninja-test-app",
+    "ninja-test-lib",
 ]
 
 [tool.uv.workspace]
 members = ["libs/*", "apps/*"]
 
 [tool.uv.sources]
-ninja-core = { workspace = true }
-ninja-cli = { workspace = true }
-ninja-auth = { workspace = true }
-ninja-api = { workspace = true }
-ninja-setup-assistant = { workspace = true }
-ninja-test-lib = { workspace = true }
-ninja-models = { workspace = true }
 ninja-agents = { workspace = true }
-ninja-test-app = { workspace = true }
-ninja-introspect = { workspace = true }
+ninja-api = { workspace = true }
+ninja-auth = { workspace = true }
+ninja-boundary = { workspace = true }
+ninja-cli = { workspace = true }
 ninja-codegen = { workspace = true }
+ninja-core = { workspace = true }
+ninja-introspect = { workspace = true }
+ninja-models = { workspace = true }
+ninja-setup-assistant = { workspace = true }
+ninja-test-app = { workspace = true }
+ninja-test-lib = { workspace = true }
 
 [dependency-groups]
 dev = [
