@@ -3,12 +3,19 @@ name = "ninja-setup-assistant"
 version = "0.1.0"
 description = "Ninja Setup Assistant — conversational CLI for ninjastack init"
 requires-python = ">=3.12"
-dependencies = ["ninja-core", "ninja-cli", "ninja-introspect"]
+dependencies = [
+    "ninja-core",
+    "ninja-cli",
+    "ninja-introspect",
+    "ninja-agents",
+    "google-adk>=0.4.0",
+]
 
 [tool.uv.sources]
 ninja-core = { workspace = true }
 ninja-cli = { workspace = true }
 ninja-introspect = { workspace = true }
+ninja-agents = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

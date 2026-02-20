@@ -17,6 +17,7 @@ from ninja_setup_assistant.tools import (
     add_entity,
     add_relationship,
     confirm_schema,
+    create_adk_tools,
     create_domain,
     review_schema,
 )
@@ -271,3 +272,51 @@ class TestConfirmSchema:
         assert len(data["entities"]) == 2
         assert len(data["relationships"]) == 1
         assert len(data["domains"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# create_adk_tools — ADK-compatible wrappers
+# ---------------------------------------------------------------------------
+
+
+class TestCreateAdkTools:
+    def test_returns_six_tools(self, workspace: SchemaWorkspace) -> None:
+        tools = create_adk_tools(workspace)
+        assert len(tools) == 6
+
+    def test_tool_names(self, workspace: SchemaWorkspace) -> None:
+        tools = create_adk_tools(workspace)
+        names = [t.__name__ for t in tools]
+        assert "adk_add_entity" in names
+        assert "adk_add_relationship" in names
+        assert "adk_create_domain" in names
+        assert "adk_review_schema" in names
+        assert "adk_confirm_schema" in names
+        assert "adk_introspect_database" in names
+
+    def test_all_tools_have_docstrings(self, workspace: SchemaWorkspace) -> None:
+        tools = create_adk_tools(workspace)
+        for tool in tools:
+            assert tool.__doc__, f"{tool.__name__} missing docstring"
+
+    def test_adk_add_entity_modifies_workspace(self, workspace: SchemaWorkspace) -> None:
+        tools = create_adk_tools(workspace)
+        add_fn = next(t for t in tools if t.__name__ == "adk_add_entity")
+        result = add_fn(name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        assert "Added entity" in result
+        assert len(workspace.schema.entities) == 1
+
+    def test_adk_review_schema_reads_workspace(self, workspace: SchemaWorkspace) -> None:
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        tools = create_adk_tools(workspace)
+        review_fn = next(t for t in tools if t.__name__ == "adk_review_schema")
+        result = review_fn()
+        assert "User" in result
+
+    def test_adk_confirm_schema_returns_json(self, workspace: SchemaWorkspace) -> None:
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        tools = create_adk_tools(workspace)
+        confirm_fn = next(t for t in tools if t.__name__ == "adk_confirm_schema")
+        result = confirm_fn()
+        data = json.loads(result)
+        assert data["project_name"] == "test-project"

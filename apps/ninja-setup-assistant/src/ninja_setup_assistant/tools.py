@@ -1,13 +1,15 @@
 """ADK tool definitions that manipulate an in-memory AgenticSchema.
 
 All tools operate on a shared ``SchemaWorkspace`` instance so they can be
-tested independently of any LLM.
+tested independently of any LLM.  The ``create_adk_tools`` factory produces
+bound wrapper functions suitable for passing to ``LlmAgent(tools=...)``.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any, Callable
 
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
@@ -217,6 +219,112 @@ async def introspect_database(
 
 
 # ---------------------------------------------------------------------------
+# ADK tool factory — produces bound functions for LlmAgent(tools=...)
+# ---------------------------------------------------------------------------
+
+
+def create_adk_tools(workspace: SchemaWorkspace) -> list[Callable[..., Any]]:
+    """Create ADK-compatible tool functions bound to *workspace*.
+
+    Each returned function has the correct signature (without ``workspace``)
+    and docstring for ADK to auto-generate function declarations.
+    """
+
+    def adk_add_entity(
+        name: str,
+        fields: list[dict[str, str]],
+        storage_engine: str = "sql",
+        description: str = "",
+    ) -> str:
+        """Add a new entity (table/collection/node) to the schema.
+
+        Args:
+            name: Entity name in PascalCase (e.g. 'User', 'Product').
+            fields: List of field definitions. Each dict must have 'name' and 'field_type' keys.
+                Valid field_type values: string, text, integer, float, boolean, datetime, date,
+                uuid, json, array, binary, enum.  Optional keys: primary_key, nullable, unique, indexed.
+            storage_engine: Storage engine — sql, mongo, graph, or vector.  Defaults to sql.
+            description: Human-readable entity description.
+        """
+        return add_entity(
+            workspace, name=name, fields=fields, storage_engine=storage_engine, description=description or None
+        )
+
+    def adk_add_relationship(
+        name: str,
+        source_entity: str,
+        target_entity: str,
+        relationship_type: str = "hard",
+        cardinality: str = "many_to_one",
+        source_field: str = "",
+        target_field: str = "",
+        description: str = "",
+    ) -> str:
+        """Define a relationship between two entities.
+
+        Args:
+            name: Relationship name (e.g. 'user_posts').
+            source_entity: Name of the source entity.
+            target_entity: Name of the target entity.
+            relationship_type: Type — hard, soft, or graph.  Defaults to hard.
+            cardinality: one_to_one, one_to_many, many_to_one, or many_to_many.
+            source_field: FK field on the source entity.
+            target_field: Referenced field on the target entity.
+            description: Relationship description.
+        """
+        return add_relationship(
+            workspace,
+            name=name,
+            source_entity=source_entity,
+            target_entity=target_entity,
+            relationship_type=relationship_type,
+            cardinality=cardinality,
+            source_field=source_field or None,
+            target_field=target_field or None,
+            description=description or None,
+        )
+
+    def adk_create_domain(
+        name: str,
+        entities: list[str],
+        description: str = "",
+    ) -> str:
+        """Group entities into a logical domain with its own Expert Agent.
+
+        Args:
+            name: Domain name (e.g. 'Users', 'Inventory').
+            entities: List of entity names belonging to this domain.
+            description: Domain description.
+        """
+        return create_domain(workspace, name=name, entities=entities, description=description or None)
+
+    def adk_review_schema() -> str:
+        """Show the current schema summary — entities, relationships, and domains."""
+        return review_schema(workspace)
+
+    def adk_confirm_schema() -> str:
+        """Finalize and validate the schema. Returns the full ASD as JSON."""
+        return confirm_schema(workspace)
+
+    async def adk_introspect_database(connection_string: str) -> str:
+        """Connect to a database and discover its schema via introspection.
+
+        Args:
+            connection_string: Database connection URI (e.g. postgresql://user:pass@host/db).
+        """
+        return await introspect_database(workspace, connection_string=connection_string)
+
+    return [
+        adk_add_entity,
+        adk_add_relationship,
+        adk_create_domain,
+        adk_review_schema,
+        adk_confirm_schema,
+        adk_introspect_database,
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -228,119 +336,3 @@ def _to_bool(value: object) -> bool:
     if isinstance(value, str):
         return value.lower() in ("true", "1", "yes")
     return bool(value)
-
-
-# ---------------------------------------------------------------------------
-# ADK tool descriptors — used by the agent to register callable tools.
-# Each descriptor is a dict compatible with Google ADK's FunctionDeclaration.
-# ---------------------------------------------------------------------------
-
-
-TOOL_DECLARATIONS = [
-    {
-        "name": "add_entity",
-        "description": (
-            "Add a new entity (table/collection/node) to the schema. "
-            "Provide a PascalCase name, a list of fields, and optionally a storage engine."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Entity name in PascalCase (e.g. 'User', 'Product')."},
-                "fields": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string", "description": "Field name in snake_case."},
-                            "field_type": {
-                                "type": "string",
-                                "description": (
-                                    "Field type: string, text, integer, float, boolean, "
-                                    "datetime, date, uuid, json, array, binary, enum."
-                                ),
-                            },
-                            "primary_key": {"type": "boolean", "description": "Whether this is the primary key."},
-                            "nullable": {"type": "boolean", "description": "Whether the field accepts null."},
-                            "unique": {"type": "boolean", "description": "Whether values must be unique."},
-                            "indexed": {"type": "boolean", "description": "Whether the field is indexed."},
-                        },
-                        "required": ["name", "field_type"],
-                    },
-                    "description": "List of field definitions.",
-                },
-                "storage_engine": {
-                    "type": "string",
-                    "description": "Storage engine: sql, mongo, graph, vector. Defaults to sql.",
-                },
-                "description": {"type": "string", "description": "Human-readable entity description."},
-            },
-            "required": ["name", "fields"],
-        },
-    },
-    {
-        "name": "add_relationship",
-        "description": "Define a relationship between two entities.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Relationship name."},
-                "source_entity": {"type": "string", "description": "Source entity name."},
-                "target_entity": {"type": "string", "description": "Target entity name."},
-                "relationship_type": {
-                    "type": "string",
-                    "description": "Type: hard, soft, or graph. Defaults to hard.",
-                },
-                "cardinality": {
-                    "type": "string",
-                    "description": "Cardinality: one_to_one, one_to_many, many_to_one, many_to_many.",
-                },
-                "source_field": {"type": "string", "description": "FK field on source entity."},
-                "target_field": {"type": "string", "description": "Referenced field on target entity."},
-                "description": {"type": "string", "description": "Relationship description."},
-            },
-            "required": ["name", "source_entity", "target_entity"],
-        },
-    },
-    {
-        "name": "create_domain",
-        "description": "Group entities into a logical domain with its own Expert Agent.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Domain name (e.g. 'Users', 'Inventory')."},
-                "entities": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Entity names belonging to this domain.",
-                },
-                "description": {"type": "string", "description": "Domain description."},
-            },
-            "required": ["name", "entities"],
-        },
-    },
-    {
-        "name": "review_schema",
-        "description": "Show the current schema summary to the user.",
-        "parameters": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "confirm_schema",
-        "description": "Finalize and validate the schema. Returns the full ASD as JSON.",
-        "parameters": {"type": "object", "properties": {}},
-    },
-    {
-        "name": "introspect_database",
-        "description": "Connect to a database and discover its schema via introspection.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "connection_string": {
-                    "type": "string",
-                    "description": "Database connection URI (e.g. postgresql://user:pass@host/db).",
-                },
-            },
-            "required": ["connection_string"],
-        },
-    },
-]

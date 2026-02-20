@@ -2508,6 +2508,8 @@ name = "ninja-setup-assistant"
 version = "0.1.0"
 source = { editable = "apps/ninja-setup-assistant" }
 dependencies = [
+    { name = "google-adk" },
+    { name = "ninja-agents" },
     { name = "ninja-cli" },
     { name = "ninja-core" },
     { name = "ninja-introspect" },
@@ -2515,6 +2517,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google-adk", specifier = ">=0.4.0" },
+    { name = "ninja-agents", editable = "libs/ninja-agents" },
     { name = "ninja-cli", editable = "libs/ninja-cli" },
     { name = "ninja-core", editable = "libs/ninja-core" },
     { name = "ninja-introspect", editable = "libs/ninja-introspect" },
