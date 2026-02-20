@@ -13,6 +13,7 @@ members = [
     "ninja-agents",
     "ninja-api",
     "ninja-auth",
+    "ninja-boundary",
     "ninja-cli",
     "ninja-core",
     "ninja-introspect",
@@ -30,6 +31,7 @@ dependencies = [
     { name = "ninja-agents" },
     { name = "ninja-api" },
     { name = "ninja-auth" },
+    { name = "ninja-boundary" },
     { name = "ninja-cli" },
     { name = "ninja-core" },
     { name = "ninja-introspect" },
@@ -52,6 +54,7 @@ requires-dist = [
     { name = "ninja-agents", editable = "libs/ninja-agents" },
     { name = "ninja-api", editable = "apps/ninja-api" },
     { name = "ninja-auth", editable = "libs/ninja-auth" },
+    { name = "ninja-boundary", editable = "libs/ninja-boundary" },
     { name = "ninja-cli", editable = "libs/ninja-cli" },
     { name = "ninja-core", editable = "libs/ninja-core" },
     { name = "ninja-introspect", editable = "libs/ninja-introspect" },
@@ -2250,6 +2253,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "pydantic", specifier = ">=2.0" }]
+
+[[package]]
+name = "ninja-boundary"
+version = "0.1.0"
+source = { editable = "libs/ninja-boundary" }
+dependencies = [
+    { name = "ninja-core" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
 
 [[package]]
 name = "ninja-cli"
