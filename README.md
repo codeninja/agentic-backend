@@ -1,3 +1,7 @@
+> **⚠️ Early Alpha — Under Heavy Development**
+>
+> NinjaStack is actively undergoing heavy development and is **not yet ready for production use**. APIs, schemas, and architecture may change without notice. We're still in early alpha and welcome new contributors and anyone willing to explore a new frontier of agentic backend architecture. If that sounds like your kind of thing — jump in, open issues, and help shape what this becomes.
+
 <p align="center">
   <h1 align="center">🥷 NinjaStack</h1>
   <p align="center">
