@@ -18,11 +18,23 @@ app.add_typer(create_app, name="create")
 def init(
     project_name: str = typer.Option("my-ninja-project", "--name", "-n", help="Project name."),
     root: Path = typer.Option(Path("."), "--root", "-r", help="Project root directory."),
+    interactive: bool = typer.Option(False, "--interactive", "-i", help="Launch the conversational setup assistant."),
 ) -> None:
     """Initialize a new Ninja Stack project with .ninjastack/ config."""
     if is_initialized(root):
         typer.echo(f".ninjastack/ already exists in {root.resolve()}. Skipping init.")
         raise typer.Exit(code=0)
+
+    if interactive:
+        import asyncio
+
+        from ninja_setup_assistant.runner import run_assistant
+
+        result = asyncio.run(run_assistant(project_name=project_name, root=root))
+        if result is None:
+            raise typer.Exit(code=1)
+        typer.echo(f"Setup complete! Project '{project_name}' initialized with {len(result.entities)} entities.")
+        return
 
     config = init_state(project_name, root)
     typer.echo(f"Initialized Ninja Stack project '{config.project_name}' in {root.resolve() / '.ninjastack'}")
