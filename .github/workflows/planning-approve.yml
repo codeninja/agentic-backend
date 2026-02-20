@@ -1,0 +1,51 @@
+name: Planning Approval
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  check-reaction:
+    # Only trigger on reactions to planning agent comments
+    # We use a polling approach since GitHub doesn't have a native reaction event for issue comments
+    if: false  # Disabled — using workflow_dispatch polling instead
+    runs-on: ubuntu-latest
+    steps: []
+
+  # Alternative: maintainer comments /approve
+  approve:
+    if: >-
+      github.event.comment.body == '/approve' &&
+      (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Move to todo
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.issue.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            // Remove planning label
+            try {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: issue, name: 'planning' });
+            } catch (e) {}
+
+            // Add todo label
+            await github.rest.issues.addLabels({ owner, repo, issue_number: issue, labels: ['todo'] });
+
+            // Acknowledge
+            await github.rest.reactions.createForIssueComment({
+              owner, repo,
+              comment_id: context.payload.comment.id,
+              content: '+1'
+            });
+
+            await github.rest.issues.createComment({
+              owner, repo,
+              issue_number: issue,
+              body: '✅ Plan approved. Issue moved to `todo` — ready for implementation.'
+            });
