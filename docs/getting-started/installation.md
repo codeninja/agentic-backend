@@ -3,14 +3,14 @@
 ## From PyPI
 
 ```bash
-pip install agentic-backend
+pip install ninja-stack
 ```
 
 ## From Source
 
 ```bash
-git clone https://github.com/codeninja/agentic-backend.git
-cd agentic-backend
+git clone https://github.com/codeninja/ninja-stack.git
+cd ninja-stack
 uv sync
 ```
 
@@ -36,8 +36,8 @@ export GOOGLE_API_KEY="your-key-here"
 
 ```bash
 # Clone and install all workspace packages
-git clone https://github.com/codeninja/agentic-backend.git
-cd agentic-backend
+git clone https://github.com/codeninja/ninja-stack.git
+cd ninja-stack
 uv sync
 
 # Run tests

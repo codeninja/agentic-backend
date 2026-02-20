@@ -1,5 +1,5 @@
 [project]
-name = "agentic-backend"
+name = "ninja-stack"
 version = "0.1.0"
 description = "Ninja Stack — schema-first agentic backend framework"
 readme = "README.md"

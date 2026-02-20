@@ -18,7 +18,7 @@ A simple bookstore with Books, Customers, Orders, and Reviews — enough to demo
 ## Running the Examples
 
 ```bash
-cd agentic-backend
+cd ninja-stack
 PYTHONPATH=examples/bookstore uv run python examples/bookstore/01_schema_definition.py
 ```
 

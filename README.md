@@ -5,9 +5,9 @@
     Point at a database, get a full agentic backend with AI agents, GraphQL, auth, and UI.
   </p>
   <p align="center">
-    <a href="https://codeninja.github.io/agentic-backend/">Homepage</a> ·
-    <a href="https://codeninja.github.io/agentic-backend/docs/">Documentation</a> ·
-    <a href="https://codeninja.github.io/agentic-backend/docs/examples/">Examples</a>
+    <a href="https://codeninja.github.io/ninja-stack/">Homepage</a> ·
+    <a href="https://codeninja.github.io/ninja-stack/docs/">Documentation</a> ·
+    <a href="https://codeninja.github.io/ninja-stack/docs/examples/">Examples</a>
   </p>
 </p>
 
@@ -84,7 +84,7 @@ graph TD
 - **Domain Agents** — LLM-powered. Own a business domain. Delegate to data agents. Configurable reasoning.
 - **Coordinator** — Top-level router. Classifies intent. Synthesizes cross-domain results.
 
-> 📚 [Full architecture docs →](https://codeninja.github.io/agentic-backend/docs/architecture/)
+> 📚 [Full architecture docs →](https://codeninja.github.io/ninja-stack/docs/architecture/)
 
 ## Quick Start
 
@@ -96,8 +96,8 @@ graph TD
 ### Install from source
 
 ```bash
-git clone https://github.com/codeninja/agentic-backend.git
-cd agentic-backend
+git clone https://github.com/codeninja/ninja-stack.git
+cd ninja-stack
 uv sync
 ```
 
@@ -138,7 +138,7 @@ export GOOGLE_API_KEY="your-gemini-api-key"
 NinjaStack is a modular monorepo of 15 focused packages:
 
 ```
-agentic-backend/
+ninja-stack/
 ├── libs/                          # Reusable libraries
 │   ├── ninja-core/                # ASD schema models (entity, domain, relationship)
 │   ├── ninja-agents/              # ADK agents (DataAgent, DomainAgent, Coordinator)
@@ -178,8 +178,8 @@ agentic-backend/
 ### Setup
 
 ```bash
-git clone https://github.com/codeninja/agentic-backend.git
-cd agentic-backend
+git clone https://github.com/codeninja/ninja-stack.git
+cd ninja-stack
 uv sync
 ```
 
@@ -216,10 +216,10 @@ uv run mkdocs serve
 
 ## Links
 
-- 🏠 **Homepage**: [codeninja.github.io/agentic-backend](https://codeninja.github.io/agentic-backend/)
-- 📚 **Documentation**: [codeninja.github.io/agentic-backend/docs](https://codeninja.github.io/agentic-backend/docs/)
+- 🏠 **Homepage**: [codeninja.github.io/ninja-stack](https://codeninja.github.io/ninja-stack/)
+- 📚 **Documentation**: [codeninja.github.io/ninja-stack/docs](https://codeninja.github.io/ninja-stack/docs/)
 - 📖 **Examples**: [examples/bookstore/](examples/bookstore/)
-- 🐛 **Issues**: [github.com/codeninja/agentic-backend/issues](https://github.com/codeninja/agentic-backend/issues)
+- 🐛 **Issues**: [github.com/codeninja/ninja-stack/issues](https://github.com/codeninja/ninja-stack/issues)
 
 ## License
 

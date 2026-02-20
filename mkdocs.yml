@@ -1,9 +1,9 @@
 site_name: NinjaStack Docs
 site_description: Schema-first agentic backend framework documentation
-site_url: https://codeninja.github.io/agentic-backend/docs/
+site_url: https://codeninja.github.io/ninja-stack/docs/
 site_dir: site/docs
-repo_url: https://github.com/codeninja/agentic-backend
-repo_name: codeninja/agentic-backend
+repo_url: https://github.com/codeninja/ninja-stack
+repo_name: codeninja/ninja-stack
 edit_uri: edit/main/docs/
 
 theme:
@@ -148,4 +148,4 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/codeninja/agentic-backend
+      link: https://github.com/codeninja/ninja-stack
