@@ -26,6 +26,8 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKTREE_BASE="/tmp/ns-worktrees"
 PIDS_FILE="$PROJECT_ROOT/.dev-loop-pids"
 LOG_DIR="$PROJECT_ROOT/.dev-loop-logs"
+BOUNCE_FILE="$PROJECT_ROOT/.dev-loop-bounces"  # tracks review/reject cycles per issue
+MAX_BOUNCES=2
 
 # Board status option IDs (from project field config)
 STATUS_TRIAGE="7075b0bd"
@@ -193,6 +195,34 @@ get_prioritized_todo_issues() {
     done
 
     echo "$sorted" | sort -n | awk '{print $2}' | grep -v '^$'
+}
+
+# ---------------------------------------------------------------------------
+# Bounce tracking — count review↔rejected cycles per issue
+# ---------------------------------------------------------------------------
+get_bounce_count() {
+    local issue_num="$1"
+    if [[ -f "$BOUNCE_FILE" ]]; then
+        grep -c "^${issue_num}$" "$BOUNCE_FILE" 2>/dev/null || echo 0
+    else
+        echo 0
+    fi
+}
+
+record_bounce() {
+    local issue_num="$1"
+    echo "$issue_num" >> "$BOUNCE_FILE"
+}
+
+# Escalate to Need Human and notify via OpenClaw → Claw → Dallas
+escalate_to_human() {
+    local issue_num="$1"
+    local title="$2"
+    local bounces="$3"
+    log "  🚨 #$issue_num has bounced $bounces times — escalating to Need Human"
+    set_status "$issue_num" "$STATUS_NEED_HUMAN"
+    # Notify via OpenClaw system event → wakes Claw who notifies Dallas
+    openclaw system event --text "🚨 Dev Loop Escalation: Issue #$issue_num ($title) has failed AI review $bounces times and has been moved to Need Human. Please review manually: https://github.com/$REPO/issues/$issue_num" --mode now 2>/dev/null || true
 }
 
 # Get issue title
@@ -435,8 +465,15 @@ Be thorough but fair. Only reject for real issues, not style preferences." \
             (cd "$PROJECT_ROOT" && git worktree remove "$review_dir" 2>/dev/null || true)
             (cd "$PROJECT_ROOT" && git worktree remove "$WORKTREE_BASE/issue-${issue_num}" 2>/dev/null || true)
         elif grep -q "REVIEW_RESULT=REJECTED" "$review_log"; then
-            log "  ❌ PR #$pr_num REJECTED — moving to Rejected for rework"
-            set_status "$issue_num" "$STATUS_REJECTED"
+            record_bounce "$issue_num"
+            local bounces
+            bounces=$(get_bounce_count "$issue_num")
+            if (( bounces >= MAX_BOUNCES )); then
+                escalate_to_human "$issue_num" "$title" "$bounces"
+            else
+                log "  ❌ PR #$pr_num REJECTED (bounce $bounces/$MAX_BOUNCES) — moving to Rejected for rework"
+                set_status "$issue_num" "$STATUS_REJECTED"
+            fi
             (cd "$PROJECT_ROOT" && git worktree remove "$review_dir" 2>/dev/null || true)
         else
             log "  ⚠️  Review result unclear for #$issue_num — check log: $review_log"
