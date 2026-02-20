@@ -5,8 +5,9 @@
 # Continuously monitors the GitHub project board and orchestrates Claude Code
 # agents to implement, review, and merge tickets.
 #
-# Usage:  ./scripts/dev-loop.sh
-# Stop:   touch stop.txt   (in project root)
+# Usage:     ./scripts/dev-loop.sh
+# Stop:      touch stop.txt      (immediate abort)
+# Shutdown:  touch shutdown.txt   (graceful — waits for agents, then exits)
 # =============================================================================
 set -euo pipefail
 
@@ -49,6 +50,24 @@ die() { log "FATAL: $*"; exit 1; }
 check_stop() {
     if [[ -f "$PROJECT_ROOT/stop.txt" ]]; then
         log "🛑 stop.txt detected — aborting."
+        exit 0
+    fi
+}
+
+# Graceful shutdown: no new actions, wait for running agents, clean up
+check_shutdown() {
+    if [[ -f "$PROJECT_ROOT/shutdown.txt" ]]; then
+        log "🔻 shutdown.txt detected — initiating graceful shutdown..."
+        log "  Waiting for running agents to finish..."
+        while any_agents_running; do
+            clean_pids
+            log "  ⏳ Agents still running — checking again in 30s..."
+            sleep 30
+        done
+        log "  All agents finished."
+        rm -f "$PROJECT_ROOT/shutdown.txt"
+        log "  Removed shutdown.txt."
+        log "🛑 Graceful shutdown complete."
         exit 0
     fi
 }
@@ -483,15 +502,19 @@ main() {
         (cd "$PROJECT_ROOT" && git pull --rebase origin main 2>/dev/null || true)
 
         # Phase 1: Check if we need more tickets
+        check_shutdown
         phase_audit
 
         # Phase 2: Promote completed work to review
+        check_shutdown
         phase_promote
 
         # Phase 3: Review PRs awaiting AI review
+        check_shutdown
         phase_review
 
         # Phase 4: Start implementation on available tickets
+        check_shutdown
         phase_implement
 
         # Board summary
@@ -509,6 +532,7 @@ for s in ['Todo', 'In Progress', 'AI Review', 'Rejected', 'In Review', 'Done']:
 "
 
         log ""
+        check_shutdown
         log "💤 Sleeping ${CYCLE_DELAY}s until next cycle..."
         sleep "$CYCLE_DELAY"
     done
