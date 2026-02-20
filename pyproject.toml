@@ -48,6 +48,13 @@ ninja-test-lib = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "mkdocs-gen-files>=0.6.0",
+    "mkdocs-literate-nav>=0.6.2",
+    "mkdocs-material>=9.7.2",
+    "mkdocs-mermaid2-plugin>=1.2.3",
+    "mkdocs-section-index>=0.3.10",
+    "mkdocstrings>=1.0.3",
+    "mkdocstrings-python>=2.0.3",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "pytest-cov>=6.0",
