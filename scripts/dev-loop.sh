@@ -244,6 +244,14 @@ Focus on actionable, specific issues. Each issue should have:
 - Affected files
 - Impact assessment
 
+ORGANIZATION:
+- Group related issues under Epic issues. An Epic is a GitHub issue with the 'epic' label that describes a broad goal.
+- Before creating individual issues, check if a relevant Epic already exists: gh issue list --repo $REPO --label epic --state open --json title,number
+- If no Epic exists for the area, create one first: gh issue create --repo $REPO --title 'Epic: <area>' --label 'epic' --body '<vision-level description of the goal>'
+- Each individual issue should reference its parent Epic in the body: 'Part of #<epic_number>'
+- Use 'enhancement' label for new features, 'bug' for defects
+- Assign priority labels: 'priority: high', 'priority: medium', or 'priority: low' (NEVER 'priority: critical' — reserved for humans)
+
 Do NOT create issues for things that are already tracked." \
             --output-format text \
             > "$audit_log" 2>&1 &
