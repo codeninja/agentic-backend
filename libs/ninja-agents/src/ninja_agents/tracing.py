@@ -1,4 +1,8 @@
-"""Observability — trace context with structured logging, timing, and cost attribution."""
+"""Observability — trace context with structured logging, timing, and cost attribution.
+
+Integrates with ADK events: call ``TraceContext.record_adk_event()`` to
+capture token usage from ``Event.usage_metadata`` emitted by the ADK runtime.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +113,24 @@ class TraceContext:
     @property
     def total_output_tokens(self) -> int:
         return sum(s.output_tokens for s in self.spans)
+
+    def record_adk_event(self, event: Any) -> None:
+        """Extract token counts from an ADK ``Event`` and attribute them.
+
+        If the event has ``usage_metadata`` with ``prompt_token_count`` /
+        ``candidates_token_count``, the tokens are recorded on the active
+        span for ``event.author`` (if one exists).
+        """
+        author: str | None = getattr(event, "author", None)
+        usage = getattr(event, "usage_metadata", None)
+        if author and usage:
+            span = self._active_spans.get(author)
+            if span is None:
+                span = self.start_span(author)
+            input_tokens = getattr(usage, "prompt_token_count", 0) or 0
+            output_tokens = getattr(usage, "candidates_token_count", 0) or 0
+            if input_tokens or output_tokens:
+                span.record_tokens(input_tokens, output_tokens)
 
     def to_dict(self) -> dict:
         return {

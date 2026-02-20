@@ -1,9 +1,15 @@
-"""Parallel delegation logic — Coordinator fans out to DomainAgents concurrently."""
+"""Parallel delegation — Coordinator fans out to DomainAgents concurrently.
+
+Uses ADK ``ParallelAgent`` for the fan-out topology while keeping a
+synchronous convenience wrapper for non-async callers.
+"""
 
 from __future__ import annotations
 
 import asyncio
 from typing import Any
+
+from google.adk.agents import LlmAgent, ParallelAgent
 
 from ninja_agents.base import CoordinatorAgent
 from ninja_agents.tracing import TraceContext
@@ -25,10 +31,38 @@ async def _execute_domain(
 
 
 class Orchestrator:
-    """Orchestrates parallel fan-out from a CoordinatorAgent to multiple DomainAgents."""
+    """Orchestrates parallel fan-out from a CoordinatorAgent to multiple DomainAgents.
+
+    Provides ``build_parallel_agent()`` to construct an ADK ``ParallelAgent``
+    for use within the ADK runtime, and ``fan_out()`` / ``fan_out_sync()``
+    for direct programmatic parallel execution.
+    """
 
     def __init__(self, coordinator: CoordinatorAgent) -> None:
         self.coordinator = coordinator
+
+    def build_parallel_agent(self, target_domains: list[str] | None = None) -> ParallelAgent:
+        """Build an ADK ParallelAgent for fan-out execution.
+
+        Creates fresh ``LlmAgent`` instances (ADK enforces single-parent,
+        so the coordinator's own sub_agents cannot be reused here).
+        """
+        domains = target_domains or self.coordinator.domain_names
+        sub_agents: list[LlmAgent] = []
+        for d in domains:
+            da = self.coordinator.get_domain_agent(d)
+            if da is not None:
+                sub_agents.append(
+                    LlmAgent(
+                        name=f"{da.name}_parallel",
+                        model=da.agent.model,
+                        description=da.agent.description,
+                        instruction=da.agent.instruction,
+                        tools=[],
+                        sub_agents=[],
+                    )
+                )
+        return ParallelAgent(name="parallel_fan_out", sub_agents=sub_agents)
 
     async def fan_out(
         self,
@@ -40,7 +74,7 @@ class Orchestrator:
 
         Args:
             request: The user request to process.
-            target_domains: Domains to route to. Defaults to all domains.
+            target_domains: Domains to route to.  Defaults to all domains.
             trace: Optional trace context for observability.
 
         Returns:

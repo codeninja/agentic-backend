@@ -12,7 +12,7 @@ class TestGenerateCrudTools:
 
     def test_tool_names_prefixed_with_entity(self, order_entity: EntitySchema) -> None:
         tools = generate_crud_tools(order_entity)
-        names = [t.name for t in tools]
+        names = [t.__name__ for t in tools]
         assert "order_get" in names
         assert "order_list" in names
         assert "order_create" in names
@@ -23,12 +23,13 @@ class TestGenerateCrudTools:
     def test_all_tools_reference_correct_entity(self, order_entity: EntitySchema) -> None:
         tools = generate_crud_tools(order_entity)
         for tool in tools:
-            assert tool.entity_name == "Order"
+            result = tool(id="test")
+            assert result["entity"] == "Order"
 
     def test_tool_handler_returns_operation_dict(self, order_entity: EntitySchema) -> None:
         tools = generate_crud_tools(order_entity)
-        get_tool = next(t for t in tools if t.operation == "get")
-        result = get_tool.handler(id="abc-123")
+        get_tool = next(t for t in tools if t.__name__ == "order_get")
+        result = get_tool(id="abc-123")
         assert result == {"entity": "Order", "operation": "get", "params": {"id": "abc-123"}}
 
     def test_invoke_tool_records_in_span(self, order_entity: EntitySchema) -> None:
@@ -38,6 +39,6 @@ class TestGenerateCrudTools:
         invoke_tool(tool, span=span, id="123")
         assert len(span.tool_calls) == 1
         record = span.tool_calls[0]
-        assert record.tool_name == tool.name
+        assert record.tool_name == tool.__name__
         assert record.success is True
         assert record.duration_ms >= 0
