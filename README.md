@@ -56,28 +56,28 @@ ninjastack init --interactive
 
 NinjaStack organizes agents in a three-tier hierarchy with explicit ownership at every level:
 
-```
-                    ┌──────────────────────────┐
-                    │   Coordinator Agent       │  Routes across domains
-                    │   (LLM · gemini-2.5-pro)  │  Intent classification
-                    └─────────┬────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-    ┌─────────┴─────────┐          ┌─────────┴─────────┐
-    │  Catalog Domain    │          │  Commerce Domain   │
-    │  (gemini-2.5-flash)│          │  (gemini-2.5-pro)  │
-    └──┬──────────┬─────┘          └──┬──────────┬─────┘
-       │          │                   │          │
-   ┌───┴───┐ ┌───┴───┐          ┌───┴───┐ ┌───┴───┐
-   │ Book  │ │Review │          │Customer│ │ Order │    Data Agents
-   │ Agent │ │ Agent │          │ Agent  │ │ Agent │    (deterministic
-   └───┬───┘ └───┬───┘          └───┬───┘ └───┬───┘     no LLM)
-       │         │                  │         │
-    ┌──┴─────────┴──────────────────┴─────────┴──┐
-    │         Unified Persistence Layer           │
-    │   SQL  ·  MongoDB  ·  Neo4j  ·  ChromaDB   │
-    └─────────────────────────────────────────────┘
+```mermaid
+graph TD
+    C["🎯 Coordinator Agent<br/><small>LLM · gemini-2.5-pro · Intent routing</small>"]
+    C --> D1["📚 Catalog Domain<br/><small>gemini-2.5-flash · Medium reasoning</small>"]
+    C --> D2["🛒 Commerce Domain<br/><small>gemini-2.5-pro · High reasoning</small>"]
+    D1 --> B["📖 Book Agent"]
+    D1 --> R["⭐ Review Agent"]
+    D2 --> Cu["👤 Customer Agent"]
+    D2 --> O["📦 Order Agent"]
+    B --> P["🗄️ Unified Persistence Layer<br/><small>SQL · MongoDB · Neo4j · ChromaDB</small>"]
+    R --> P
+    Cu --> P
+    O --> P
+
+    style C fill:#166534,color:#fff,stroke:#22c55e
+    style D1 fill:#1e3a5f,color:#fff,stroke:#3b82f6
+    style D2 fill:#1e3a5f,color:#fff,stroke:#3b82f6
+    style B fill:#854d0e,color:#fff,stroke:#eab308
+    style R fill:#854d0e,color:#fff,stroke:#eab308
+    style Cu fill:#854d0e,color:#fff,stroke:#eab308
+    style O fill:#854d0e,color:#fff,stroke:#eab308
+    style P fill:#581c87,color:#fff,stroke:#a855f7
 ```
 
 - **Data Agents** — Deterministic CRUD. No LLM. One entity, scoped tools. Fast and testable.
