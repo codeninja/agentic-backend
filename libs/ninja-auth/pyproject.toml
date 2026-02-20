@@ -3,7 +3,13 @@ name = "ninja-auth"
 version = "0.1.0"
 description = "Ninja Auth Gateway — pluggable authentication and identity"
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.0"]
+dependencies = [
+    "pydantic>=2.0",
+    "starlette>=0.27",
+    "pyjwt[crypto]>=2.8",
+    "httpx>=0.25",
+    "bcrypt>=4.0",
+]
 
 [build-system]
 requires = ["hatchling"]
