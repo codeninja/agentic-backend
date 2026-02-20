@@ -1,0 +1,243 @@
+{% extends "base.html.j2" %}
+{% block title %}{{ entity.name }} — CRUD Viewer{% endblock %}
+{% block extra_styles %}
+.inline-edit { display: none; }
+.editing .inline-view { display: none; }
+.editing .inline-edit { display: block; }
+.sort-header { cursor: pointer; user-select: none; }
+.sort-header:hover { color: #1a1a2e; }
+.search-bar { max-width: 400px; }
+{% endblock %}
+
+{% block content %}
+<div style="margin: 1.5rem 0 1rem; display: flex; align-items: center; gap: 1rem;">
+  <a href="index.html" style="color: #4c51bf; text-decoration: none;">&larr; Back</a>
+  <h1>{{ entity.name }}</h1>
+  <span class="badge badge-{{ entity.storage_engine.value | lower if entity.storage_engine.value is defined else entity.storage_engine | lower }}">
+    {{ entity.storage_engine.value if entity.storage_engine.value is defined else entity.storage_engine }}
+  </span>
+</div>
+
+<div class="toolbar">
+  {% if has_embedding %}
+  <input type="text" id="semantic-search" class="search-bar" placeholder="Semantic search {{ entity.name }}...">
+  {% endif %}
+  <input type="text" id="filter-input" placeholder="Filter rows..." style="max-width: 250px;">
+  <button class="btn btn-primary" onclick="showCreateForm()">+ New {{ entity.name }}</button>
+</div>
+
+{% if relationships %}
+<div class="card" style="padding: 0.75rem 1rem;">
+  <strong style="font-size: 0.85rem;">Relationships:</strong>
+  {% for rel in relationships %}
+  <a href="{{ rel.target_slug }}.html" style="margin-left: 0.75rem; font-size: 0.85rem; color: #4c51bf;">
+    {{ rel.name }} &rarr; {{ rel.target_entity }} ({{ rel.cardinality }})
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card" style="overflow-x: auto;">
+  <table id="data-table">
+    <thead>
+      <tr>
+        {% for field in fields_meta %}
+        <th class="sort-header" data-field="{{ field.name }}">{{ field.name }}</th>
+        {% endfor %}
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+    </tbody>
+  </table>
+  <div class="pagination">
+    <button class="btn btn-sm" onclick="prevPage()">&laquo; Prev</button>
+    <span id="page-info">Page 1</span>
+    <button class="btn btn-sm" onclick="nextPage()">Next &raquo;</button>
+  </div>
+</div>
+
+<div id="create-form" class="card" style="display: none;">
+  <h3 style="margin-bottom: 1rem;">Create {{ entity.name }}</h3>
+  <form onsubmit="createRecord(event)">
+    {% for field in fields_meta %}
+    {% if not field.primary_key %}
+    <div style="margin-bottom: 0.75rem;">
+      <label style="font-size: 0.85rem; font-weight: 600;">{{ field.name }}{% if not field.nullable %} *{% endif %}</label>
+      {% if field.input_type == "textarea" %}
+      <textarea name="{{ field.name }}" {% if not field.nullable %}required{% endif %}
+        {% if field.constraints.maxlength is defined %}maxlength="{{ field.constraints.maxlength }}"{% endif %}
+      ></textarea>
+      {% elif field.input_type == "select" and field.constraints.enum_values is defined %}
+      <select name="{{ field.name }}" {% if not field.nullable %}required{% endif %}>
+        <option value="">-- Select --</option>
+        {% for val in field.constraints.enum_values %}
+        <option value="{{ val }}">{{ val }}</option>
+        {% endfor %}
+      </select>
+      {% elif field.input_type == "checkbox" %}
+      <input type="checkbox" name="{{ field.name }}" style="width: auto;">
+      {% else %}
+      <input type="{{ field.input_type }}" name="{{ field.name }}"
+        {% if not field.nullable %}required{% endif %}
+        {% if field.constraints.minlength is defined %}minlength="{{ field.constraints.minlength }}"{% endif %}
+        {% if field.constraints.maxlength is defined %}maxlength="{{ field.constraints.maxlength }}"{% endif %}
+        {% if field.constraints.pattern is defined %}pattern="{{ field.constraints.pattern }}"{% endif %}
+        {% if field.constraints.min is defined %}min="{{ field.constraints.min }}"{% endif %}
+        {% if field.constraints.max is defined %}max="{{ field.constraints.max }}"{% endif %}
+      >
+      {% endif %}
+      <div class="validation-error" id="err-{{ field.name }}"></div>
+    </div>
+    {% endif %}
+    {% endfor %}
+    <button type="submit" class="btn btn-primary">Create</button>
+    <button type="button" class="btn" onclick="hideCreateForm()">Cancel</button>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const GQL_ENDPOINT = "{{ gql_endpoint }}";
+const ENTITY = "{{ slug }}";
+const FIELDS = {{ fields_meta | tojson }};
+let currentPage = 0;
+const PAGE_SIZE = 25;
+let sortField = null;
+let sortAsc = true;
+
+function showCreateForm() { document.getElementById("create-form").style.display = "block"; }
+function hideCreateForm() { document.getElementById("create-form").style.display = "none"; }
+
+async function gqlQuery(query, variables) {
+  const res = await fetch(GQL_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  return res.json();
+}
+
+async function loadData() {
+  const fieldNames = FIELDS.map(f => f.name).join(" ");
+  const query = `query { list_${ENTITY}(limit: ${PAGE_SIZE}, offset: ${currentPage * PAGE_SIZE}) { ${fieldNames} } }`;
+  const data = await gqlQuery(query);
+  renderTable(data?.data?.[`list_${ENTITY}`] || []);
+}
+
+function renderTable(rows) {
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = "";
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    FIELDS.forEach(f => {
+      const td = document.createElement("td");
+      const val = row[f.name] ?? "";
+      td.innerHTML = `<span class="inline-view">${escapeHtml(String(val))}</span>`;
+      if (!f.primary_key) {
+        td.innerHTML += `<span class="inline-edit"><input type="${f.input_type === 'textarea' ? 'text' : f.input_type}" value="${escapeHtml(String(val))}" data-field="${f.name}"></span>`;
+      }
+      tr.appendChild(td);
+    });
+    const actionTd = document.createElement("td");
+    const pk = FIELDS.find(f => f.primary_key);
+    const pkVal = pk ? row[pk.name] : "";
+    actionTd.innerHTML = `
+      <button class="btn btn-sm" onclick="toggleEdit(this)">Edit</button>
+      <button class="btn btn-sm btn-primary" style="display:none" onclick="saveEdit(this, '${pkVal}')">Save</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteRecord('${pkVal}')">Delete</button>
+    `;
+    tr.appendChild(actionTd);
+    tbody.appendChild(tr);
+  });
+  document.getElementById("page-info").textContent = `Page ${currentPage + 1}`;
+}
+
+function toggleEdit(btn) {
+  const tr = btn.closest("tr");
+  tr.classList.toggle("editing");
+  const saveBtn = btn.nextElementSibling;
+  btn.style.display = tr.classList.contains("editing") ? "none" : "";
+  saveBtn.style.display = tr.classList.contains("editing") ? "" : "none";
+}
+
+async function saveEdit(btn, id) {
+  const tr = btn.closest("tr");
+  const inputs = tr.querySelectorAll(".inline-edit input");
+  const patch = {};
+  inputs.forEach(inp => { patch[inp.dataset.field] = inp.value; });
+  const patchJson = JSON.stringify(patch).replace(/"/g, '\\"');
+  await gqlQuery(`mutation { update_${ENTITY}(id: "${id}", patch: "${patchJson}") { ${FIELDS.map(f => f.name).join(" ")} } }`);
+  tr.classList.remove("editing");
+  loadData();
+}
+
+async function createRecord(e) {
+  e.preventDefault();
+  const form = e.target;
+  const input = {};
+  FIELDS.filter(f => !f.primary_key).forEach(f => {
+    const el = form.elements[f.name];
+    if (el) input[f.name] = f.input_type === "checkbox" ? el.checked : el.value;
+  });
+  const inputJson = JSON.stringify(input).replace(/"/g, '\\"');
+  await gqlQuery(`mutation { create_${ENTITY}(input: "${inputJson}") { ${FIELDS.map(f => f.name).join(" ")} } }`);
+  hideCreateForm();
+  form.reset();
+  loadData();
+}
+
+async function deleteRecord(id) {
+  if (!confirm("Delete this record?")) return;
+  await gqlQuery(`mutation { delete_${ENTITY}(id: "${id}") }`);
+  loadData();
+}
+
+function prevPage() { if (currentPage > 0) { currentPage--; loadData(); } }
+function nextPage() { currentPage++; loadData(); }
+
+function escapeHtml(text) {
+  const d = document.createElement("div");
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+document.getElementById("filter-input")?.addEventListener("input", function(e) {
+  const val = e.target.value.toLowerCase();
+  document.querySelectorAll("#table-body tr").forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(val) ? "" : "none";
+  });
+});
+
+document.querySelectorAll(".sort-header").forEach(th => {
+  th.addEventListener("click", () => {
+    const field = th.dataset.field;
+    if (sortField === field) sortAsc = !sortAsc;
+    else { sortField = field; sortAsc = true; }
+    const rows = Array.from(document.querySelectorAll("#table-body tr"));
+    const idx = FIELDS.findIndex(f => f.name === field);
+    rows.sort((a, b) => {
+      const av = a.children[idx]?.textContent || "";
+      const bv = b.children[idx]?.textContent || "";
+      return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    const tbody = document.getElementById("table-body");
+    rows.forEach(r => tbody.appendChild(r));
+  });
+});
+
+{% if has_embedding %}
+document.getElementById("semantic-search")?.addEventListener("keydown", async function(e) {
+  if (e.key !== "Enter") return;
+  const query = e.target.value;
+  if (!query) { loadData(); return; }
+  const fieldNames = FIELDS.map(f => f.name).join(" ");
+  const data = await gqlQuery(`query { search_${ENTITY}(query: "${query}") { ${fieldNames} } }`);
+  renderTable(data?.data?.[`search_${ENTITY}`] || []);
+});
+{% endif %}
+
+loadData();
+</script>
+{% endblock %}
