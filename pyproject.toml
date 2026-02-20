@@ -12,6 +12,7 @@ dependencies = [
     "ninja-cli",
     "ninja-codegen",
     "ninja-core",
+    "ninja-deploy",
     "ninja-gql",
     "ninja-graph",
     "ninja-introspect",
@@ -34,6 +35,7 @@ ninja-boundary = { workspace = true }
 ninja-cli = { workspace = true }
 ninja-codegen = { workspace = true }
 ninja-core = { workspace = true }
+ninja-deploy = { workspace = true }
 ninja-gql = { workspace = true }
 ninja-graph = { workspace = true }
 ninja-introspect = { workspace = true }

@@ -23,6 +23,7 @@ members = [
     "ninja-cli",
     "ninja-codegen",
     "ninja-core",
+    "ninja-deploy",
     "ninja-gql",
     "ninja-graph",
     "ninja-introspect",
@@ -46,6 +47,7 @@ dependencies = [
     { name = "ninja-cli" },
     { name = "ninja-codegen" },
     { name = "ninja-core" },
+    { name = "ninja-deploy" },
     { name = "ninja-gql" },
     { name = "ninja-graph" },
     { name = "ninja-introspect" },
@@ -74,6 +76,7 @@ requires-dist = [
     { name = "ninja-cli", editable = "libs/ninja-cli" },
     { name = "ninja-codegen", editable = "libs/ninja-codegen" },
     { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "ninja-deploy", editable = "libs/ninja-deploy" },
     { name = "ninja-gql", editable = "libs/ninja-gql" },
     { name = "ninja-graph", editable = "libs/ninja-graph" },
     { name = "ninja-introspect", editable = "libs/ninja-introspect" },
@@ -2361,6 +2364,25 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "pydantic", specifier = ">=2.0" }]
+
+[[package]]
+name = "ninja-deploy"
+version = "0.1.0"
+source = { editable = "libs/ninja-deploy" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "ninja-core" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
 
 [[package]]
 name = "ninja-gql"

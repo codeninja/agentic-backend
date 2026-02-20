@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ project_name }}-{{ svc.name }}
+  labels:
+    app: {{ svc.name }}
+    project: {{ project_name }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ svc.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ svc.name }}
+        project: {{ project_name }}
+    spec:
+      containers:
+        - name: {{ svc.name }}
+          image: {{ svc.image }}
+          ports:
+            - containerPort: {{ svc.port }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ project_name }}-{{ svc.name }}
+  labels:
+    app: {{ svc.name }}
+    project: {{ project_name }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ svc.port }}
+      targetPort: {{ svc.port }}
+      protocol: TCP
+  selector:
+    app: {{ svc.name }}

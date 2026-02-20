@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ project_name }}-config
+  labels:
+    project: {{ project_name }}
+data:
+  APP_NAME: "{{ project_name }}"
+{% if StorageEngine.SQL in engines %}
+  POSTGRES_HOST: "{{ project_name }}-postgresql"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "{{ project_name | replace('-', '_') }}"
+{% endif %}
+{% if StorageEngine.MONGO in engines %}
+  MONGO_HOST: "{{ project_name }}-mongodb"
+  MONGO_PORT: "27017"
+  MONGO_DB: "{{ project_name | replace('-', '_') }}"
+{% endif %}
+{% if StorageEngine.GRAPH in engines %}
+  NEO4J_HOST: "{{ project_name }}-neo4j"
+  NEO4J_PORT: "7687"
+{% endif %}
+{% if StorageEngine.VECTOR in engines %}
+  MILVUS_HOST: "{{ project_name }}-milvus"
+  MILVUS_PORT: "19530"
+{% endif %}
