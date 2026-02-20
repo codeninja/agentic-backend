@@ -23,6 +23,7 @@ members = [
     "ninja-cli",
     "ninja-codegen",
     "ninja-core",
+    "ninja-gql",
     "ninja-graph",
     "ninja-introspect",
     "ninja-models",
@@ -44,6 +45,7 @@ dependencies = [
     { name = "ninja-cli" },
     { name = "ninja-codegen" },
     { name = "ninja-core" },
+    { name = "ninja-gql" },
     { name = "ninja-graph" },
     { name = "ninja-introspect" },
     { name = "ninja-models" },
@@ -70,6 +72,7 @@ requires-dist = [
     { name = "ninja-cli", editable = "libs/ninja-cli" },
     { name = "ninja-codegen", editable = "libs/ninja-codegen" },
     { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "ninja-gql", editable = "libs/ninja-gql" },
     { name = "ninja-graph", editable = "libs/ninja-graph" },
     { name = "ninja-introspect", editable = "libs/ninja-introspect" },
     { name = "ninja-models", editable = "libs/ninja-models" },
@@ -644,6 +647,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c7/96/38086d58a181aac86d503dfa9c47eb20715a79c3e3acbdf786e92e5c09a8/coverage-7.13.4-cp314-cp314t-win_amd64.whl", hash = "sha256:4c7d3cc01e7350f2f0f6f7036caaf5673fb56b6998889ccfe9e1c1fe75a9c932", size = 224148, upload-time = "2026-02-09T12:58:58.645Z" },
     { url = "https://files.pythonhosted.org/packages/ce/72/8d10abd3740a0beb98c305e0c3faf454366221c0f37a8bcf8f60020bb65a/coverage-7.13.4-cp314-cp314t-win_arm64.whl", hash = "sha256:23e3f687cf945070d1c90f85db66d11e3025665d8dafa831301a0e0038f3db9b", size = 222172, upload-time = "2026-02-09T12:59:00.396Z" },
     { url = "https://files.pythonhosted.org/packages/0d/4a/331fe2caf6799d591109bb9c08083080f6de90a823695d412a935622abb2/coverage-7.13.4-py3-none-any.whl", hash = "sha256:1af1641e57cf7ba1bd67d677c9abdbcd6cc2ab7da3bca7fa1e2b7e50e65f2ad0", size = 211242, upload-time = "2026-02-09T12:59:02.032Z" },
+]
+
+[[package]]
+name = "cross-web"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a4/58/e688e99d1493c565d1587e64b499268d0a3129ae59f4efe440aac395f803/cross_web-0.4.1.tar.gz", hash = "sha256:0466295028dcae98c9ab3d18757f90b0e74fac2ff90efbe87e74657546d9993d", size = 157385, upload-time = "2026-01-09T18:17:41.534Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/67/49/92b46b6e65f09b717a66c4e5a9bc47a45ebc83dd0e0ed126f8258363479d/cross_web-0.4.1-py3-none-any.whl", hash = "sha256:41b07c3a38253c517ec0603c1a366353aff77538946092b0f9a2235033f192c2", size = 14320, upload-time = "2026-01-09T18:17:40.325Z" },
 ]
 
 [[package]]
@@ -1434,6 +1449,15 @@ wheels = [
 [package.optional-dependencies]
 grpc = [
     { name = "grpcio" },
+]
+
+[[package]]
+name = "graphql-core"
+version = "3.2.7"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ac/9b/037a640a2983b09aed4a823f9cf1729e6d780b0671f854efa4727a7affbe/graphql_core-3.2.7.tar.gz", hash = "sha256:27b6904bdd3b43f2a0556dad5d579bdfdeab1f38e8e8788e555bdcb586a6f62c", size = 513484, upload-time = "2025-11-01T22:30:40.436Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/14/933037032608787fb92e365883ad6a741c235e0ff992865ec5d904a38f1e/graphql_core-3.2.7-py3-none-any.whl", hash = "sha256:17fc8f3ca4a42913d8e24d9ac9f08deddf0a0b2483076575757f6c412ead2ec0", size = 207262, upload-time = "2025-11-01T22:30:38.912Z" },
 ]
 
 [[package]]
@@ -2339,6 +2363,25 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "pydantic", specifier = ">=2.0" }]
+
+[[package]]
+name = "ninja-gql"
+version = "0.1.0"
+source = { editable = "libs/ninja-gql" }
+dependencies = [
+    { name = "ninja-core" },
+    { name = "ninja-persistence" },
+    { name = "pydantic" },
+    { name = "strawberry-graphql" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "ninja-persistence", editable = "libs/ninja-persistence" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "strawberry-graphql", specifier = ">=0.236" },
+]
 
 [[package]]
 name = "ninja-graph"
@@ -3982,6 +4025,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c4/68/79977123bb7be889ad680d79a40f339082c1978b5cfcf62c2d8d196873ac/starlette-0.52.1.tar.gz", hash = "sha256:834edd1b0a23167694292e94f597773bc3f89f362be6effee198165a35d62933", size = 2653702, upload-time = "2026-01-18T13:34:11.062Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/0d/13d1d239a25cbfb19e740db83143e95c772a1fe10202dda4b76792b114dd/starlette-0.52.1-py3-none-any.whl", hash = "sha256:0029d43eb3d273bc4f83a08720b4912ea4b071087a3b48db01b7c839f7954d74", size = 74272, upload-time = "2026-01-18T13:34:09.188Z" },
+]
+
+[[package]]
+name = "strawberry-graphql"
+version = "0.297.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cross-web" },
+    { name = "graphql-core" },
+    { name = "packaging" },
+    { name = "python-dateutil" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/ca/fa3e4290c2a96582bc54e6aa3233809a5748f79e7b080ae8bd35a062afa7/strawberry_graphql-0.297.0.tar.gz", hash = "sha256:0c8f588f5c1536d7a808e9f057a29b93ad7b8e4b04b4f8ed76782fd5d2d67f89", size = 216314, upload-time = "2026-02-19T23:04:58.609Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/51/c013fd430691b4758ad7c1bdd257139de7d027e286e4c4b6473cae182aa9/strawberry_graphql-0.297.0-py3-none-any.whl", hash = "sha256:b2e797b2dc26490d171dae4f1a09cd6ac30cdf25d18a0d692922030e93b8085e", size = 314270, upload-time = "2026-02-19T23:05:00.843Z" },
 ]
 
 [[package]]
