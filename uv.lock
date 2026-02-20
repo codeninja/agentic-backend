@@ -23,6 +23,7 @@ members = [
     "ninja-cli",
     "ninja-codegen",
     "ninja-core",
+    "ninja-graph",
     "ninja-introspect",
     "ninja-models",
     "ninja-persistence",
@@ -43,6 +44,7 @@ dependencies = [
     { name = "ninja-cli" },
     { name = "ninja-codegen" },
     { name = "ninja-core" },
+    { name = "ninja-graph" },
     { name = "ninja-introspect" },
     { name = "ninja-models" },
     { name = "ninja-persistence" },
@@ -68,6 +70,7 @@ requires-dist = [
     { name = "ninja-cli", editable = "libs/ninja-cli" },
     { name = "ninja-codegen", editable = "libs/ninja-codegen" },
     { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "ninja-graph", editable = "libs/ninja-graph" },
     { name = "ninja-introspect", editable = "libs/ninja-introspect" },
     { name = "ninja-models", editable = "libs/ninja-models" },
     { name = "ninja-persistence", editable = "libs/ninja-persistence" },
@@ -2336,6 +2339,28 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "pydantic", specifier = ">=2.0" }]
+
+[[package]]
+name = "ninja-graph"
+version = "0.1.0"
+source = { editable = "libs/ninja-graph" }
+dependencies = [
+    { name = "ninja-core" },
+    { name = "pydantic" },
+]
+
+[package.optional-dependencies]
+neo4j = [
+    { name = "neo4j" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "neo4j", marker = "extra == 'neo4j'", specifier = ">=5.0" },
+    { name = "ninja-core", editable = "libs/ninja-core" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
+provides-extras = ["neo4j"]
 
 [[package]]
 name = "ninja-introspect"
