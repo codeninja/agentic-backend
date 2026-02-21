@@ -99,7 +99,9 @@ async def test_oauth2_authenticate_with_code():
         mock_exchange.return_value = {"access_token": "at-123"}
         mock_userinfo.return_value = {"sub": "u1", "email": "user@gmail.com"}
 
-        ctx = await strategy.authenticate_with_code("code-abc")
+        ctx = await strategy.authenticate_with_code(
+            "code-abc", expected_state="state-tok", received_state="state-tok"
+        )
         assert ctx.user_id == "u1"
         assert ctx.email == "user@gmail.com"
         assert ctx.provider == "oauth2:google"
@@ -155,10 +157,45 @@ async def test_oauth2_github_id_fallback():
         mock_exchange.return_value = {"access_token": "gh-token"}
         mock_userinfo.return_value = {"id": 99999, "email": "dev@github.com"}
 
-        ctx = await strategy.authenticate_with_code("gh-code")
+        ctx = await strategy.authenticate_with_code(
+            "gh-code", expected_state="s1", received_state="s1"
+        )
         assert ctx.user_id == "99999"
         assert ctx.email == "dev@github.com"
         assert ctx.provider == "oauth2:github"
+
+
+async def test_oauth2_empty_expected_state_raises():
+    """Empty expected_state must be rejected."""
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with pytest.raises(AuthenticationError, match="expected_state"):
+        await strategy.authenticate_with_code(
+            "code-abc", expected_state="", received_state="some-state"
+        )
+
+
+async def test_oauth2_empty_received_state_raises():
+    """Empty received_state must be rejected."""
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with pytest.raises(AuthenticationError, match="received_state"):
+        await strategy.authenticate_with_code(
+            "code-abc", expected_state="some-state", received_state=""
+        )
+
+
+async def test_oauth2_both_states_empty_raises():
+    """Both states empty must be rejected."""
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with pytest.raises(AuthenticationError):
+        await strategy.authenticate_with_code(
+            "code-abc", expected_state="", received_state=""
+        )
 
 
 def test_google_preset_urls():
