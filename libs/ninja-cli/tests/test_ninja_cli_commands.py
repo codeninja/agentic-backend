@@ -37,10 +37,13 @@ class TestStubCommands:
         assert result.exit_code == 0
         assert "Not yet implemented" in result.output
 
-    def test_serve_stub(self):
+    def test_serve_no_schema(self, tmp_path, monkeypatch):
+        """serve without a schema file should exit with error."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
         result = runner.invoke(app, ["serve"])
-        assert result.exit_code == 0
-        assert "Not yet implemented" in result.output
+        assert result.exit_code == 1
+        assert "not found" in result.output
 
     def test_deploy_stub(self):
         result = runner.invoke(app, ["deploy"])

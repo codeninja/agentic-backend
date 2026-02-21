@@ -48,9 +48,24 @@ def sync() -> None:
 
 
 @app.command()
-def serve() -> None:
-    """Start the Ninja Stack dev server. (Not yet implemented)"""
-    typer.echo("Not yet implemented")
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Bind address."),
+    port: int = typer.Option(8000, "--port", "-p", help="Bind port."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development."),
+    schema_path: Path | None = typer.Option(None, "--schema-path", help="Override ASD schema path."),
+) -> None:
+    """Start the Ninja Stack dev server."""
+    import uvicorn
+    from ninja_api.app import create_app
+
+    asd_path = schema_path or (_find_project_root() / ".ninjastack" / "schema.json")
+    if not asd_path.exists():
+        typer.echo(f"ASD schema not found at {asd_path}. Run 'ninjastack init' first.", err=True)
+        raise typer.Exit(code=1)
+
+    app = create_app(schema_path=asd_path)
+    typer.echo(f"Starting Ninja Stack server on {host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="info")
 
 
 @app.command()
