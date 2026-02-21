@@ -266,7 +266,14 @@ Your task:
 5. For EACH issue found, create a GitHub issue using: gh issue create --repo $REPO --title '<title>' --label 'bug' --label 'priority: <high|medium|low>' --body '<detailed body>'
    IMPORTANT: NEVER use 'priority: critical' — that label is reserved for human-created tickets only. Use 'priority: high' as your maximum.
 6. After creating each issue, add it to project board 4: gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url>
-7. Do NOT create duplicates — first run: gh issue list --repo $REPO --state open --json title,number
+7. Then set the board status. Use the following GraphQL mutation for EACH new item:
+   - For well-defined bugs with clear fix paths → set to Todo (option ID: $STATUS_TODO):
+     gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"<ITEM_ID>\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_TODO\" } }) { projectV2Item { id } } }'
+   - For features, architectural changes, or issues needing design decisions → set to Planning (option ID: $STATUS_PLANNING):
+     gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"<ITEM_ID>\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_PLANNING\" } }) { projectV2Item { id } } }'
+   - Epics should always go to Planning.
+   Get the item ID from the gh project item-add output (--format json) or by querying the board.
+8. Do NOT create duplicates — first run: gh issue list --repo $REPO --state open --json title,number
    and check existing titles before creating new ones
 
 Focus on actionable, specific issues. Each issue should have:
