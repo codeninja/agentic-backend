@@ -421,6 +421,14 @@ If the issue is VALID and the problem exists, continue to Phase 2.
 
 ## PHASE 2: IMPLEMENTATION
 
+QUALITY STANDARDS — NON-NEGOTIABLE:
+- Write PRODUCTION-QUALITY code. No stubs, no mocks-as-implementation, no TODO placeholders, no shortcuts.
+- Do not cut corners. If the issue requires a persistence layer, implement a real persistence layer. If it requires validation, implement real validation.
+- Every public function must have docstrings. Every edge case mentioned in the issue must be handled.
+- Do not introduce workarounds or hacks. Solve the root problem.
+- Your code must be consistent with the project's architectural principles: explicit > implicit, composition > inheritance, constraints > convention.
+- If you cannot implement the full solution properly, output RESULT=NEEDS_PLANNING with an explanation rather than shipping incomplete work.
+
 1. Read the issue carefully and understand the requirements
 2. Read relevant source files to understand the current implementation
 3. Implement the fix/feature as described in the issue
