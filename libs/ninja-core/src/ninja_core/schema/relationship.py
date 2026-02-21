@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+import warnings
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class RelationshipType(str, Enum):
@@ -40,3 +42,24 @@ class RelationshipSchema(BaseModel):
     description: str | None = Field(default=None, description="Human-readable description.")
 
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_relationship_fields(self) -> RelationshipSchema:
+        """Validate FK fields for HARD relationships and edge_label for GRAPH."""
+        if self.relationship_type == RelationshipType.HARD:
+            if not self.source_field or not self.target_field:
+                raise ValueError(
+                    f"HARD relationship '{self.name}' requires both "
+                    f"source_field and target_field to be set"
+                )
+
+        if self.relationship_type == RelationshipType.GRAPH:
+            if not self.edge_label:
+                self.edge_label = self.name
+                warnings.warn(
+                    f"GRAPH relationship '{self.name}' has no edge_label set; "
+                    f"defaulting to relationship name '{self.name}'",
+                    UserWarning,
+                    stacklevel=1,
+                )
+        return self

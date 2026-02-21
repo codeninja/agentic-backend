@@ -142,13 +142,22 @@ class TestAgenticSchema:
 
     def test_full_project(self):
         user = _simple_entity("User")
-        order = _simple_entity("Order")
+        order = EntitySchema(
+            name="Order",
+            storage_engine=StorageEngine.SQL,
+            fields=[
+                FieldSchema(name="id", field_type=FieldType.UUID, primary_key=True),
+                FieldSchema(name="user_id", field_type=FieldType.UUID),
+            ],
+        )
         rel = RelationshipSchema(
             name="user_orders",
             source_entity="User",
             target_entity="Order",
             relationship_type=RelationshipType.HARD,
             cardinality=Cardinality.ONE_TO_MANY,
+            source_field="id",
+            target_field="user_id",
         )
         domain = DomainSchema(name="Commerce", entities=["User", "Order"])
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class StorageEngine(str, Enum):
@@ -56,6 +56,33 @@ class FieldConstraint(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    @model_validator(mode="after")
+    def validate_constraint_coherence(self) -> FieldConstraint:
+        """Ensure min/max constraints are logically consistent."""
+        if self.min_length is not None and self.max_length is not None:
+            if self.min_length > self.max_length:
+                raise ValueError(
+                    f"min_length ({self.min_length}) cannot exceed "
+                    f"max_length ({self.max_length})"
+                )
+        if self.ge is not None and self.le is not None:
+            if self.ge > self.le:
+                raise ValueError(
+                    f"ge ({self.ge}) cannot exceed le ({self.le})"
+                )
+        return self
+
+
+_FIELD_TYPE_COMPATIBLE_PYTHON_TYPES: dict[FieldType, tuple[type, ...]] = {
+    FieldType.STRING: (str,),
+    FieldType.TEXT: (str,),
+    FieldType.INTEGER: (int,),
+    FieldType.FLOAT: (int, float),
+    FieldType.BOOLEAN: (bool,),
+    FieldType.UUID: (str,),
+    FieldType.ENUM: (str,),
+}
+
 
 class FieldSchema(BaseModel):
     """Schema definition for a single field within an entity."""
@@ -75,6 +102,37 @@ class FieldSchema(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    @model_validator(mode="after")
+    def validate_field_coherence(self) -> FieldSchema:
+        """Validate default type compatibility and enum constraints."""
+        # Primary key must not be nullable
+        if self.primary_key and self.nullable:
+            raise ValueError(
+                f"Primary key field '{self.name}' must not be nullable"
+            )
+
+        # Enum field requires enum_values in constraints
+        if self.field_type == FieldType.ENUM:
+            if (
+                self.constraints is None
+                or self.constraints.enum_values is None
+                or len(self.constraints.enum_values) == 0
+            ):
+                raise ValueError(
+                    f"Field '{self.name}' with field_type=ENUM requires "
+                    f"non-empty constraints.enum_values"
+                )
+
+        # Default value type checking (skip None defaults)
+        if self.default is not None:
+            allowed = _FIELD_TYPE_COMPATIBLE_PYTHON_TYPES.get(self.field_type)
+            if allowed is not None and not isinstance(self.default, allowed):
+                raise ValueError(
+                    f"Field '{self.name}': default value {self.default!r} "
+                    f"is not compatible with field_type={self.field_type.value}"
+                )
+        return self
+
 
 class EntitySchema(BaseModel):
     """Schema definition for an entity (table, collection, node, or vector store)."""
@@ -90,3 +148,29 @@ class EntitySchema(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Arbitrary tags for categorization.")
 
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def validate_entity_integrity(self) -> EntitySchema:
+        """Validate unique field names and exactly one primary key."""
+        # Unique field names
+        seen: set[str] = set()
+        for f in self.fields:
+            if f.name in seen:
+                raise ValueError(
+                    f"Entity '{self.name}' has duplicate field name '{f.name}'"
+                )
+            seen.add(f.name)
+
+        # Exactly one primary key
+        pk_fields = [f for f in self.fields if f.primary_key]
+        if len(pk_fields) == 0:
+            raise ValueError(
+                f"Entity '{self.name}' must have exactly one primary key field"
+            )
+        if len(pk_fields) > 1:
+            pk_names = [f.name for f in pk_fields]
+            raise ValueError(
+                f"Entity '{self.name}' has multiple primary key fields: "
+                f"{pk_names}"
+            )
+        return self
