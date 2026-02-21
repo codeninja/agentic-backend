@@ -108,6 +108,33 @@ async def test_bearer_authenticate_from_header():
     assert resp.json()["user_id"] is None
 
 
+def test_bearer_rejects_token_missing_sub():
+    """JWT without a 'sub' claim must be rejected (issue #81)."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+    token = _make_token({"email": "a@b.com", "roles": ["admin"]})
+    ctx = strategy.validate_token(token)
+    assert ctx is None
+
+
+def test_bearer_rejects_token_with_empty_sub():
+    """JWT with an empty-string 'sub' claim must be rejected (issue #81)."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+    token = _make_token({"sub": "", "email": "a@b.com"})
+    ctx = strategy.validate_token(token)
+    assert ctx is None
+
+
+def test_bearer_rejects_token_with_whitespace_sub():
+    """JWT with a whitespace-only 'sub' claim must be rejected."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+    token = _make_token({"sub": "   ", "email": "a@b.com"})
+    ctx = strategy.validate_token(token)
+    assert ctx is None
+
+
 def test_bearer_metadata_contains_claims():
     config = BearerConfig(secret_key=SECRET, algorithm="HS256")
     strategy = BearerStrategy(config)
