@@ -431,7 +431,21 @@ If the issue is VALID and the problem exists, continue to Phase 2.
 8. Push: git push origin $branch
 9. Update the PR body: gh pr edit $draft_pr --repo $REPO --body 'Closes #$issue_num\n\n<summary of changes>'
 10. Mark PR ready for review: gh pr ready $draft_pr --repo $REPO
-11. Output: RESULT=IMPLEMENTED
+11. Leave a handoff comment on the issue summarizing what you did and what the reviewer should focus on:
+    gh issue comment $issue_num --repo $REPO --body '**Developer Handoff:**
+    
+    **What was done:**
+    - <list of changes made, files modified>
+    
+    **Tests:**
+    - <test results summary>
+    
+    **What the reviewer should check:**
+    - <areas of concern, edge cases, architectural decisions made>
+    
+    **Next steps if approved:**
+    - <any follow-up work needed, related issues>'
+12. Output: RESULT=IMPLEMENTED
 
 IMPORTANT:
 - A draft PR already exists — do NOT create a new one
@@ -522,10 +536,34 @@ VIOLATIONS:
 
 IF THE CODE PASSES REVIEW:
 - Run: gh pr review $pr_num --repo $REPO --approve --body 'AI Review: APPROVED. <brief summary of what was reviewed and why it passes>'
+- Leave a handoff comment on the issue:
+  gh issue comment $issue_num --repo $REPO --body '**Reviewer Handoff (APPROVED):**
+
+  **What was reviewed:**
+  - <files examined, tests verified>
+  
+  **Verdict:** Code correctly implements the ticket requirements and aligns with project vision.
+  
+  **Notes for future work:**
+  - <any observations, potential improvements, or related areas to watch>'
 - Then output exactly: REVIEW_RESULT=APPROVED
 
 IF THE CODE FAILS REVIEW:
 - Run: gh pr review $pr_num --repo $REPO --request-changes --body 'AI Review: CHANGES REQUESTED.\n\n<detailed list of issues found, with file names and line numbers>\n\nPlease address these issues and re-request review.'
+- Leave a handoff comment on the issue:
+  gh issue comment $issue_num --repo $REPO --body '**Reviewer Handoff (CHANGES REQUESTED):**
+
+  **What was reviewed:**
+  - <files examined, tests verified>
+  
+  **Issues found:**
+  - <numbered list of specific problems with file:line references>
+  
+  **What the next developer should do:**
+  - <clear actionable steps to fix each issue>
+  
+  **What NOT to change:**
+  - <parts of the implementation that are correct and should be preserved>'
 - Then output exactly: REVIEW_RESULT=REJECTED
 
 Be thorough but fair. Only reject for real issues, not style preferences." \
@@ -606,11 +644,29 @@ OPTION A — CLOSE: The issue is genuinely not needed. Close it.
 
 OPTION B — REVISE AND RETURN: The issue is valid but needs clarification. Update it and send back.
   - Run: gh issue edit $issue_num --repo $REPO --body '<revised body with clearer requirements, acceptance criteria, and implementation hints>'
-  - Run: gh issue comment $issue_num --repo $REPO --body 'Planning Review: Revised requirements. Ready for implementation.'
+  - Run: gh issue comment $issue_num --repo $REPO --body '**Planner Handoff (REVISED):**
+  
+    **What changed:**
+    - <list of clarifications, added acceptance criteria, etc.>
+    
+    **What the developer should do:**
+    - <specific implementation guidance>
+    
+    **Key decisions made:**
+    - <architectural choices, scope decisions>'
   - Output: PLANNING_RESULT=REVISED
 
 OPTION C — ESCALATE: The issue requires human architectural decision.
-  - Run: gh issue comment $issue_num --repo $REPO --body 'Planning Review: This requires human input. <explanation of what needs deciding>'
+  - Run: gh issue comment $issue_num --repo $REPO --body '**Planner Handoff (ESCALATE):**
+  
+    **Why this needs human input:**
+    - <specific questions or decisions needed>
+    
+    **Options considered:**
+    - <tradeoffs analyzed>
+    
+    **Recommendation:**
+    - <what the planner would suggest, if any>'
   - Output: PLANNING_RESULT=ESCALATE
 
 Output the verdict as the LAST line." \
