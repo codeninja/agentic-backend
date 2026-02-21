@@ -1,9 +1,12 @@
 """Tests for AuthConfig loading."""
 
 import json
+import os
 import tempfile
 
-from ninja_auth.config import AuthConfig
+import pytest
+
+from ninja_auth.config import AuthConfig, IdentityConfig, _INSECURE_TOKEN_SECRET
 
 
 def test_auth_config_defaults():
@@ -63,3 +66,47 @@ def test_auth_config_oauth2_providers():
 
     assert "google" in cfg.oauth2_providers
     assert cfg.oauth2_providers["google"].client_id == "gid"
+
+
+# --- Tests for IdentityConfig.token_secret validation (issue #50) ---
+
+
+class TestTokenSecretValidation:
+    """Verify that the insecure default token_secret is rejected outside dev/test."""
+
+    def test_insecure_default_rejected_in_production(self, monkeypatch):
+        monkeypatch.delenv("NINJASTACK_ENV", raising=False)
+        with pytest.raises(ValueError, match="insecure default"):
+            IdentityConfig()
+
+    def test_insecure_default_rejected_with_prod_env(self, monkeypatch):
+        monkeypatch.setenv("NINJASTACK_ENV", "production")
+        with pytest.raises(ValueError, match="insecure default"):
+            IdentityConfig()
+
+    def test_insecure_default_allowed_in_dev(self, monkeypatch):
+        monkeypatch.setenv("NINJASTACK_ENV", "dev")
+        cfg = IdentityConfig()
+        assert cfg.token_secret != _INSECURE_TOKEN_SECRET
+        assert len(cfg.token_secret) > 16
+
+    def test_insecure_default_allowed_in_test(self, monkeypatch):
+        monkeypatch.setenv("NINJASTACK_ENV", "test")
+        cfg = IdentityConfig()
+        assert cfg.token_secret != _INSECURE_TOKEN_SECRET
+
+    def test_explicit_secret_always_accepted(self, monkeypatch):
+        monkeypatch.delenv("NINJASTACK_ENV", raising=False)
+        cfg = IdentityConfig(token_secret="my-super-secret-key-123")
+        assert cfg.token_secret == "my-super-secret-key-123"
+
+    def test_explicit_secret_accepted_in_production(self, monkeypatch):
+        monkeypatch.setenv("NINJASTACK_ENV", "production")
+        cfg = IdentityConfig(token_secret="prod-secret-abc")
+        assert cfg.token_secret == "prod-secret-abc"
+
+    def test_dev_mode_generates_unique_secrets(self, monkeypatch):
+        monkeypatch.setenv("NINJASTACK_ENV", "dev")
+        cfg1 = IdentityConfig()
+        cfg2 = IdentityConfig()
+        assert cfg1.token_secret != cfg2.token_secret
