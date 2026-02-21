@@ -156,7 +156,18 @@ class IdentityConfig(BaseModel):
 
 
 class AuthConfig(BaseModel):
-    """Top-level auth configuration."""
+    """Top-level auth configuration.
+
+    Attributes:
+        revocation_store: Optional token revocation store instance. When ``None``
+            (the default), revocation checks are skipped entirely and the gateway
+            operates in pure stateless JWT mode. Set to an implementation of
+            :class:`~ninja_auth.revocation.TokenRevocationStore` (e.g.
+            ``InMemoryRevocationStore``) to enable server-side token revocation
+            and per-user session invalidation.
+    """
+
+    model_config = {"arbitrary_types_allowed": True}
 
     default_strategy: str = "bearer"
     public_paths: list[str] = Field(default_factory=lambda: ["/health", "/docs", "/openapi.json"])
@@ -166,6 +177,7 @@ class AuthConfig(BaseModel):
     identity: IdentityConfig = Field(default_factory=IdentityConfig)
     rbac: RBACConfig = Field(default_factory=RBACConfig)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
+    revocation_store: Any | None = Field(default=None, exclude=True)
 
     @classmethod
     def from_file(cls, path: str | Path = ".ninjastack/auth.json") -> AuthConfig:

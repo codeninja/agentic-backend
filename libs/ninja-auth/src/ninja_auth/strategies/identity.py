@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -81,6 +82,7 @@ class IdentityStrategy:
             "sub": user_ctx.user_id,
             "email": user_ctx.email,
             "roles": user_ctx.roles,
+            "jti": uuid.uuid4().hex,
             "iat": now,
             "exp": now + timedelta(minutes=self.config.token_expiry_minutes),
         }
