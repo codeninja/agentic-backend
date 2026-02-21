@@ -121,8 +121,8 @@ async function gqlQuery(query, variables) {
 
 async function loadData() {
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const query = `query { list_${ENTITY}(limit: ${PAGE_SIZE}, offset: ${currentPage * PAGE_SIZE}) { ${fieldNames} } }`;
-  const data = await gqlQuery(query);
+  const query = `query($limit: Int!, $offset: Int!) { list_${ENTITY}(limit: $limit, offset: $offset) { ${fieldNames} } }`;
+  const data = await gqlQuery(query, { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE });
   renderTable(data?.data?.[`list_${ENTITY}`] || []);
 }
 
@@ -143,11 +143,26 @@ function renderTable(rows) {
     const actionTd = document.createElement("td");
     const pk = FIELDS.find(f => f.primary_key);
     const pkVal = pk ? row[pk.name] : "";
-    actionTd.innerHTML = `
-      <button class="btn btn-sm" onclick="toggleEdit(this)">Edit</button>
-      <button class="btn btn-sm btn-primary" style="display:none" onclick="saveEdit(this, '${pkVal}')">Save</button>
-      <button class="btn btn-sm btn-danger" onclick="deleteRecord('${pkVal}')">Delete</button>
-    `;
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn btn-sm";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", function() { toggleEdit(this); });
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "btn btn-sm btn-primary";
+    saveBtn.style.display = "none";
+    saveBtn.textContent = "Save";
+    saveBtn.addEventListener("click", function() { saveEdit(this, pkVal); });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn btn-sm btn-danger";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", function() { deleteRecord(pkVal); });
+
+    actionTd.appendChild(editBtn);
+    actionTd.appendChild(saveBtn);
+    actionTd.appendChild(delBtn);
     tr.appendChild(actionTd);
     tbody.appendChild(tr);
   });
@@ -167,8 +182,9 @@ async function saveEdit(btn, id) {
   const inputs = tr.querySelectorAll(".inline-edit input");
   const patch = {};
   inputs.forEach(inp => { patch[inp.dataset.field] = inp.value; });
-  const patchJson = JSON.stringify(patch).replace(/"/g, '\\"');
-  await gqlQuery(`mutation { update_${ENTITY}(id: "${id}", patch: "${patchJson}") { ${FIELDS.map(f => f.name).join(" ")} } }`);
+  const fieldNames = FIELDS.map(f => f.name).join(" ");
+  const query = `mutation($id: ID!, $patch: JSON!) { update_${ENTITY}(id: $id, patch: $patch) { ${fieldNames} } }`;
+  await gqlQuery(query, { id, patch });
   tr.classList.remove("editing");
   loadData();
 }
@@ -181,8 +197,9 @@ async function createRecord(e) {
     const el = form.elements[f.name];
     if (el) input[f.name] = f.input_type === "checkbox" ? el.checked : el.value;
   });
-  const inputJson = JSON.stringify(input).replace(/"/g, '\\"');
-  await gqlQuery(`mutation { create_${ENTITY}(input: "${inputJson}") { ${FIELDS.map(f => f.name).join(" ")} } }`);
+  const fieldNames = FIELDS.map(f => f.name).join(" ");
+  const query = `mutation($input: JSON!) { create_${ENTITY}(input: $input) { ${fieldNames} } }`;
+  await gqlQuery(query, { input });
   hideCreateForm();
   form.reset();
   loadData();
@@ -190,7 +207,8 @@ async function createRecord(e) {
 
 async function deleteRecord(id) {
   if (!confirm("Delete this record?")) return;
-  await gqlQuery(`mutation { delete_${ENTITY}(id: "${id}") }`);
+  const query = `mutation($id: ID!) { delete_${ENTITY}(id: $id) }`;
+  await gqlQuery(query, { id });
   loadData();
 }
 
@@ -233,7 +251,7 @@ document.getElementById("semantic-search")?.addEventListener("keydown", async fu
   const query = e.target.value;
   if (!query) { loadData(); return; }
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const data = await gqlQuery(`query { search_${ENTITY}(query: "${query}") { ${fieldNames} } }`);
+  const data = await gqlQuery(`query($query: String!) { search_${ENTITY}(query: $query) { ${fieldNames} } }`, { query });
   renderTable(data?.data?.[`search_${ENTITY}`] || []);
 });
 {% endif %}
