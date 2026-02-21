@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from fnmatch import fnmatch
 from typing import Any
 
@@ -13,6 +14,7 @@ from starlette.responses import JSONResponse, Response
 from ninja_auth.agent_context import set_rbac_policy, set_user_context
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
+from ninja_auth.errors import AuthenticationError
 from ninja_auth.rate_limiter import RateLimiter
 from ninja_auth.rbac import RBACPolicy
 from ninja_auth.strategies.apikey import ApiKeyStrategy
@@ -44,6 +46,7 @@ class AuthGateway(BaseHTTPMiddleware):
         self._apikey = ApiKeyStrategy(self.config.api_key)
         self._rbac = RBACPolicy(self.config.rbac)
         self._rate_limiter = RateLimiter(self.config.rate_limit)
+        self._revocation_store = self.config.revocation_store
 
     def _is_public_path(self, path: str) -> bool:
         """Check if the request path matches any configured public path pattern."""
@@ -92,6 +95,23 @@ class AuthGateway(BaseHTTPMiddleware):
 
         self._rate_limiter.record_attempt(client_ip, success=True)
 
+        # Check token revocation if a revocation store is configured
+        if self._revocation_store and user_ctx:
+            try:
+                await self._check_revocation(user_ctx)
+            except AuthenticationError as exc:
+                logger.warning(
+                    "Token revoked: ip=%s path=%s user=%s reason=%s",
+                    client_ip,
+                    request.url.path,
+                    user_ctx.user_id,
+                    str(exc),
+                )
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": str(exc)},
+                )
+
         # Enrich user context with RBAC-resolved permissions
         user_ctx = self._enrich_permissions(user_ctx)
 
@@ -113,6 +133,30 @@ class AuthGateway(BaseHTTPMiddleware):
             return ctx
 
         return None
+
+    async def _check_revocation(self, ctx: UserContext) -> None:
+        """Check if the authenticated token has been revoked.
+
+        Raises:
+            AuthenticationError: If the token's ``jti`` has been individually
+                revoked, or if the token was issued before the user's
+                revocation cutoff timestamp.
+        """
+        claims = ctx.metadata.get("claims") or {}
+
+        # Per-token revocation check
+        jti = claims.get("jti")
+        if jti and await self._revocation_store.is_token_revoked(jti):
+            raise AuthenticationError("Token has been revoked")
+
+        # Per-user revocation check (all tokens issued before a cutoff)
+        iat_raw = claims.get("iat")
+        if iat_raw and ctx.user_id:
+            revoked_before = await self._revocation_store.get_user_revoked_before(ctx.user_id)
+            if revoked_before:
+                iat = datetime.fromtimestamp(iat_raw, tz=timezone.utc)
+                if iat < revoked_before:
+                    raise AuthenticationError("Session invalidated")
 
     def _enrich_permissions(self, ctx: UserContext) -> UserContext:
         """Resolve role-based permissions and merge them into the user context."""
