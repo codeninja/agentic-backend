@@ -33,15 +33,31 @@ RBAC-aware domain/entity checks inside agent tools:
     def delete_invoice(**kwargs):
         require_domain_access("delete", "Billing", entity="Invoice")
         ...
+
+RBAC policy propagation (set by AuthGateway middleware):
+
+    from ninja_auth.agent_context import set_rbac_policy, clear_rbac_policy
+
+    policy = RBACPolicy(config)
+    token = set_rbac_policy(policy)
+    try:
+        await run_agent(...)
+    finally:
+        clear_rbac_policy(token)
 """
 
 from __future__ import annotations
 
 from contextvars import ContextVar, Token
+from typing import TYPE_CHECKING
 
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 
+if TYPE_CHECKING:
+    from ninja_auth.rbac import RBACPolicy
+
 _user_context_var: ContextVar[UserContext] = ContextVar("user_context", default=ANONYMOUS_USER)
+_rbac_policy_var: ContextVar[RBACPolicy | None] = ContextVar("rbac_policy", default=None)
 
 
 def set_user_context(ctx: UserContext) -> Token[UserContext]:
@@ -77,6 +93,28 @@ def require_user_context() -> UserContext:
     return ctx
 
 
+def set_rbac_policy(policy: RBACPolicy) -> Token[RBACPolicy | None]:
+    """Set the RBAC policy for the current async task.
+
+    Called by ``AuthGateway`` so that agent tools use the gateway's configured
+    policy (with custom roles) instead of a bare default.
+
+    Returns a token that can be passed to ``clear_rbac_policy`` to restore
+    the previous value.
+    """
+    return _rbac_policy_var.set(policy)
+
+
+def clear_rbac_policy(token: Token[RBACPolicy | None]) -> None:
+    """Restore the previous RBAC policy (typically None)."""
+    _rbac_policy_var.reset(token)
+
+
+def current_rbac_policy() -> RBACPolicy | None:
+    """Return the current RBAC policy, or None if none has been set."""
+    return _rbac_policy_var.get()
+
+
 def require_role(role: str) -> UserContext:
     """Return the current user context or raise if the user lacks the given role.
 
@@ -106,10 +144,16 @@ def require_domain_access(
     domain: str,
     *,
     entity: str | None = None,
+    policy: RBACPolicy | None = None,
 ) -> UserContext:
     """Raise :class:`PermissionError` if the current user cannot perform *action* on *domain*/*entity*.
 
     Uses RBAC permission-matching (wildcards, domain-covers-entity).
+
+    The RBAC policy is resolved in the following order:
+    1. Explicit *policy* parameter (for direct caller control).
+    2. The contextvar set by ``AuthGateway`` via ``set_rbac_policy``.
+    3. A default ``RBACPolicy()`` with only built-in roles (fallback).
 
     Raises:
         PermissionError: If not authenticated or lacking the required permission.
@@ -117,6 +161,6 @@ def require_domain_access(
     from ninja_auth.rbac import RBACPolicy
 
     ctx = require_user_context()
-    policy = RBACPolicy()
-    policy.check(ctx.permissions, action, domain, entity)
+    resolved = policy or _rbac_policy_var.get() or RBACPolicy()
+    resolved.check(ctx.permissions, action, domain, entity)
     return ctx
