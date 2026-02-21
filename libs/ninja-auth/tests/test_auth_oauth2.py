@@ -1,8 +1,10 @@
 """Tests for OAuth2 strategy."""
 
+import pytest
 from unittest.mock import AsyncMock, patch
 
 from ninja_auth.config import OAuth2ProviderConfig
+from ninja_auth.errors import AuthenticationError
 from ninja_auth.strategies.oauth2 import GITHUB_PRESET, GOOGLE_PRESET, OAuth2Strategy
 
 
@@ -19,21 +21,31 @@ def _make_config(**kwargs) -> OAuth2ProviderConfig:
     return OAuth2ProviderConfig(**defaults)
 
 
-def test_oauth2_authorization_url():
+def test_oauth2_authorization_url_with_explicit_state():
     config = _make_config()
     strategy = OAuth2Strategy("test", config)
-    url = strategy.get_authorization_url(state="abc123")
+    url, state = strategy.get_authorization_url(state="abc123")
     assert "client_id=test-client-id" in url
     assert "state=abc123" in url
     assert "response_type=code" in url
+    assert state == "abc123"
     assert url.startswith("https://provider.example.com/auth?")
 
 
-def test_oauth2_authorization_url_no_state():
+def test_oauth2_authorization_url_always_has_state():
     config = _make_config()
     strategy = OAuth2Strategy("test", config)
-    url = strategy.get_authorization_url()
-    assert "state" not in url
+    url, state = strategy.get_authorization_url()
+    assert "state=" in url
+    assert len(state) > 16
+
+
+def test_oauth2_authorization_url_generates_unique_states():
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+    _, state1 = strategy.get_authorization_url()
+    _, state2 = strategy.get_authorization_url()
+    assert state1 != state2
 
 
 async def test_oauth2_exchange_code():
@@ -91,7 +103,44 @@ async def test_oauth2_authenticate_with_code():
         assert ctx.user_id == "u1"
         assert ctx.email == "user@gmail.com"
         assert ctx.provider == "oauth2:google"
-        assert ctx.metadata["access_token"] == "at-123"
+        assert ctx.access_token == "at-123"
+        # access_token should NOT be in metadata
+        assert "access_token" not in ctx.metadata
+
+
+async def test_oauth2_state_mismatch_raises():
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with (
+        patch.object(strategy, "exchange_code", new_callable=AsyncMock),
+        patch.object(strategy, "get_userinfo", new_callable=AsyncMock),
+    ):
+        with pytest.raises(AuthenticationError, match="state mismatch"):
+            await strategy.authenticate_with_code(
+                "code-abc",
+                expected_state="correct-state",
+                received_state="wrong-state",
+            )
+
+
+async def test_oauth2_state_validation_passes():
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with (
+        patch.object(strategy, "exchange_code", new_callable=AsyncMock) as mock_exchange,
+        patch.object(strategy, "get_userinfo", new_callable=AsyncMock) as mock_userinfo,
+    ):
+        mock_exchange.return_value = {"access_token": "at-123"}
+        mock_userinfo.return_value = {"sub": "u1", "email": "a@b.com"}
+
+        ctx = await strategy.authenticate_with_code(
+            "code-abc",
+            expected_state="my-state",
+            received_state="my-state",
+        )
+        assert ctx.user_id == "u1"
 
 
 async def test_oauth2_github_id_fallback():

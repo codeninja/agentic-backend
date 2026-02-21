@@ -1,6 +1,8 @@
 """Tests for the audit log."""
 
-from ninja_boundary.audit import AuditLog, CoercionAction
+import logging
+
+from ninja_boundary.audit import AuditLog, CoercionAction, _REDACTED
 
 
 class TestAuditLog:
@@ -53,3 +55,51 @@ class TestAuditLog:
         assert len(audit) == 1
         audit.clear()
         assert len(audit) == 0
+
+
+# --- Tests for sensitive field redaction in audit logging (issue #56) ---
+
+
+class TestAuditLogRedaction:
+    def test_sensitive_field_password_redacted_in_log(self, caplog):
+        audit = AuditLog()
+        with caplog.at_level(logging.DEBUG, logger="ninja_boundary.audit"):
+            audit.record("User", "password", CoercionAction.TYPE_CAST, "plain123", "hashed", "hash")
+        assert _REDACTED in caplog.text
+        assert "plain123" not in caplog.text
+        assert "hashed" not in caplog.text
+
+    def test_sensitive_field_api_key_redacted_in_log(self, caplog):
+        audit = AuditLog()
+        with caplog.at_level(logging.DEBUG, logger="ninja_boundary.audit"):
+            audit.record("Service", "api_key", CoercionAction.TYPE_CAST, "key-abc", "key-xyz", "rotate")
+        assert _REDACTED in caplog.text
+        assert "key-abc" not in caplog.text
+
+    def test_sensitive_field_token_redacted_in_log(self, caplog):
+        audit = AuditLog()
+        with caplog.at_level(logging.DEBUG, logger="ninja_boundary.audit"):
+            audit.record("Session", "access_token", CoercionAction.TYPE_CAST, "tok-old", "tok-new", "refresh")
+        assert _REDACTED in caplog.text
+        assert "tok-old" not in caplog.text
+
+    def test_sensitive_field_secret_redacted_in_log(self, caplog):
+        audit = AuditLog()
+        with caplog.at_level(logging.DEBUG, logger="ninja_boundary.audit"):
+            audit.record("Config", "client_secret", CoercionAction.TYPE_CAST, "s1", "s2", "rotate")
+        assert _REDACTED in caplog.text
+        assert "s1" not in caplog.text
+
+    def test_non_sensitive_field_not_redacted_in_log(self, caplog):
+        audit = AuditLog()
+        with caplog.at_level(logging.DEBUG, logger="ninja_boundary.audit"):
+            audit.record("User", "age", CoercionAction.TYPE_CAST, "25", 25, "str to int")
+        assert "'25'" in caplog.text
+        assert _REDACTED not in caplog.text
+
+    def test_sensitive_field_values_still_stored_in_entry(self):
+        """Redaction only applies to logging — the AuditEntry itself keeps original values."""
+        audit = AuditLog()
+        entry = audit.record("User", "password", CoercionAction.TYPE_CAST, "plain", "hashed", "hash")
+        assert entry.before == "plain"
+        assert entry.after == "hashed"

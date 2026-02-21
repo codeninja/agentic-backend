@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
 logger = logging.getLogger("ninja_boundary.audit")
+
+SENSITIVE_FIELD_PATTERNS = re.compile(
+    r"(password|secret|token|api_key|credential|auth)",
+    re.IGNORECASE,
+)
+_REDACTED = "***REDACTED***"
 
 
 class CoercionAction(str, Enum):
@@ -69,7 +76,16 @@ class AuditLog:
             reason=reason,
         )
         self._entries.append(entry)
-        logger.debug("Coercion: %s.%s %s %r -> %r (%s)", entity_name, field_name, action.value, before, after, reason)
+        if SENSITIVE_FIELD_PATTERNS.search(field_name):
+            logger.debug(
+                "Coercion: %s.%s %s %s -> %s (%s)",
+                entity_name, field_name, action.value, _REDACTED, _REDACTED, reason,
+            )
+        else:
+            logger.debug(
+                "Coercion: %s.%s %s %r -> %r (%s)",
+                entity_name, field_name, action.value, before, after, reason,
+            )
         return entry
 
     @property

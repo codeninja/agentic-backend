@@ -32,6 +32,26 @@ class OAuth2ProviderConfig(BaseModel):
     scopes: list[str] = Field(default_factory=lambda: ["openid", "email", "profile"])
     redirect_uri: str = ""
 
+    @model_validator(mode="after")
+    def _check_redirect_uri(self) -> OAuth2ProviderConfig:
+        if not self.redirect_uri:
+            return self
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.redirect_uri)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(
+                f"redirect_uri must be an HTTP(S) URL, got: '{self.redirect_uri}'"
+            )
+        if not parsed.hostname:
+            raise ValueError(
+                f"redirect_uri must include a hostname, got: '{self.redirect_uri}'"
+            )
+        return self
+
+
+_HMAC_ALGORITHMS = {"HS256", "HS384", "HS512"}
+
 
 class BearerConfig(BaseModel):
     """JWT bearer token validation config."""
@@ -41,6 +61,31 @@ class BearerConfig(BaseModel):
     public_key: str = ""
     issuer: str = ""
     audience: str = ""
+
+    @model_validator(mode="after")
+    def _check_keys(self) -> BearerConfig:
+        if self.algorithm in _HMAC_ALGORITHMS and not self.secret_key:
+            env = os.environ.get("NINJASTACK_ENV", "").lower()
+            if env in ("dev", "development", "test"):
+                logger.warning(
+                    "BearerConfig.secret_key is empty for HMAC algorithm '%s'. "
+                    "Auto-generating a random key for %s mode.",
+                    self.algorithm,
+                    env,
+                )
+                self.secret_key = secrets.token_urlsafe(32)
+                return self
+            raise ValueError(
+                f"BearerConfig.secret_key must not be empty when using "
+                f"HMAC algorithm '{self.algorithm}'. Provide a secret key or "
+                f"switch to an asymmetric algorithm (e.g. RS256)."
+            )
+        if self.algorithm not in _HMAC_ALGORITHMS and not self.public_key:
+            raise ValueError(
+                f"BearerConfig.public_key must not be empty when using "
+                f"asymmetric algorithm '{self.algorithm}'."
+            )
+        return self
 
 
 class ApiKeyConfig(BaseModel):

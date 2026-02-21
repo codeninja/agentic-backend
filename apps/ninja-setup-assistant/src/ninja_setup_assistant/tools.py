@@ -10,12 +10,23 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
 from ninja_introspect.engine import IntrospectionEngine
+
+_ALLOWED_DB_SCHEMES = {
+    "postgresql", "postgresql+asyncpg", "postgresql+aiosqlite",
+    "postgres", "postgres+asyncpg",
+    "mysql", "mysql+aiomysql", "mysql+asyncmy",
+    "sqlite", "sqlite+aiosqlite",
+    "mongodb", "mongodb+srv",
+    "neo4j", "neo4j+s", "neo4j+ssc",
+    "bolt", "bolt+s", "bolt+ssc",
+}
 
 
 @dataclass
@@ -183,6 +194,30 @@ def confirm_schema(workspace: SchemaWorkspace) -> str:
     return json.dumps(schema.model_dump(), indent=2)
 
 
+def _validate_connection_string(connection_string: str) -> str | None:
+    """Validate a connection string format. Returns an error message or None."""
+    parsed = urlparse(connection_string)
+    scheme = parsed.scheme
+    if not scheme:
+        return f"Invalid connection string: missing scheme. Got '{connection_string}'."
+    if scheme not in _ALLOWED_DB_SCHEMES:
+        return (
+            f"Unsupported database scheme '{scheme}'. "
+            f"Allowed schemes: {', '.join(sorted(_ALLOWED_DB_SCHEMES))}."
+        )
+    base_scheme = scheme.split("+")[0]
+    if base_scheme == "sqlite":
+        db_path = parsed.path
+        if not db_path or db_path == "/":
+            return f"Invalid SQLite URL '{connection_string}': missing database path."
+        if db_path.startswith("//") and not db_path.startswith("///:memory:"):
+            return (
+                f"Rejected SQLite URL '{connection_string}': "
+                "absolute paths via sqlite:////... are not allowed in this context."
+            )
+    return None
+
+
 async def introspect_database(
     workspace: SchemaWorkspace,
     connection_string: str,
@@ -196,6 +231,10 @@ async def introspect_database(
     Returns:
         A summary of discovered entities and relationships.
     """
+    error = _validate_connection_string(connection_string)
+    if error:
+        return f"Connection rejected: {error}"
+
     engine = IntrospectionEngine(project_name=workspace.schema.project_name)
     result = await engine.run([connection_string])
 

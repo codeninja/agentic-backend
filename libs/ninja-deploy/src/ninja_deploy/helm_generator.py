@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from pathlib import Path
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 from ninja_core.schema.entity import StorageEngine
 from ninja_core.schema.project import AgenticSchema
+
+logger = logging.getLogger(__name__)
+
+_PLACEHOLDER_PATTERN = re.compile(r"changeme", re.IGNORECASE)
 
 # Maps ASD storage engines to Helm dependency charts
 INFRA_CHART_MAP: dict[StorageEngine, dict[str, str]] = {
@@ -123,6 +129,22 @@ class HelmGenerator:
         template = self.env.get_template("_helpers.tpl.j2")
         return template.render(project_name=self.schema.project_name)
 
+    @staticmethod
+    def _warn_placeholder_credentials(files: dict[str, str]) -> list[str]:
+        """Emit warnings for any placeholder credentials found in generated manifests."""
+        warnings: list[str] = []
+        for filename, content in files.items():
+            for match in _PLACEHOLDER_PATTERN.finditer(content):
+                line_num = content[:match.start()].count("\n") + 1
+                warnings.append(f"{filename}:{line_num}")
+        if warnings:
+            logger.warning(
+                "Generated Helm values contain placeholder credentials ('changeme') "
+                "that MUST be replaced before deployment: %s",
+                ", ".join(warnings),
+            )
+        return warnings
+
     def generate_all(self) -> dict[str, str]:
         """Generate a complete Helm chart as a dict of relative_path -> content."""
         chart_name = self.schema.project_name
@@ -137,6 +159,7 @@ class HelmGenerator:
         # Default values.yaml = dev
         files[f"{chart_name}/values.yaml"] = self.generate_values_yaml("dev")
 
+        self._warn_placeholder_credentials(files)
         return files
 
     def write_chart(self, output_dir: Path) -> list[Path]:
