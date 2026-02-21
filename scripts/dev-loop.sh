@@ -402,6 +402,14 @@ BRANCH: $branch
 DRAFT PR: #$draft_pr (already created)
 REPO: $REPO
 
+## PHASE 0: SYNC WITH MAIN
+
+Before anything else, ensure your branch is up to date:
+1. cd $worktree
+2. git fetch origin main
+3. git rebase origin/main (if conflicts, abort and output RESULT=NEEDS_PLANNING)
+4. Verify with: git log --oneline origin/main..HEAD (should show only your branch commits)
+
 ## PHASE 1: VALIDATION
 
 Before writing any code, verify this ticket is still valid:
