@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import secrets
 from typing import Any
 from urllib.parse import urlencode
@@ -91,9 +92,15 @@ class OAuth2Strategy:
             return resp.json()
 
     async def authenticate_with_code(
-        self, code: str, *, expected_state: str | None = None, received_state: str | None = None
+        self, code: str, *, expected_state: str, received_state: str
     ) -> UserContext:
         """Full OAuth2 flow: exchange code -> fetch userinfo -> return context.
+
+        Both ``expected_state`` and ``received_state`` are **required** to
+        enforce CSRF protection.  The caller must store the state token
+        returned by :meth:`get_authorization_url` in the user's session and
+        pass it back here alongside the value from the OAuth2 callback query
+        string.
 
         Args:
             code: The authorization code from the provider callback.
@@ -101,14 +108,20 @@ class OAuth2Strategy:
             received_state: The state token returned in the callback URL.
 
         Raises:
-            AuthenticationError: If state validation fails.
+            AuthenticationError: If state validation fails or state values
+                are empty.
         """
-        if expected_state is not None or received_state is not None:
-            if expected_state != received_state:
-                raise AuthenticationError(
-                    "OAuth2 state mismatch — possible CSRF attack. "
-                    f"Expected '{expected_state}', got '{received_state}'."
-                )
+        if not expected_state or not received_state:
+            raise AuthenticationError(
+                "OAuth2 state validation requires both expected_state and "
+                "received_state. Ensure the state token from "
+                "get_authorization_url() is stored in the session and "
+                "forwarded on callback."
+            )
+        if not hmac.compare_digest(expected_state, received_state):
+            raise AuthenticationError(
+                "OAuth2 state mismatch — possible CSRF attack."
+            )
 
         tokens = await self.exchange_code(code)
         access_token = tokens.get("access_token", "")
