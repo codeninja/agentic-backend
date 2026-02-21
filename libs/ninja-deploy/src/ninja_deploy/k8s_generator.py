@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from pathlib import Path
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 from ninja_core.schema.entity import StorageEngine
 from ninja_core.schema.project import AgenticSchema
+
+logger = logging.getLogger(__name__)
+
+_PLACEHOLDER_PATTERN = re.compile(r"changeme", re.IGNORECASE)
 
 # Maps storage engines to infra container images used in raw K8s manifests
 INFRA_IMAGES: dict[StorageEngine, dict[str, str]] = {
@@ -94,6 +100,22 @@ class K8sGenerator:
             )
         return manifests
 
+    @staticmethod
+    def _warn_placeholder_credentials(files: dict[str, str]) -> list[str]:
+        """Emit warnings for any placeholder credentials found in generated manifests."""
+        warnings: list[str] = []
+        for filename, content in files.items():
+            for match in _PLACEHOLDER_PATTERN.finditer(content):
+                line_num = content[:match.start()].count("\n") + 1
+                warnings.append(f"{filename}:{line_num}")
+        if warnings:
+            logger.warning(
+                "Generated manifests contain placeholder credentials ('changeme') "
+                "that MUST be replaced before deployment: %s",
+                ", ".join(warnings),
+            )
+        return warnings
+
     def generate_all(self, app_name: str = "ninja-api", port: str = "8000") -> dict[str, str]:
         """Generate all raw K8s manifests. Returns dict of relative_path -> content."""
         files: dict[str, str] = {}
@@ -105,6 +127,7 @@ class K8sGenerator:
         for name, content in self.generate_infra_deployments().items():
             files[f"infra/{name}"] = content
 
+        self._warn_placeholder_credentials(files)
         return files
 
     def write_manifests(self, output_dir: Path) -> list[Path]:

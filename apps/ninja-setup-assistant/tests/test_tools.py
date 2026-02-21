@@ -14,6 +14,7 @@ from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipType
 from ninja_setup_assistant.tools import (
     SchemaWorkspace,
+    _validate_connection_string,
     add_entity,
     add_relationship,
     confirm_schema,
@@ -320,3 +321,54 @@ class TestCreateAdkTools:
         result = confirm_fn()
         data = json.loads(result)
         assert data["project_name"] == "test-project"
+
+
+# ---------------------------------------------------------------------------
+# Connection string validation (issue #56)
+# ---------------------------------------------------------------------------
+
+
+class TestConnectionStringValidation:
+    def test_valid_postgresql_url(self):
+        assert _validate_connection_string("postgresql://user:pass@localhost/mydb") is None
+
+    def test_valid_postgresql_asyncpg_url(self):
+        assert _validate_connection_string("postgresql+asyncpg://user:pass@localhost/mydb") is None
+
+    def test_valid_mysql_url(self):
+        assert _validate_connection_string("mysql+aiomysql://user:pass@localhost/mydb") is None
+
+    def test_valid_sqlite_memory(self):
+        assert _validate_connection_string("sqlite:///:memory:") is None
+
+    def test_valid_sqlite_relative_path(self):
+        assert _validate_connection_string("sqlite:///mydb.sqlite") is None
+
+    def test_valid_mongodb_url(self):
+        assert _validate_connection_string("mongodb://localhost:27017/mydb") is None
+
+    def test_rejects_missing_scheme(self):
+        error = _validate_connection_string("localhost/mydb")
+        assert error is not None
+        assert "missing scheme" in error
+
+    def test_rejects_unsupported_scheme(self):
+        error = _validate_connection_string("ftp://example.com/file")
+        assert error is not None
+        assert "Unsupported database scheme" in error
+
+    def test_rejects_sqlite_absolute_path(self):
+        """sqlite:////etc/passwd — SSRF risk via file read."""
+        error = _validate_connection_string("sqlite:////etc/passwd")
+        assert error is not None
+        assert "not allowed" in error
+
+    def test_rejects_sqlite_empty_path(self):
+        error = _validate_connection_string("sqlite:///")
+        assert error is not None
+        assert "missing database path" in error
+
+    def test_rejects_http_as_db_scheme(self):
+        error = _validate_connection_string("http://evil.com/steal-data")
+        assert error is not None
+        assert "Unsupported" in error

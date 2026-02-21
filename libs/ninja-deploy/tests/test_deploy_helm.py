@@ -187,3 +187,26 @@ class TestHelmInfraMapping:
             assert "memory_request" in profile
             assert "cpu_limit" in profile
             assert "memory_limit" in profile
+
+
+class TestHelmPlaceholderWarnings:
+    def test_generate_all_warns_about_placeholder_credentials(self, sample_asd, caplog):
+        import logging
+        gen = HelmGenerator(sample_asd)
+        with caplog.at_level(logging.WARNING):
+            gen.generate_all()
+        assert "changeme" in caplog.text.lower()
+        assert "placeholder" in caplog.text.lower()
+
+    def test_warn_placeholder_credentials_returns_locations(self, sample_asd):
+        gen = HelmGenerator(sample_asd)
+        values_content = gen.generate_values_yaml("dev")
+        files = {"values.yaml": values_content}
+        warnings = HelmGenerator._warn_placeholder_credentials(files)
+        assert len(warnings) > 0
+        assert any("values.yaml" in w for w in warnings)
+
+    def test_no_warnings_when_no_placeholders(self, sample_asd):
+        files = {"values.yaml": "postgresql:\n  auth:\n    postgresPassword: real-secret\n"}
+        warnings = HelmGenerator._warn_placeholder_credentials(files)
+        assert len(warnings) == 0

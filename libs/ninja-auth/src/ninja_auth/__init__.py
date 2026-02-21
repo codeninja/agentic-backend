@@ -11,6 +11,7 @@ from ninja_auth.agent_context import (
 )
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
+from ninja_auth.errors import AuthenticationError
 from ninja_auth.gateway import AuthGateway, get_user_context
 from ninja_auth.rbac import (
     BUILTIN_ROLES,
@@ -31,6 +32,7 @@ __all__ = [
     "Action",
     "ApiKeyStrategy",
     "AuthConfig",
+    "AuthenticationError",
     "AuthGateway",
     "BearerStrategy",
     "BUILTIN_ROLES",

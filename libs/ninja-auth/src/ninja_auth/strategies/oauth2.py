@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Any
 from urllib.parse import urlencode
 
@@ -9,6 +10,7 @@ import httpx
 
 from ninja_auth.config import OAuth2ProviderConfig
 from ninja_auth.context import UserContext
+from ninja_auth.errors import AuthenticationError
 
 # Well-known provider presets
 GOOGLE_PRESET = OAuth2ProviderConfig(
@@ -37,17 +39,28 @@ class OAuth2Strategy:
         self.provider_name = provider_name
         self.config = config
 
-    def get_authorization_url(self, state: str = "") -> str:
-        """Build the URL to redirect the user to for OAuth2 authorization."""
+    def get_authorization_url(self, state: str | None = None) -> tuple[str, str]:
+        """Build the URL to redirect the user to for OAuth2 authorization.
+
+        Always generates a cryptographic ``state`` token for CSRF protection.
+        If *state* is provided it is used as-is; otherwise a random token is
+        generated.
+
+        Returns:
+            A ``(url, state)`` tuple. The caller must store ``state`` in the
+            session so it can be verified in the callback.
+        """
+        if not state:
+            state = secrets.token_urlsafe(32)
         params: dict[str, str] = {
             "client_id": self.config.client_id,
             "redirect_uri": self.config.redirect_uri,
             "response_type": "code",
             "scope": " ".join(self.config.scopes),
+            "state": state,
         }
-        if state:
-            params["state"] = state
-        return f"{self.config.authorize_url}?{urlencode(params)}"
+        url = f"{self.config.authorize_url}?{urlencode(params)}"
+        return url, state
 
     async def exchange_code(self, code: str) -> dict[str, Any]:
         """Exchange an authorization code for tokens."""
@@ -77,8 +90,26 @@ class OAuth2Strategy:
             resp.raise_for_status()
             return resp.json()
 
-    async def authenticate_with_code(self, code: str) -> UserContext:
-        """Full OAuth2 flow: exchange code -> fetch userinfo -> return context."""
+    async def authenticate_with_code(
+        self, code: str, *, expected_state: str | None = None, received_state: str | None = None
+    ) -> UserContext:
+        """Full OAuth2 flow: exchange code -> fetch userinfo -> return context.
+
+        Args:
+            code: The authorization code from the provider callback.
+            expected_state: The state token stored in the user's session.
+            received_state: The state token returned in the callback URL.
+
+        Raises:
+            AuthenticationError: If state validation fails.
+        """
+        if expected_state is not None or received_state is not None:
+            if expected_state != received_state:
+                raise AuthenticationError(
+                    "OAuth2 state mismatch — possible CSRF attack. "
+                    f"Expected '{expected_state}', got '{received_state}'."
+                )
+
         tokens = await self.exchange_code(code)
         access_token = tokens.get("access_token", "")
         userinfo = await self.get_userinfo(access_token)
@@ -92,5 +123,6 @@ class OAuth2Strategy:
             email=email,
             roles=[],
             provider=f"oauth2:{self.provider_name}",
-            metadata={"userinfo": userinfo, "access_token": access_token},
+            metadata={"userinfo": userinfo},
+            _access_token=access_token,
         )

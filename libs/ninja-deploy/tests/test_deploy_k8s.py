@@ -220,3 +220,25 @@ class TestK8sInfraImages:
             assert "name" in info
             assert "image" in info
             assert "port" in info
+
+
+class TestK8sPlaceholderWarnings:
+    def test_generate_all_warns_about_placeholder_credentials(self, sample_asd, caplog):
+        import logging
+        gen = K8sGenerator(sample_asd)
+        with caplog.at_level(logging.WARNING):
+            gen.generate_all()
+        assert "changeme" in caplog.text.lower()
+        assert "placeholder" in caplog.text.lower()
+
+    def test_warn_placeholder_credentials_returns_locations(self, sample_asd):
+        gen = K8sGenerator(sample_asd)
+        files = {"secret.yaml": gen.generate_secret()}
+        warnings = K8sGenerator._warn_placeholder_credentials(files)
+        assert len(warnings) > 0
+        assert any("secret.yaml" in w for w in warnings)
+
+    def test_no_warnings_when_no_placeholders(self, sample_asd):
+        files = {"clean.yaml": "apiVersion: v1\nkind: Secret\ndata:\n  key: real-password\n"}
+        warnings = K8sGenerator._warn_placeholder_credentials(files)
+        assert len(warnings) == 0
