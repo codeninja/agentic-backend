@@ -334,6 +334,66 @@ phase_implement() {
             continue
         fi
 
+        log "  🔬 Validating ticket #$issue_num before implementation..."
+        local validate_log="$LOG_DIR/validate-${issue_num}-$(date +%s).log"
+
+        # Synchronous validation gate — decide if ticket is still needed
+        claude --dangerously-skip-permissions -p "You are a developer picking up a ticket for implementation. Before writing any code, you need to verify the ticket is still valid and actionable.
+
+PROJECT ROOT: $PROJECT_ROOT
+REPO: $REPO
+ISSUE #$issue_num: $title
+
+ISSUE BODY:
+$body
+
+Your task:
+1. Read the relevant source files mentioned in the issue
+2. Check if the problem described still exists in the current codebase
+3. Check if another PR or recent commit already fixed this (run: git log --oneline -20)
+4. Verify the proposed fix makes sense given the current architecture
+
+Then output EXACTLY ONE of these verdicts on its own line:
+
+VALIDATE_RESULT=PROCEED
+  — The issue is valid, the problem exists, and implementation should begin.
+
+VALIDATE_RESULT=UNNECESSARY
+  — The issue has already been resolved or is no longer applicable. Include a brief explanation.
+
+VALIDATE_RESULT=NEEDS_PLANNING
+  — The issue is valid but the requirements are unclear, conflicting, or need architectural discussion. Include a brief explanation of what needs clarification.
+
+Output the verdict as the LAST line of your response." \
+            --output-format text \
+            > "$validate_log" 2>&1
+
+        if grep -q "VALIDATE_RESULT=UNNECESSARY" "$validate_log"; then
+            local reason
+            reason=$(grep -B5 "VALIDATE_RESULT=UNNECESSARY" "$validate_log" | grep -v "VALIDATE_RESULT" | tail -3 | tr '\n' ' ')
+            log "  🗑️  #$issue_num deemed unnecessary — closing"
+            gh issue comment "$issue_num" --repo "$REPO" --body "**Dev Validation:** This issue appears to already be resolved or is no longer applicable.
+
+${reason}
+
+Closing automatically. Reopen if this assessment is incorrect." 2>/dev/null
+            gh issue close "$issue_num" --repo "$REPO" 2>/dev/null
+            set_status "$issue_num" "$STATUS_DONE"
+            continue
+        elif grep -q "VALIDATE_RESULT=NEEDS_PLANNING" "$validate_log"; then
+            local reason
+            reason=$(grep -B5 "VALIDATE_RESULT=NEEDS_PLANNING" "$validate_log" | grep -v "VALIDATE_RESULT" | tail -3 | tr '\n' ' ')
+            log "  📋 #$issue_num needs planning — returning to Planning"
+            gh issue comment "$issue_num" --repo "$REPO" --body "**Dev Validation:** This ticket needs further planning before implementation can begin.
+
+${reason}
+
+Moving to Planning for clarification." 2>/dev/null
+            set_status "$issue_num" "$STATUS_PLANNING"
+            continue
+        fi
+
+        log "  ✅ #$issue_num validated — proceeding with implementation"
         log "  🚀 Starting implementation of #$issue_num: $title"
         set_status "$issue_num" "$STATUS_IN_PROGRESS"
 
@@ -482,6 +542,82 @@ Be thorough but fair. Only reject for real issues, not style preferences." \
 }
 
 # ---------------------------------------------------------------------------
+# Phase 3b: Planning — review tickets returned from dev validation
+# ---------------------------------------------------------------------------
+phase_planning() {
+    local planning_issues
+    planning_issues=$(issues_by_status "Planning")
+
+    if [[ -z "$planning_issues" ]]; then
+        return
+    fi
+
+    while IFS= read -r issue_num; do
+        [[ -z "$issue_num" ]] && continue
+        check_stop
+
+        local title
+        title=$(get_issue_title "$issue_num")
+        local body
+        body=$(get_issue_body "$issue_num")
+        local comments
+        comments=$(gh issue view "$issue_num" --repo "$REPO" --json comments -q '[.comments[-3:][].body] | join("\n---\n")' 2>/dev/null)
+        local planning_log="$LOG_DIR/planning-${issue_num}-$(date +%s).log"
+
+        log "  📐 Planning review for #$issue_num: $title"
+
+        claude --dangerously-skip-permissions -p "You are a technical planner reviewing a ticket that was returned from development validation.
+
+PROJECT ROOT: $PROJECT_ROOT
+REPO: $REPO
+ISSUE #$issue_num: $title
+
+ISSUE BODY:
+$body
+
+RECENT COMMENTS (developer feedback):
+$comments
+
+Your task:
+1. Read the developer's feedback in the comments
+2. Examine the current codebase to understand the context
+3. Decide one of three outcomes:
+
+OPTION A — CLOSE: The issue is genuinely not needed. Close it.
+  - Run: gh issue comment $issue_num --repo $REPO --body 'Planning Review: Confirmed this issue is not needed. <reason>'
+  - Run: gh issue close $issue_num --repo $REPO
+  - Output: PLANNING_RESULT=CLOSED
+
+OPTION B — REVISE AND RETURN: The issue is valid but needs clarification. Update it and send back.
+  - Run: gh issue edit $issue_num --repo $REPO --body '<revised body with clearer requirements, acceptance criteria, and implementation hints>'
+  - Run: gh issue comment $issue_num --repo $REPO --body 'Planning Review: Revised requirements. Ready for implementation.'
+  - Output: PLANNING_RESULT=REVISED
+
+OPTION C — ESCALATE: The issue requires human architectural decision.
+  - Run: gh issue comment $issue_num --repo $REPO --body 'Planning Review: This requires human input. <explanation of what needs deciding>'
+  - Output: PLANNING_RESULT=ESCALATE
+
+Output the verdict as the LAST line." \
+            --output-format text \
+            > "$planning_log" 2>&1
+
+        if grep -q "PLANNING_RESULT=CLOSED" "$planning_log"; then
+            log "  🗑️  #$issue_num closed by planner"
+            set_status "$issue_num" "$STATUS_DONE"
+        elif grep -q "PLANNING_RESULT=REVISED" "$planning_log"; then
+            log "  📝 #$issue_num revised — returning to Todo"
+            set_status "$issue_num" "$STATUS_TODO"
+        elif grep -q "PLANNING_RESULT=ESCALATE" "$planning_log"; then
+            log "  🚨 #$issue_num needs human input — moving to Need Human"
+            set_status "$issue_num" "$STATUS_NEED_HUMAN"
+            openclaw system event --text "📐 Dev Loop Planning Escalation: Issue #$issue_num ($title) needs human architectural input. See: https://github.com/$REPO/issues/$issue_num" --mode now 2>/dev/null || true
+        else
+            log "  ⚠️  Planning result unclear for #$issue_num — check log: $planning_log"
+        fi
+    done <<< "$planning_issues"
+}
+
+# ---------------------------------------------------------------------------
 # Phase 4: Promote — move completed implementations to AI Review
 # ---------------------------------------------------------------------------
 phase_promote() {
@@ -557,6 +693,10 @@ main() {
         # Phase 3: Review PRs awaiting AI review
         check_shutdown
         phase_review
+
+        # Phase 3b: Handle tickets returned to Planning
+        check_shutdown
+        phase_planning
 
         # Phase 4: Start implementation on available tickets
         check_shutdown
