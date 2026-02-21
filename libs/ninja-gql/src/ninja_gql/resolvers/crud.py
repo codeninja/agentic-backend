@@ -1,7 +1,9 @@
 """Standard CRUD resolver implementations.
 
 Each resolver delegates to a ``ninja_persistence.Repository`` instance looked up
-from a registry function supplied at schema-build time.
+from a registry function supplied at schema-build time.  Create and update
+mutations validate their JSON input against the ASD entity schema before
+passing data to the repository.
 """
 
 from typing import Any, Callable, Optional
@@ -9,6 +11,12 @@ from typing import Any, Callable, Optional
 import strawberry
 from ninja_core.schema.entity import EntitySchema
 from ninja_persistence.protocols import Repository
+
+from ninja_gql.validation import (
+    InputValidationError,
+    validate_create_input,
+    validate_update_input,
+)
 
 
 def make_get_resolver(
@@ -50,11 +58,20 @@ def make_create_resolver(
     gql_type: type,
     repo_getter: Callable[[str], Repository[Any]],
 ) -> Callable:
-    """Return an async resolver: ``create_{entity}(input) -> GqlType``."""
+    """Return an async resolver: ``create_{entity}(input) -> GqlType``.
+
+    Validates the JSON input against the ASD entity field definitions
+    before delegating to the repository.  Unknown fields are rejected
+    (mass-assignment protection) and type/constraint checks are enforced.
+    """
 
     async def resolver(input: strawberry.scalars.JSON) -> gql_type:  # type: ignore[valid-type]
+        try:
+            validated = validate_create_input(entity, input)
+        except InputValidationError as exc:
+            raise ValueError("; ".join(exc.errors)) from exc
         repo = repo_getter(entity.name)
-        row = await repo.create(input)
+        row = await repo.create(validated)
         return gql_type(**row)
 
     resolver.__name__ = f"create_{_snake(entity.name)}"
@@ -66,11 +83,20 @@ def make_update_resolver(
     gql_type: type,
     repo_getter: Callable[[str], Repository[Any]],
 ) -> Callable:
-    """Return an async resolver: ``update_{entity}(id, patch) -> GqlType | None``."""
+    """Return an async resolver: ``update_{entity}(id, patch) -> GqlType | None``.
+
+    Validates the JSON patch against the ASD entity field definitions
+    before delegating to the repository.  Unknown fields and primary-key
+    modifications are rejected.
+    """
 
     async def resolver(id: str, patch: strawberry.scalars.JSON) -> Optional[gql_type]:  # type: ignore[valid-type]
+        try:
+            validated = validate_update_input(entity, patch)
+        except InputValidationError as exc:
+            raise ValueError("; ".join(exc.errors)) from exc
         repo = repo_getter(entity.name)
-        row = await repo.update(id, patch)
+        row = await repo.update(id, validated)
         if row is None:
             return None
         return gql_type(**row)

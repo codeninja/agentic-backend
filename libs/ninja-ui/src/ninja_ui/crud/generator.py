@@ -14,7 +14,7 @@ from ninja_ui.shared.assets import FIELD_TYPE_INPUT_MAP, snake_case
 def _get_template_env() -> Environment:
     return Environment(
         loader=PackageLoader("ninja_ui", "templates"),
-        autoescape=False,
+        autoescape=True,
         trim_blocks=True,
         lstrip_blocks=True,
     )
