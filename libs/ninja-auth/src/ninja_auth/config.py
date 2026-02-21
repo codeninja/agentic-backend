@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
+import secrets
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ninja_auth.rbac import RBACConfig
+
+logger = logging.getLogger(__name__)
 
 # Prefix constants for key storage formats
 _HASH_PREFIX = "sha256:"
@@ -74,13 +78,35 @@ class ApiKeyConfig(BaseModel):
         return self.hash_key(stored_value)
 
 
+_INSECURE_TOKEN_SECRET = "change-me-in-production"
+
+
 class IdentityConfig(BaseModel):
     """Built-in identity (registration/login) config."""
 
     enabled: bool = True
     hash_algorithm: str = "bcrypt"
-    token_secret: str = "change-me-in-production"
+    token_secret: str = _INSECURE_TOKEN_SECRET
     token_expiry_minutes: int = 60
+
+    @model_validator(mode="after")
+    def _check_token_secret(self) -> IdentityConfig:
+        if self.token_secret != _INSECURE_TOKEN_SECRET:
+            return self
+        env = os.environ.get("NINJASTACK_ENV", "").lower()
+        if env in ("dev", "development", "test"):
+            logger.warning(
+                "IdentityConfig.token_secret is using the insecure default. "
+                "This is allowed in %s mode but MUST be changed for production.",
+                env,
+            )
+            self.token_secret = secrets.token_urlsafe(32)
+            return self
+        raise ValueError(
+            "IdentityConfig.token_secret still has the insecure default value "
+            f"'{_INSECURE_TOKEN_SECRET}'. Set an explicit secret or set "
+            "NINJASTACK_ENV=dev for local development."
+        )
 
 
 class AuthConfig(BaseModel):
