@@ -23,6 +23,7 @@ members = [
     "ninja-codegen",
     "ninja-core",
     "ninja-deploy",
+    "ninja-devloop",
     "ninja-gql",
     "ninja-graph",
     "ninja-introspect",
@@ -2597,6 +2598,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "ninja-devloop"
+version = "0.1.0"
+source = { editable = "libs/ninja-devloop" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "typer" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "typer", specifier = ">=0.15" },
+]
+
+[[package]]
 name = "ninja-gql"
 version = "0.1.0"
 source = { editable = "libs/ninja-gql" }
@@ -2790,6 +2806,7 @@ dependencies = [
     { name = "httpx" },
     { name = "jinja2" },
     { name = "litellm" },
+    { name = "ninja-devloop" },
     { name = "pydantic" },
     { name = "pyjwt", extra = ["crypto"] },
     { name = "pyyaml" },
@@ -2848,6 +2865,7 @@ requires-dist = [
     { name = "motor", marker = "extra == 'mongo'", specifier = ">=3.0" },
     { name = "neo4j", marker = "extra == 'all'", specifier = ">=5.0" },
     { name = "neo4j", marker = "extra == 'graph'", specifier = ">=5.0" },
+    { name = "ninja-devloop", editable = "libs/ninja-devloop" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
     { name = "pymilvus", marker = "extra == 'all'", specifier = ">=2.3" },

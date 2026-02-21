@@ -22,6 +22,7 @@ dependencies = [
     "bcrypt>=4.0",
     "typer>=0.15",
     "pyyaml>=6.0",
+    "ninja-devloop",
 ]
 
 [project.scripts]
@@ -53,6 +54,7 @@ packages = [
     "libs/ninja-introspect/src/ninja_introspect",
     "libs/ninja-models/src/ninja_models",
     "libs/ninja-ui/src/ninja_ui",
+    "libs/ninja-devloop/src/ninja_devloop",
     "apps/ninja-api/src/ninja_api",
     "apps/ninja-setup-assistant/src/ninja_setup_assistant",
 ]
@@ -69,6 +71,7 @@ ninja-cli = { workspace = true }
 ninja-codegen = { workspace = true }
 ninja-core = { workspace = true }
 ninja-deploy = { workspace = true }
+ninja-devloop = { workspace = true }
 ninja-gql = { workspace = true }
 ninja-graph = { workspace = true }
 ninja-introspect = { workspace = true }
