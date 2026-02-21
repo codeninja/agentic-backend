@@ -53,6 +53,7 @@ die() { log "FATAL: $*"; exit 1; }
 check_stop() {
     if [[ -f "$PROJECT_ROOT/stop.txt" ]]; then
         log "🛑 stop.txt detected — aborting."
+        rm -f "$PROJECT_ROOT/stop.txt"
         exit 0
     fi
 }
@@ -450,6 +451,7 @@ Your task:
 8. Push: git push origin $branch
 9. Update the PR body with a summary: gh pr edit $draft_pr --repo $REPO --body 'Closes #$issue_num\n\n<summary of changes>'
 10. Mark the PR as ready for review: gh pr ready $draft_pr --repo $REPO
+11. Move the ticket to AI Review on the board (set_status $issue_num $STATUS_AI_REVIEW)
 
 IMPORTANT:
 - A draft PR already exists — do NOT create a new one
@@ -529,6 +531,13 @@ Your task:
    d. Is the code consistent with the project's architecture and patterns?
    e. Are there security concerns?
    f. Does it align with the project vision (schema-first, model-agnostic, explicit contracts)?
+
+VIOLATIONS:
+- If the developer missed something from the issue, misunderstood the requirements, or if tests are missing/failing → CHANGES REQUESTED
+- If the code works but has identifiable security issues → CHANGES REQUESTED
+- If the code implements the solution in a way that violates the project vision or architectural principles → CHANGES REQUESTED
+- If the developer cheats tests, removes vital functionality, or introduces new issues → CHANGES REQUESTED
+- If the developer introduces a workaround instead of addressing the root problem → HUMAN REVIEW NEEDED (escalate to Need Human)
 
 IF THE CODE PASSES REVIEW:
 - Run: gh pr review $pr_num --repo $REPO --approve --body 'AI Review: APPROVED. <brief summary of what was reviewed and why it passes>'
