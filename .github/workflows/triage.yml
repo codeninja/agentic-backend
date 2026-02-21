@@ -6,7 +6,8 @@ on:
 
 jobs:
   triage:
-    if: github.actor != 'codeninja'
+    # Triage all new issues regardless of author (audit agents use codeninja account)
+    if: true
     runs-on: ubuntu-latest
     permissions:
       issues: write

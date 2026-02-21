@@ -269,16 +269,25 @@ Your task:
 2. Read the implementation plans in docs/ and implementation_plans/
 3. Examine the source code in libs/ and apps/
 4. Identify: security vulnerabilities, logic flaws, missing implementations vs the vision, broken integrations
-5. For EACH issue found, create a GitHub issue using: gh issue create --repo $REPO --title '<title>' --label 'bug' --label 'priority: <high|medium|low>' --body '<detailed body>'
-   IMPORTANT: NEVER use 'priority: critical' — that label is reserved for human-created tickets only. Use 'priority: high' as your maximum.
-6. After creating each issue, add it to project board 4: gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url>
-7. Then set the board status. Use the following GraphQL mutation for EACH new item:
-   - For bugs/defects that need verification → set to Triage (option ID: $STATUS_TRIAGE). The GitHub Actions triage workflow will validate and plan them automatically.
-     gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"<ITEM_ID>\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_TRIAGE\" } }) { projectV2Item { id } } }'
-   - For features, architectural changes, or enhancements → set to Planning (option ID: $STATUS_PLANNING):
-     gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"<ITEM_ID>\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_PLANNING\" } }) { projectV2Item { id } } }'
-   - Epics should always go to Planning.
-   Get the item ID from the gh project item-add output (--format json) or by querying the board.
+5. For EACH issue found, you MUST do ALL of the following steps (do not skip any):
+
+   Step A — Create the issue with the 'triage' label included:
+     gh issue create --repo $REPO --title '<title>' --label 'bug' --label 'triage' --label 'priority: <high|medium|low>' --body '<detailed body>'
+     IMPORTANT: NEVER use 'priority: critical' — that label is reserved for human-created tickets only. Use 'priority: high' as your maximum.
+     IMPORTANT: ALWAYS include '--label triage' so the GitHub Actions triage workflow picks it up.
+
+   Step B — Add it to the project board and capture the item ID:
+     ITEM_ID=\$(gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url> --format json | jq -r '.id')
+     echo \"Added to board: item \$ITEM_ID\"
+
+   Step C — Set the board status column:
+   - For bugs/defects → Triage (option ID: $STATUS_TRIAGE):
+     gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"'\"\$ITEM_ID\"'\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_TRIAGE\" } }) { projectV2Item { id } } }'
+   - For features/enhancements → Planning (option ID: $STATUS_PLANNING):
+     gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"'\"\$ITEM_ID\"'\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_PLANNING\" } }) { projectV2Item { id } } }'
+   - Epics → always Planning.
+
+   If Step B or C fails, log the error and continue — do NOT skip steps for other issues.
 8. Do NOT create duplicates — first run: gh issue list --repo $REPO --state open --json title,number
    and check existing titles before creating new ones
 
@@ -576,9 +585,11 @@ IF THE CODE PASSES REVIEW:
   **Notes for future work:**
   - <any observations, potential improvements, or related areas to watch>'
 - If you identified follow-up work during the review (edge cases not covered, related areas needing attention, tech debt introduced, documentation gaps, etc.), create a ticket for EACH follow-up item:
-  gh issue create --repo $REPO --title '<descriptive title>' --label '<bug|enhancement>' --label 'priority: <high|medium|low>' --body '<description referencing the original issue #$issue_num and explaining what needs to happen next>'
+  gh issue create --repo $REPO --title '<descriptive title>' --label '<bug|enhancement>' --label 'triage' --label 'priority: <high|medium|low>' --body '<description referencing the original issue #$issue_num and explaining what needs to happen next>'
   NEVER use 'priority: critical' — reserved for humans.
-  Then add each to the project board: gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url>
+  Then add each to the project board AND set status to Triage:
+    ITEM_ID=$(gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url> --format json | jq -r '.id')
+    gh api graphql -f query='mutation { updateProjectV2ItemFieldValue(input: { projectId: \"$PROJECT_ID\", itemId: \"'\"$ITEM_ID\"'\", fieldId: \"$FIELD_ID\", value: { singleSelectOptionId: \"$STATUS_TRIAGE\" } }) { projectV2Item { id } } }'
 - Then output exactly: REVIEW_RESULT=APPROVED
 
 IF THE CODE FAILS REVIEW:
