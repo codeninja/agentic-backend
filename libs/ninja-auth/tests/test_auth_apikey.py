@@ -206,7 +206,8 @@ async def test_apikey_authenticate_from_header():
     assert resp.json()["user_id"] is None
 
 
-async def test_apikey_authenticate_from_query_param():
+async def test_apikey_query_param_rejected():
+    """API keys in query parameters must be rejected to prevent credential leakage."""
     hashed = ApiKeyConfig.hash_key("qkey")
     config = ApiKeyConfig(keys={"svc": hashed})
     strategy = ApiKeyStrategy(config)
@@ -221,4 +222,25 @@ async def test_apikey_authenticate_from_query_param():
     client = TestClient(app)
 
     resp = client.get("/?api_key=qkey")
-    assert resp.json()["user_id"] == "apikey:svc"
+    assert resp.json()["user_id"] is None
+
+
+async def test_apikey_query_param_logs_warning(caplog):
+    """A deprecation warning must be logged when a query param key is attempted."""
+    import logging
+
+    hashed = ApiKeyConfig.hash_key("qkey")
+    config = ApiKeyConfig(keys={"svc": hashed})
+    strategy = ApiKeyStrategy(config)
+
+    async def homepage(request):
+        await strategy.authenticate(request)
+        return JSONResponse({"ok": True})
+
+    app = Starlette(routes=[Route("/", homepage)])
+    client = TestClient(app)
+
+    with caplog.at_level(logging.WARNING, logger="ninja_auth.strategies.apikey"):
+        client.get("/?api_key=qkey")
+
+    assert any("query parameter" in r.message.lower() for r in caplog.records)

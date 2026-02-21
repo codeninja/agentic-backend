@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import hmac
+import logging
 
 from starlette.requests import Request
 
 from ninja_auth.config import ApiKeyConfig
 from ninja_auth.context import UserContext
+
+logger = logging.getLogger(__name__)
 
 
 class ApiKeyStrategy:
@@ -17,12 +20,22 @@ class ApiKeyStrategy:
         self.config = config
 
     async def authenticate(self, request: Request) -> UserContext | None:
-        """Check the request header for a valid API key."""
+        """Check the request header for a valid API key.
+
+        Only accepts API keys from the configured header. Query parameter
+        delivery is rejected to prevent credential leakage in server logs,
+        proxy logs, and browser history.
+        """
         api_key = request.headers.get(self.config.header_name.lower(), "")
         if not api_key:
-            # Also check query param as fallback
-            api_key = request.query_params.get("api_key", "")
-        if not api_key:
+            if request.query_params.get("api_key", ""):
+                logger.warning(
+                    "API key provided via query parameter — rejected. "
+                    "Send the key in the '%s' header instead. "
+                    "Query parameter authentication is disabled to prevent "
+                    "credential leakage in server and proxy logs.",
+                    self.config.header_name,
+                )
             return None
 
         return self.validate_key(api_key)
