@@ -31,6 +31,8 @@ from ninja_auth.strategies.bearer import BearerStrategy
 from ninja_auth.strategies.identity import IdentityStrategy
 from ninja_auth.strategies.oauth2 import OAuth2Strategy
 from ninja_auth.revocation import InMemoryRevocationStore, TokenRevocationStore
+from ninja_auth.router import create_auth_router
+from ninja_auth.state_store import InMemoryOAuthStateStore, OAuthStateStore
 from ninja_auth.user_store import InMemoryUserStore, UserStore
 
 __all__ = [
@@ -43,9 +45,11 @@ __all__ = [
     "BearerStrategy",
     "BUILTIN_ROLES",
     "IdentityStrategy",
+    "InMemoryOAuthStateStore",
     "InMemoryRevocationStore",
     "InMemoryUserStore",
     "OAuth2Strategy",
+    "OAuthStateStore",
     "RateLimitConfig",
     "RateLimiter",
     "RBACConfig",
@@ -67,4 +71,5 @@ __all__ = [
     "set_rbac_policy",
     "set_user_context",
     "TokenRevocationStore",
+    "create_auth_router",
 ]
