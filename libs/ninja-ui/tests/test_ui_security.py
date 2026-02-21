@@ -12,7 +12,8 @@ from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
 
 from ninja_ui.chat.generator import ChatGenerator
-from ninja_ui.crud.generator import CrudGenerator
+from ninja_ui.chat.generator import _get_template_env as _chat_get_template_env
+from ninja_ui.crud.generator import CrudGenerator, _get_template_env
 from ninja_ui.server import DEFAULT_CSP, UIServer
 from ninja_ui.shared.sanitize import (
     is_safe_identifier,
@@ -149,30 +150,44 @@ XSS_DOMAIN_NAME = '"><script>alert("domain")</script>'
 
 
 def _xss_entity() -> EntitySchema:
-    """Entity with a malicious name to test XSS prevention."""
-    return EntitySchema(
+    """Entity with a malicious name to test XSS prevention.
+
+    Uses model_construct() to bypass Pydantic name validation (which now
+    rejects XSS payloads at the schema level).  This tests defense-in-depth:
+    even if schema validation is somehow bypassed, templates must still
+    escape output correctly.
+    """
+    xss_field = FieldSchema.model_construct(
+        name=XSS_FIELD_NAME, field_type=FieldType.STRING,
+        primary_key=False, nullable=False, constraints=None,
+    )
+    id_field = FieldSchema.model_construct(
+        name="id", field_type=FieldType.UUID,
+        primary_key=True, nullable=False, constraints=None,
+    )
+    return EntitySchema.model_construct(
         name=XSS_ENTITY_NAME,
         storage_engine=StorageEngine.SQL,
-        fields=[
-            FieldSchema(name="id", field_type=FieldType.UUID, primary_key=True),
-            FieldSchema(name=XSS_FIELD_NAME, field_type=FieldType.STRING),
-        ],
+        fields=[id_field, xss_field],
     )
 
 
 def _xss_schema() -> AgenticSchema:
-    """ASD schema with malicious entity/domain names."""
-    return AgenticSchema(
+    """ASD schema with malicious entity/domain names.
+
+    Uses model_construct() to bypass Pydantic name validation for
+    defense-in-depth testing of template escaping.
+    """
+    xss_domain = DomainSchema.model_construct(
+        name=XSS_DOMAIN_NAME,
+        description='<img src=x onerror=alert("desc")>',
+        entities=[XSS_ENTITY_NAME],
+    )
+    return AgenticSchema.model_construct(
         project_name='<script>alert("project")</script>',
         entities=[_xss_entity()],
         relationships=[],
-        domains=[
-            DomainSchema(
-                name=XSS_DOMAIN_NAME,
-                description='<img src=x onerror=alert("desc")>',
-                entities=[XSS_ENTITY_NAME],
-            ),
-        ],
+        domains=[xss_domain],
     )
 
 
@@ -383,6 +398,100 @@ class TestServerSecurityHeaders:
         assert "frame-ancestors 'none'" in DEFAULT_CSP
         assert "base-uri 'self'" in DEFAULT_CSP
         assert "form-action 'self'" in DEFAULT_CSP
+
+
+# ---------------------------------------------------------------------------
+# GraphQL variable type tests (from #143 security epic)
+# ---------------------------------------------------------------------------
+
+
+class TestCrudTemplateVariables:
+    """Tests that CRUD templates use GraphQL variables with correct types."""
+
+    def test_create_uses_variables(self, sample_asd, customer_entity, tmp_path):
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(customer_entity, tmp_path)
+        content = path.read_text()
+        assert "$input: JSON!" in content
+        assert "variables:" in content or "variables ||" in content
+
+    def test_update_uses_variables(self, sample_asd, customer_entity, tmp_path):
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(customer_entity, tmp_path)
+        content = path.read_text()
+        assert "$id: String!" in content
+        assert "$patch: JSON!" in content
+
+    def test_delete_uses_variables(self, sample_asd, customer_entity, tmp_path):
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(customer_entity, tmp_path)
+        content = path.read_text()
+        assert 'mutation DeleteEntity($id: String!)' in content
+
+    def test_list_uses_variables(self, sample_asd, customer_entity, tmp_path):
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(customer_entity, tmp_path)
+        content = path.read_text()
+        assert "$limit: Int!" in content
+        assert "$offset: Int!" in content
+
+    def test_search_uses_variables(self, sample_asd, product_entity, tmp_path):
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(product_entity, tmp_path)
+        content = path.read_text()
+        assert "$query: String!" in content
+
+    def test_no_string_interpolation_in_mutations(self, sample_asd, customer_entity, tmp_path):
+        """Ensure no direct string interpolation of user values in query strings."""
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(customer_entity, tmp_path)
+        content = path.read_text()
+        assert 'input: "${' not in content
+        assert 'patch: "${' not in content
+        assert 'id: "${' not in content
+
+    def test_csrf_header_in_fetch(self, sample_asd, customer_entity, tmp_path):
+        """Generated JS includes X-Requested-With header for CSRF protection."""
+        gen = CrudGenerator(sample_asd)
+        path = gen.generate_entity_page(customer_entity, tmp_path)
+        content = path.read_text()
+        assert "X-Requested-With" in content
+
+
+class TestChatTemplateVariables:
+    """Tests that chat templates use GraphQL variables."""
+
+    def test_ask_uses_variables(self, sample_asd, tmp_path):
+        gen = ChatGenerator(sample_asd)
+        gen.generate(tmp_path)
+        content = (tmp_path / "chat" / "index.html").read_text()
+        assert "$query: String!" in content
+
+    def test_no_string_interpolation_in_query(self, sample_asd, tmp_path):
+        """Ensure no direct string interpolation of user text in query strings."""
+        gen = ChatGenerator(sample_asd)
+        gen.generate(tmp_path)
+        content = (tmp_path / "chat" / "index.html").read_text()
+        assert 'query: "${' not in content
+        assert '.replace(/"/g' not in content
+
+    def test_csrf_header_in_fetch(self, sample_asd, tmp_path):
+        gen = ChatGenerator(sample_asd)
+        gen.generate(tmp_path)
+        content = (tmp_path / "chat" / "index.html").read_text()
+        assert "X-Requested-With" in content
+
+
+class TestAutoescapeEnabled:
+    """Tests that Jinja2 autoescape is enabled in both generators."""
+
+    def test_crud_autoescape_enabled(self):
+        env = _get_template_env()
+        assert env.autoescape is True
+
+    def test_chat_autoescape_enabled(self):
+        env = _chat_get_template_env()
+        assert env.autoescape is True
 
 
 # ---------------------------------------------------------------------------
