@@ -47,8 +47,8 @@
 
 {% block scripts %}
 <script>
-const GQL_ENDPOINT = "{{ gql_endpoint }}";
-let activeDomain = "{{ domains[0].name if domains else '' }}";
+const GQL_ENDPOINT = {{ gql_endpoint | tojson }};
+let activeDomain = {{ (domains[0].name if domains else '') | tojson }};
 let uploadedFile = null;
 
 function selectDomain(btn) {

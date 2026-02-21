@@ -99,8 +99,8 @@
 
 {% block scripts %}
 <script>
-const GQL_ENDPOINT = "{{ gql_endpoint }}";
-const ENTITY = "{{ slug }}";
+const GQL_ENDPOINT = {{ gql_endpoint | tojson }};
+const ENTITY = {{ slug | tojson }};
 const FIELDS = {{ fields_meta | tojson }};
 let currentPage = 0;
 const PAGE_SIZE = 25;
