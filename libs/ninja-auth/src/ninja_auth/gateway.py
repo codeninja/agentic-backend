@@ -10,7 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from ninja_auth.agent_context import set_user_context
+from ninja_auth.agent_context import set_rbac_policy, set_user_context
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_auth.rate_limiter import RateLimiter
@@ -51,6 +51,9 @@ class AuthGateway(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Authenticate the request and inject user context."""
+        # Propagate the configured RBAC policy so agent tools use custom roles
+        set_rbac_policy(self._rbac)
+
         # Allow public paths through without auth
         if self._is_public_path(request.url.path):
             request.state.user_context = ANONYMOUS_USER

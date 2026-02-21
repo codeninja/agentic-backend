@@ -1,12 +1,15 @@
 """Ninja Auth — pluggable authentication gateway with RBAC."""
 
 from ninja_auth.agent_context import (
+    clear_rbac_policy,
     clear_user_context,
+    current_rbac_policy,
     current_user_context,
     require_domain_access,
     require_permission,
     require_role,
     require_user_context,
+    set_rbac_policy,
     set_user_context,
 )
 from ninja_auth.config import AuthConfig
@@ -48,7 +51,9 @@ __all__ = [
     "RoleDefinition",
     "UserContext",
     "UserStore",
+    "clear_rbac_policy",
     "clear_user_context",
+    "current_rbac_policy",
     "current_user_context",
     "get_user_context",
     "permission_matches",
@@ -57,5 +62,6 @@ __all__ = [
     "require_permission",
     "require_role",
     "require_user_context",
+    "set_rbac_policy",
     "set_user_context",
 ]
