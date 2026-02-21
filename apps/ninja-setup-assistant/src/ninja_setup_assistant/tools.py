@@ -8,12 +8,19 @@ bound wrapper functions suitable for passing to ``LlmAgent(tools=...)``.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable
 from urllib.parse import urlparse
 
 from ninja_core.schema.domain import DomainSchema
-from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
+from ninja_core.schema.entity import (
+    MAX_DESCRIPTION_LENGTH,
+    EntitySchema,
+    FieldSchema,
+    FieldType,
+    StorageEngine,
+)
 from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
 from ninja_introspect.engine import IntrospectionEngine
@@ -27,6 +34,38 @@ _ALLOWED_DB_SCHEMES = {
     "neo4j", "neo4j+s", "neo4j+ssc",
     "bolt", "bolt+s", "bolt+ssc",
 }
+
+# Same regex used in ninja-core schema validators.
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+
+# Allowed field types for validation at the tool boundary.
+_ALLOWED_FIELD_TYPES = {ft.value for ft in FieldType}
+
+# Allowed storage engines.
+_ALLOWED_STORAGE_ENGINES = {se.value for se in StorageEngine}
+
+
+def _validate_identifier(value: str, label: str) -> str | None:
+    """Validate a name is a safe identifier. Returns error message or None."""
+    if not value or not value.strip():
+        return f"{label} must not be empty."
+    if not _IDENTIFIER_RE.match(value.strip()):
+        return (
+            f"{label} {value!r} is not a valid identifier. "
+            "Must start with a letter, contain only alphanumeric characters "
+            "and underscores, and be at most 64 characters."
+        )
+    return None
+
+
+def _validate_description(value: str | None, label: str) -> str | None:
+    """Validate description length. Returns error message or None."""
+    if value is not None and len(value) > MAX_DESCRIPTION_LENGTH:
+        return (
+            f"{label} description too long ({len(value)} chars). "
+            f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
+        )
+    return None
 
 
 @dataclass
@@ -61,9 +100,39 @@ def add_entity(
     Returns:
         A confirmation message.
     """
+    # Validate entity name at tool boundary.
+    error = _validate_identifier(name, "Entity name")
+    if error:
+        return error
+
+    # Validate storage engine.
+    if storage_engine not in _ALLOWED_STORAGE_ENGINES:
+        return (
+            f"Invalid storage engine '{storage_engine}'. "
+            f"Allowed values: {', '.join(sorted(_ALLOWED_STORAGE_ENGINES))}."
+        )
+
+    # Validate description length.
+    error = _validate_description(description, "Entity")
+    if error:
+        return error
+
     for existing in workspace.schema.entities:
         if existing.name == name:
             return f"Entity '{name}' already exists. Use a different name or remove it first."
+
+    # Validate field names and types.
+    for f in fields:
+        field_name = f.get("name", "")
+        error = _validate_identifier(field_name, "Field name")
+        if error:
+            return error
+        field_type = f.get("field_type", "string")
+        if field_type not in _ALLOWED_FIELD_TYPES:
+            return (
+                f"Invalid field type '{field_type}' for field '{field_name}'. "
+                f"Allowed types: {', '.join(sorted(_ALLOWED_FIELD_TYPES))}."
+            )
 
     parsed_fields: list[FieldSchema] = []
     for f in fields:
@@ -137,6 +206,16 @@ def create_domain(
     Returns:
         A confirmation message.
     """
+    # Validate domain name at tool boundary.
+    error = _validate_identifier(name, "Domain name")
+    if error:
+        return error
+
+    # Validate description length.
+    error = _validate_description(description, "Domain")
+    if error:
+        return error
+
     entity_names = {e.name for e in workspace.schema.entities}
     missing = [e for e in entities if e not in entity_names]
     if missing:

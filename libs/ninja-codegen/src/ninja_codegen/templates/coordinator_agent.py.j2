@@ -8,7 +8,7 @@ from ninja_agents.base import CoordinatorAgent, DomainAgent
 from ninja_core.schema.agent import AgentConfig, ReasoningLevel
 
 {% for domain in domains %}
-from .{{ domain.name | lower }}_agent import create_{{ domain.name | lower }}_domain_agent
+from .{{ domain.name | safe_identifier | lower }}_agent import create_{{ domain.name | safe_identifier | lower }}_domain_agent
 {% endfor %}
 
 DOMAIN_NAMES: list[str] = {{ domain_names | repr }}
@@ -24,7 +24,7 @@ def create_coordinator(domain_agents: list[DomainAgent] | None = None) -> Coordi
     if domain_agents is None:
         domain_agents = [
 {% for domain in domains %}
-            create_{{ domain.name | lower }}_domain_agent(),
+            create_{{ domain.name | safe_identifier | lower }}_domain_agent(),
 {% endfor %}
         ]
 

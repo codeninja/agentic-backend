@@ -19,8 +19,10 @@ from ninja_core.schema.entity import EntitySchema
 from pydantic import model_validator
 
 from ninja_agents.safety import (
-    sanitize_error,
-    sanitize_identifier,
+    AgentSafetyError,
+    InvalidToolAccess,
+    safe_error_message,
+    sanitize_for_prompt,
     validate_request_size,
     validate_tool_kwargs_size,
     validate_tool_name,
@@ -94,7 +96,8 @@ class DataAgent(BaseAgent):
         on keyword arguments.
 
         Raises:
-            ValueError: If the tool name is malformed or kwargs are too large.
+            InvalidToolAccess: If the tool name is malformed.
+            AgentInputTooLarge: If kwargs exceed size limits.
             KeyError: If the tool is not in this agent's scope.
         """
         validate_tool_name(tool_name)
@@ -119,11 +122,20 @@ class DataAgent(BaseAgent):
 
         try:
             validate_tool_name(tool_name)
-        except ValueError:
+        except (InvalidToolAccess, AgentSafetyError):
             yield Event(
                 author=self.name,
                 invocation_id=ctx.invocation_id,
                 content="Invalid tool name.",
+            )
+            return
+
+        # Enforce tool_permissions if configured
+        if self.config.tool_permissions and tool_name not in self.config.tool_permissions:
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                content=InvalidToolAccess.client_message,
             )
             return
 
@@ -143,7 +155,7 @@ class DataAgent(BaseAgent):
             yield Event(
                 author=self.name,
                 invocation_id=ctx.invocation_id,
-                content=sanitize_error(exc),
+                content=safe_error_message(exc),
             )
             return
 
@@ -170,7 +182,7 @@ class DomainAgent:
         data_agents: list[DataAgent],
         config: AgentConfig | None = None,
     ) -> None:
-        safe_domain_name = sanitize_identifier(domain.name)
+        safe_domain_name = sanitize_for_prompt(domain.name)
         self.domain = domain
         self.config = config or domain.agent_config
         self.name = f"domain_agent_{safe_domain_name.lower()}"
@@ -213,7 +225,7 @@ class DomainAgent:
 
         Raises:
             KeyError: If the entity is not in this domain.
-            ValueError: If the tool name is malformed.
+            InvalidToolAccess: If the tool name is malformed.
         """
         da = self._data_agents.get(entity_name)
         if da is None:
@@ -235,7 +247,7 @@ class DomainAgent:
         Validates request size before processing.
 
         Raises:
-            ValueError: If the request exceeds the size limit.
+            AgentInputTooLarge: If the request exceeds the size limit.
         """
         validate_request_size(request)
         if trace:
@@ -302,7 +314,7 @@ class CoordinatorAgent:
         ``Orchestrator.fan_out()`` instead.
 
         Raises:
-            ValueError: If the request exceeds the size limit.
+            AgentInputTooLarge: If the request exceeds the size limit.
         """
         validate_request_size(request)
         results: dict[str, Any] = {}
@@ -327,9 +339,9 @@ def create_domain_agent(
     Sanitizes the domain name before interpolation into the LLM instruction.
 
     Raises:
-        ValueError: If the domain name fails sanitization.
+        UnsafeInputError: If the domain name fails sanitization.
     """
-    safe_name = sanitize_identifier(domain.name)
+    safe_name = sanitize_for_prompt(domain.name)
     model = _REASONING_MODEL.get(domain.agent_config.reasoning_level, _DEFAULT_MODEL)
     return LlmAgent(
         name=f"domain_agent_{safe_name.lower()}",

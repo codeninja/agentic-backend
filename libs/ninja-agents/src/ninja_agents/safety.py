@@ -9,16 +9,49 @@ Provides guardrails against:
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Error hierarchy — generic client messages, detailed server-side logs
+# ---------------------------------------------------------------------------
+
+
+class AgentSafetyError(Exception):
+    """Base for all safety-related errors. Never expose internals."""
+
+    client_message: str = "An internal error occurred."
+
+
+class AgentInputTooLarge(AgentSafetyError):
+    """Raised when agent input exceeds the maximum allowed size."""
+
+    client_message = "Request exceeds maximum allowed size."
+
+
+class InvalidToolAccess(AgentSafetyError):
+    """Raised when a tool access is denied by permission checks."""
+
+    client_message = "Tool access denied."
+
+
+class UnsafeInputError(AgentSafetyError):
+    """Raised when input contains invalid characters or injection patterns."""
+
+    client_message = "Input contains invalid characters."
+
 
 # ---------------------------------------------------------------------------
 # Prompt-injection prevention
 # ---------------------------------------------------------------------------
 
-# Schema identifiers (domain names, entity names) must be alphanumeric with
-# underscores/hyphens/spaces.  Anything else is suspicious and gets stripped.
-_SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_ -]{0,127}$")
+# Schema identifiers (domain names, entity names) must be valid Python
+# identifiers: start with letter, alphanumeric + underscores, max 64 chars.
+# This matches the Pydantic validators in ninja-core as defense-in-depth.
+_SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
 
 # Patterns that could manipulate LLM behavior when interpolated into prompts.
 _INJECTION_PATTERNS: list[re.Pattern[str]] = [
@@ -32,11 +65,12 @@ _INJECTION_PATTERNS: list[re.Pattern[str]] = [
 ]
 
 
-def sanitize_identifier(value: str) -> str:
-    """Sanitize a schema identifier (domain/entity name) for safe prompt interpolation.
+def sanitize_for_prompt(value: str) -> str:
+    """Sanitize a schema identifier for safe interpolation into LLM prompts.
 
-    Strips control characters and validates against an allowlist pattern.
-    Raises ``ValueError`` if the name is empty or contains injection patterns.
+    Defense-in-depth: validates against the same identifier regex used by
+    the Pydantic schema validators in ``ninja-core``, and additionally
+    checks for known prompt-injection patterns.
 
     Args:
         value: The raw identifier string from the ASD schema.
@@ -45,45 +79,35 @@ def sanitize_identifier(value: str) -> str:
         The sanitized identifier, stripped of leading/trailing whitespace.
 
     Raises:
-        ValueError: If the identifier is empty, too long, or contains
+        UnsafeInputError: If the identifier is empty, too long, or contains
             characters/patterns that could enable prompt injection.
     """
     if not isinstance(value, str):
-        raise ValueError(f"Identifier must be a string, got {type(value).__name__}")
+        raise UnsafeInputError(f"Identifier must be a string, got {type(value).__name__}")
 
     cleaned = value.strip()
     if not cleaned:
-        raise ValueError("Identifier must not be empty")
+        raise UnsafeInputError("Identifier must not be empty")
 
     if not _SAFE_IDENTIFIER_RE.match(cleaned):
-        raise ValueError(
+        raise UnsafeInputError(
             f"Invalid identifier: {cleaned!r}. "
-            "Must start with a letter, contain only alphanumeric characters, "
-            "underscores, hyphens, or spaces, and be at most 128 characters."
+            "Must start with a letter, contain only alphanumeric characters "
+            "and underscores, and be at most 64 characters."
         )
 
     for pattern in _INJECTION_PATTERNS:
         if pattern.search(cleaned):
-            raise ValueError(
+            raise UnsafeInputError(
                 f"Identifier {cleaned!r} contains a prompt-injection pattern and was rejected."
             )
 
     return cleaned
 
 
-def sanitize_identifiers(values: list[str]) -> list[str]:
-    """Sanitize a list of schema identifiers.
-
-    Args:
-        values: Raw identifier strings from the ASD schema.
-
-    Returns:
-        List of sanitized identifiers.
-
-    Raises:
-        ValueError: If any identifier fails validation.
-    """
-    return [sanitize_identifier(v) for v in values]
+# Keep backward-compatible aliases
+sanitize_identifier = sanitize_for_prompt
+sanitize_identifiers = lambda values: [sanitize_for_prompt(v) for v in values]
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +115,7 @@ def sanitize_identifiers(values: list[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 # Defaults — callers can override per-agent if needed.
-MAX_REQUEST_LENGTH = 10_000  # characters
+MAX_REQUEST_LENGTH = 50_000  # characters (issue spec: 50K)
 MAX_TOOL_KWARGS_SIZE = 50_000  # approximate serialized size in characters
 
 
@@ -106,16 +130,39 @@ def validate_request_size(request: str, max_length: int = MAX_REQUEST_LENGTH) ->
         The validated request string.
 
     Raises:
-        ValueError: If the request exceeds the size limit.
+        AgentInputTooLarge: If the request exceeds the size limit.
     """
     if not isinstance(request, str):
-        raise ValueError(f"Request must be a string, got {type(request).__name__}")
+        raise AgentInputTooLarge(f"Request must be a string, got {type(request).__name__}")
     if len(request) > max_length:
-        raise ValueError(
+        raise AgentInputTooLarge(
             f"Request too large: {len(request)} characters exceeds "
             f"maximum of {max_length} characters."
         )
     return request
+
+
+def validate_tool_kwargs(
+    kwargs: dict[str, Any],
+    allowed_keys: set[str],
+) -> dict[str, Any]:
+    """Whitelist-based keyword argument filtering for tool invocations.
+
+    Drops any keys not in the allowed set. This prevents unexpected or
+    malicious parameters from reaching tool implementations.
+
+    Args:
+        kwargs: The tool keyword arguments dict.
+        allowed_keys: Set of parameter names the tool accepts.
+
+    Returns:
+        A new dict containing only the allowed keys.
+    """
+    filtered = {k: v for k, v in kwargs.items() if k in allowed_keys}
+    dropped = set(kwargs.keys()) - allowed_keys
+    if dropped:
+        logger.warning("Dropped disallowed tool kwargs: %s", dropped)
+    return filtered
 
 
 def validate_tool_kwargs_size(
@@ -135,11 +182,11 @@ def validate_tool_kwargs_size(
         The validated kwargs dict.
 
     Raises:
-        ValueError: If the serialized kwargs exceed the size limit.
+        AgentInputTooLarge: If the serialized kwargs exceed the size limit.
     """
     approx_size = len(str(kwargs))
     if approx_size > max_size:
-        raise ValueError(
+        raise AgentInputTooLarge(
             f"Tool arguments too large: ~{approx_size} characters exceeds "
             f"maximum of {max_size} characters."
         )
@@ -170,11 +217,12 @@ _SAFE_ERROR_MESSAGES: dict[str, str] = {
 }
 
 
-def sanitize_error(exc: Exception) -> str:
+def safe_error_message(exc: Exception) -> str:
     """Produce a caller-safe error message from an exception.
 
     Strips filesystem paths, credentials, and stack traces. Falls back to a
     generic category-based message when the raw message contains sensitive data.
+    Logs the full exception server-side for debugging.
 
     Args:
         exc: The exception to sanitize.
@@ -182,6 +230,13 @@ def sanitize_error(exc: Exception) -> str:
     Returns:
         A safe error string suitable for inclusion in an API/agent response.
     """
+    # Always log the full exception server-side.
+    logger.error("Agent error (sanitized for client): %s: %s", type(exc).__name__, exc, exc_info=True)
+
+    # Safety errors have their own client-safe message.
+    if isinstance(exc, AgentSafetyError):
+        return exc.client_message
+
     raw = str(exc)
     exc_type = type(exc).__name__
 
@@ -195,6 +250,10 @@ def sanitize_error(exc: Exception) -> str:
         raw = raw[:200] + "..."
 
     return raw
+
+
+# Keep backward-compatible alias
+sanitize_error = safe_error_message
 
 
 # ---------------------------------------------------------------------------
@@ -215,12 +274,12 @@ def validate_tool_name(name: str) -> str:
         The validated tool name.
 
     Raises:
-        ValueError: If the tool name does not match the expected pattern.
+        InvalidToolAccess: If the tool name does not match the expected pattern.
     """
     if not isinstance(name, str):
-        raise ValueError(f"Tool name must be a string, got {type(name).__name__}")
+        raise InvalidToolAccess(f"Tool name must be a string, got {type(name).__name__}")
     if not _SAFE_TOOL_NAME_RE.match(name):
-        raise ValueError(
+        raise InvalidToolAccess(
             f"Invalid tool name: {name!r}. "
             "Must start with a lowercase letter and contain only "
             "lowercase alphanumeric characters and underscores (max 128 chars)."

@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import keyword
+import re
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Valid identifier: starts with letter, alphanumeric + underscores, max 64 chars.
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
+
+# Maximum allowed length for description fields.
+MAX_DESCRIPTION_LENGTH = 500
 
 
 class StorageEngine(str, Enum):
@@ -102,6 +110,31 @@ class FieldSchema(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    @field_validator("name")
+    @classmethod
+    def validate_field_name(cls, v: str) -> str:
+        """Enforce safe identifier pattern on field names."""
+        if not _IDENTIFIER_RE.match(v):
+            raise ValueError(
+                f"Field name {v!r} is not a valid identifier. "
+                "Must start with a letter, contain only alphanumeric characters "
+                "and underscores, and be at most 64 characters."
+            )
+        if keyword.iskeyword(v):
+            raise ValueError(f"Field name {v!r} is a Python reserved keyword.")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_field_description(cls, v: str | None) -> str | None:
+        """Enforce maximum length on description."""
+        if v is not None and len(v) > MAX_DESCRIPTION_LENGTH:
+            raise ValueError(
+                f"Description too long ({len(v)} chars). "
+                f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
+            )
+        return v
+
     @model_validator(mode="after")
     def validate_field_coherence(self) -> FieldSchema:
         """Validate default type compatibility and enum constraints."""
@@ -148,6 +181,36 @@ class EntitySchema(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Arbitrary tags for categorization.")
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("name")
+    @classmethod
+    def validate_entity_name(cls, v: str) -> str:
+        """Enforce safe identifier pattern on entity names.
+
+        Rejects names with newlines, quotes, control characters, and Python
+        reserved keywords. This is the primary defense against prompt injection
+        via schema metadata.
+        """
+        if not _IDENTIFIER_RE.match(v):
+            raise ValueError(
+                f"Entity name {v!r} is not a valid identifier. "
+                "Must start with a letter, contain only alphanumeric characters "
+                "and underscores, and be at most 64 characters."
+            )
+        if keyword.iskeyword(v):
+            raise ValueError(f"Entity name {v!r} is a Python reserved keyword.")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_entity_description(cls, v: str | None) -> str | None:
+        """Enforce maximum length on description."""
+        if v is not None and len(v) > MAX_DESCRIPTION_LENGTH:
+            raise ValueError(
+                f"Description too long ({len(v)} chars). "
+                f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
+            )
+        return v
 
     @model_validator(mode="after")
     def validate_entity_integrity(self) -> EntitySchema:
