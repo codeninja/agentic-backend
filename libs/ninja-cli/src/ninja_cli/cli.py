@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -58,6 +59,37 @@ def deploy() -> None:
     typer.echo("Not yet implemented")
 
 
+_VALID_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
+_MAX_NAME_LENGTH = 64
+
+
+def _validate_name(name: str) -> str:
+    """Validate a library or app name for safe use in shell commands.
+
+    Names must start with a lowercase letter and contain only lowercase
+    letters, digits, and hyphens.  Maximum length is 64 characters.
+
+    Args:
+        name: The candidate name to validate.
+
+    Returns:
+        The validated name (unchanged).
+
+    Raises:
+        typer.BadParameter: If the name is invalid.
+    """
+    if not name:
+        raise typer.BadParameter("Name must not be empty.")
+    if len(name) > _MAX_NAME_LENGTH:
+        raise typer.BadParameter(f"Name must be at most {_MAX_NAME_LENGTH} characters.")
+    if not _VALID_NAME_RE.match(name):
+        raise typer.BadParameter(
+            f"Invalid name '{name}'. "
+            "Names must start with a lowercase letter and contain only lowercase letters, digits, and hyphens."
+        )
+    return name
+
+
 def _find_project_root() -> Path:
     """Walk up to find the directory containing pyproject.toml."""
     current = Path.cwd()
@@ -72,6 +104,7 @@ def create_lib(
     name: str = typer.Argument(help="Library name (e.g. ninja-persistence)."),
 ) -> None:
     """Scaffold a new library under libs/."""
+    name = _validate_name(name)
     root = _find_project_root()
     script = root / "scripts" / "new_lib.sh"
     if not script.is_file():
@@ -89,6 +122,7 @@ def create_app_cmd(
     name: str = typer.Argument(help="App name (e.g. ninja-api)."),
 ) -> None:
     """Scaffold a new app under apps/."""
+    name = _validate_name(name)
     root = _find_project_root()
     script = root / "scripts" / "new_app.sh"
     if not script.is_file():
