@@ -363,17 +363,23 @@ phase_implement() {
         log "  🚀 Starting developer for #$issue_num: $title"
         set_status "$issue_num" "$STATUS_IN_PROGRESS"
 
-        # Create worktree and draft PR
+        # Create worktree and draft PR (always rebased on latest main)
         (
             cd "$PROJECT_ROOT"
             git fetch origin main 2>/dev/null
-            git worktree add -b "$branch" "$worktree" origin/main 2>/dev/null || \
+            if git worktree add -b "$branch" "$worktree" origin/main 2>/dev/null; then
+                : # new branch, already on latest main
+            else
+                # Existing branch — check it out and rebase onto latest main
                 git worktree add "$worktree" "$branch" 2>/dev/null
+                cd "$worktree"
+                git rebase origin/main 2>/dev/null || git rebase --abort 2>/dev/null
+            fi
         )
         (
             cd "$worktree"
             git commit --allow-empty -m "wip: starting work on #$issue_num" 2>/dev/null
-            git push -u origin "$branch" 2>/dev/null
+            git push -u origin "$branch" --force-with-lease 2>/dev/null
             gh pr create --repo "$REPO" --head "$branch" --base main \
                 --title "fix: $title" \
                 --body "Closes #$issue_num" \
@@ -459,7 +465,8 @@ IMPORTANT:
 - A draft PR already exists — do NOT create a new one
 - Do NOT merge the PR — it needs review first
 - Make sure tests pass before pushing
-- Keep changes focused on the issue scope" \
+- Keep changes focused on the issue scope
+- Your code WILL BE EVALUATED by an AI reviewer for: code quality, security best practices, and completeness of the solution against acceptance criteria. Incomplete or insecure implementations will be rejected." \
             --output-format text \
             > "$impl_log" 2>&1 &
         track_pid $!
@@ -502,12 +509,17 @@ phase_review() {
         log "  🔎 Reviewing PR #$pr_num for issue #$issue_num: $title"
         local review_dir="$WORKTREE_BASE/review-${issue_num}"
 
-        # Create fresh worktree for review
+        # Create fresh worktree for review (rebased on latest main)
         (
             cd "$PROJECT_ROOT"
             git fetch origin "$branch" main 2>/dev/null
             rm -rf "$review_dir" 2>/dev/null
+            git worktree remove "$review_dir" 2>/dev/null || true
             git worktree add "$review_dir" "origin/$branch" 2>/dev/null || true
+            cd "$review_dir"
+            # Rebase the review copy onto latest main so diff only shows branch changes
+            git checkout -b "review-${issue_num}" 2>/dev/null || true
+            git rebase origin/main 2>/dev/null || git rebase --abort 2>/dev/null
         )
 
         claude --dangerously-skip-permissions -p "You are a code reviewer for the NinjaStack project.
@@ -524,10 +536,11 @@ PROJECT VISION (from README):
 NinjaStack is a schema-first agentic backend framework. It transforms database schemas into fully functional agentic backends with AI agents, GraphQL APIs, authentication, RBAC, and deployment manifests. Key principles: explicit > implicit, composition > inheritance, constraints > convention, model-agnostic via LiteLLM.
 
 Your task:
-1. Run: cd $review_dir && git diff origin/main..HEAD --stat
-2. Review ALL changed files carefully
-3. Run tests: uv sync && uv run pytest --tb=short
-4. Evaluate against these criteria:
+1. Run: cd $review_dir && git log --oneline origin/main..HEAD (to see branch commits)
+2. Run: cd $review_dir && git diff origin/main...HEAD --stat (three dots = only changes introduced by this branch)
+3. Review ALL changed files from that diff carefully — ONLY evaluate changes introduced by this branch, not pre-existing code
+4. Run tests: uv sync && uv run pytest --tb=short
+5. Evaluate against these criteria:
    a. Does the code correctly implement what the issue describes?
    b. Are there tests covering the changes?
    c. Do all tests pass?
