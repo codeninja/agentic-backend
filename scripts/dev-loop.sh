@@ -324,9 +324,7 @@ phase_implement() {
 
     local slots=$(( MAX_IN_PROGRESS - in_progress_count ))
 
-    # -----------------------------------------------------------------------
-    # Step 1: Collect up to $slots candidates and validate them in PARALLEL
-    # -----------------------------------------------------------------------
+    # Collect up to $slots candidates
     local -a candidates=()
     while IFS= read -r issue_num; do
         [[ -z "$issue_num" ]] && continue
@@ -341,69 +339,14 @@ phase_implement() {
     done <<< "$all_issues"
 
     if (( ${#candidates[@]} == 0 )); then
-        log "  No candidates to validate."
+        log "  No candidates available."
         return
     fi
 
-    log "  🔬 Validating ${#candidates[@]} tickets in parallel..."
-    local -a validate_pids=()
-    local -a validate_logs=()
+    # Spawn developer agents in parallel — each validates + implements
+    local started=0
     for issue_num in "${candidates[@]}"; do
         check_stop
-        local title
-        title=$(get_issue_title "$issue_num")
-        local body
-        body=$(get_issue_body "$issue_num")
-        local validate_log="$LOG_DIR/validate-${issue_num}-$(date +%s).log"
-        validate_logs+=("$validate_log")
-
-        claude --dangerously-skip-permissions -p "You are a developer picking up a ticket for implementation. Before writing any code, you need to verify the ticket is still valid and actionable.
-
-PROJECT ROOT: $PROJECT_ROOT
-REPO: $REPO
-ISSUE #$issue_num: $title
-
-ISSUE BODY:
-$body
-
-Your task:
-1. Read the relevant source files mentioned in the issue
-2. Check if the problem described still exists in the current codebase
-3. Check if another PR or recent commit already fixed this (run: git log --oneline -20)
-4. Verify the proposed fix makes sense given the current architecture
-
-Then output EXACTLY ONE of these verdicts on its own line:
-
-VALIDATE_RESULT=PROCEED
-  — The issue is valid, the problem exists, and implementation should begin.
-
-VALIDATE_RESULT=UNNECESSARY
-  — The issue has already been resolved or is no longer applicable. Include a brief explanation.
-
-VALIDATE_RESULT=NEEDS_PLANNING
-  — The issue is valid but the requirements are unclear, conflicting, or need architectural discussion. Include a brief explanation of what needs clarification.
-
-Output the verdict as the LAST line of your response." \
-            --output-format text \
-            > "$validate_log" 2>&1 &
-        validate_pids+=($!)
-        log "    🔬 #$issue_num validation started (PID $!)"
-    done
-
-    # Wait for ALL validations to complete
-    log "  ⏳ Waiting for all validations to complete..."
-    for pid in "${validate_pids[@]}"; do
-        wait "$pid" 2>/dev/null || true
-    done
-    log "  ✅ All validations complete."
-
-    # -----------------------------------------------------------------------
-    # Step 2: Process results and spawn implementations for validated tickets
-    # -----------------------------------------------------------------------
-    local started=0
-    for i in "${!candidates[@]}"; do
-        local issue_num="${candidates[$i]}"
-        local validate_log="${validate_logs[$i]}"
         local title
         title=$(get_issue_title "$issue_num")
         local body
@@ -412,33 +355,7 @@ Output the verdict as the LAST line of your response." \
         local worktree="$WORKTREE_BASE/issue-${issue_num}"
         local impl_log="$LOG_DIR/impl-${issue_num}-$(date +%s).log"
 
-        if grep -q "VALIDATE_RESULT=UNNECESSARY" "$validate_log"; then
-            local reason
-            reason=$(grep -B5 "VALIDATE_RESULT=UNNECESSARY" "$validate_log" | grep -v "VALIDATE_RESULT" | tail -3 | tr '\n' ' ')
-            log "  🗑️  #$issue_num deemed unnecessary — closing"
-            gh issue comment "$issue_num" --repo "$REPO" --body "**Dev Validation:** This issue appears to already be resolved or is no longer applicable.
-
-${reason}
-
-Closing automatically. Reopen if this assessment is incorrect." 2>/dev/null
-            gh issue close "$issue_num" --repo "$REPO" 2>/dev/null
-            set_status "$issue_num" "$STATUS_DONE"
-            continue
-        elif grep -q "VALIDATE_RESULT=NEEDS_PLANNING" "$validate_log"; then
-            local reason
-            reason=$(grep -B5 "VALIDATE_RESULT=NEEDS_PLANNING" "$validate_log" | grep -v "VALIDATE_RESULT" | tail -3 | tr '\n' ' ')
-            log "  📋 #$issue_num needs planning — returning to Planning"
-            gh issue comment "$issue_num" --repo "$REPO" --body "**Dev Validation:** This ticket needs further planning before implementation can begin.
-
-${reason}
-
-Moving to Planning for clarification." 2>/dev/null
-            set_status "$issue_num" "$STATUS_PLANNING"
-            continue
-        fi
-
-        log "  ✅ #$issue_num validated — proceeding with implementation"
-        log "  🚀 Starting implementation of #$issue_num: $title"
+        log "  🚀 Starting developer for #$issue_num: $title"
         set_status "$issue_num" "$STATUS_IN_PROGRESS"
 
         # Create worktree and draft PR
@@ -448,8 +365,6 @@ Moving to Planning for clarification." 2>/dev/null
             git worktree add -b "$branch" "$worktree" origin/main 2>/dev/null || \
                 git worktree add "$worktree" "$branch" 2>/dev/null
         )
-
-        # Create an initial empty commit and draft PR so progress is visible
         (
             cd "$worktree"
             git commit --allow-empty -m "wip: starting work on #$issue_num" 2>/dev/null
@@ -463,8 +378,8 @@ Moving to Planning for clarification." 2>/dev/null
         draft_pr=$(get_pr_for_branch "$branch")
         log "  📝 Draft PR #$draft_pr created for #$issue_num"
 
-        # Spawn Claude Code to implement
-        claude --dangerously-skip-permissions -p "You are implementing a fix for GitHub issue #$issue_num in the NinjaStack project.
+        # Single developer agent: validates THEN implements (or bails)
+        claude --dangerously-skip-permissions -p "You are a developer assigned to GitHub issue #$issue_num in the NinjaStack project.
 
 ISSUE TITLE: $title
 
@@ -474,33 +389,58 @@ $body
 WORKING DIRECTORY: $worktree
 BRANCH: $branch
 DRAFT PR: #$draft_pr (already created)
+REPO: $REPO
 
-Your task:
+## PHASE 1: VALIDATION
+
+Before writing any code, verify this ticket is still valid:
+1. Read the relevant source files mentioned in the issue
+2. Check if the problem still exists in the current codebase
+3. Check if another PR or recent commit already fixed this (run: git log --oneline -20 in the main project at $PROJECT_ROOT)
+4. Verify the proposed fix makes sense given the current architecture
+
+If the issue is ALREADY RESOLVED or NOT NEEDED:
+- Run: gh issue comment $issue_num --repo $REPO --body 'Dev Validation: This issue is already resolved. <explanation>'
+- Run: gh issue close $issue_num --repo $REPO
+- Run: gh pr close $draft_pr --repo $REPO --delete-branch
+- Output: RESULT=UNNECESSARY
+- Stop here. Do not continue to Phase 2.
+
+If the issue NEEDS CLARIFICATION or has unclear/conflicting requirements:
+- Run: gh issue comment $issue_num --repo $REPO --body 'Dev Validation: This ticket needs further planning. <explanation of what needs clarification>'
+- Run: gh pr close $draft_pr --repo $REPO --delete-branch
+- Output: RESULT=NEEDS_PLANNING
+- Stop here. Do not continue to Phase 2.
+
+If the issue is VALID and the problem exists, continue to Phase 2.
+
+## PHASE 2: IMPLEMENTATION
+
 1. Read the issue carefully and understand the requirements
 2. Read relevant source files to understand the current implementation
 3. Implement the fix/feature as described in the issue
 4. Write or update tests to cover your changes
 5. Run the test suite: cd $worktree && uv sync && uv run pytest --tb=short
 6. Ensure ALL tests pass (not just your new ones)
-7. Commit your changes with a descriptive message: git add -A && git commit -m 'fix: <description> (closes #$issue_num)'
+7. Commit your changes: git add -A && git commit -m 'fix: <description> (closes #$issue_num)'
 8. Push: git push origin $branch
-9. Update the PR body with a summary: gh pr edit $draft_pr --repo $REPO --body 'Closes #$issue_num\n\n<summary of changes>'
-10. Mark the PR as ready for review: gh pr ready $draft_pr --repo $REPO
+9. Update the PR body: gh pr edit $draft_pr --repo $REPO --body 'Closes #$issue_num\n\n<summary of changes>'
+10. Mark PR ready for review: gh pr ready $draft_pr --repo $REPO
+11. Output: RESULT=IMPLEMENTED
 
 IMPORTANT:
 - A draft PR already exists — do NOT create a new one
 - Do NOT merge the PR — it needs review first
 - Make sure tests pass before pushing
-- The LAST thing you do must be: gh pr ready $draft_pr --repo $REPO
 - Keep changes focused on the issue scope" \
             --output-format text \
             > "$impl_log" 2>&1 &
         track_pid $!
-        log "  🤖 Implementation agent started for #$issue_num (PID $!, log: $impl_log)"
+        log "  🤖 Developer agent started for #$issue_num (PID $!, log: $impl_log)"
         started=$(( started + 1 ))
     done
 
-    log "  🚀 $started implementation agents spawned in parallel"
+    log "  🚀 $started developer agents spawned in parallel"
 }
 
 # ---------------------------------------------------------------------------
