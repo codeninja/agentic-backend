@@ -398,13 +398,27 @@ Moving to Planning for clarification." 2>/dev/null
         log "  🚀 Starting implementation of #$issue_num: $title"
         set_status "$issue_num" "$STATUS_IN_PROGRESS"
 
-        # Create worktree
+        # Create worktree and draft PR
         (
             cd "$PROJECT_ROOT"
             git fetch origin main 2>/dev/null
             git worktree add -b "$branch" "$worktree" origin/main 2>/dev/null || \
                 git worktree add "$worktree" "$branch" 2>/dev/null
         )
+
+        # Create an initial empty commit and draft PR so progress is visible
+        (
+            cd "$worktree"
+            git commit --allow-empty -m "wip: starting work on #$issue_num" 2>/dev/null
+            git push -u origin "$branch" 2>/dev/null
+            gh pr create --repo "$REPO" --head "$branch" --base main \
+                --title "fix: $title" \
+                --body "Closes #$issue_num" \
+                --draft 2>/dev/null
+        )
+        local draft_pr
+        draft_pr=$(get_pr_for_branch "$branch")
+        log "  📝 Draft PR #$draft_pr created for #$issue_num"
 
         # Spawn Claude Code to implement
         claude --dangerously-skip-permissions -p "You are implementing a fix for GitHub issue #$issue_num in the NinjaStack project.
@@ -416,6 +430,7 @@ $body
 
 WORKING DIRECTORY: $worktree
 BRANCH: $branch
+DRAFT PR: #$draft_pr (already created)
 
 Your task:
 1. Read the issue carefully and understand the requirements
@@ -425,12 +440,15 @@ Your task:
 5. Run the test suite: cd $worktree && uv sync && uv run pytest --tb=short
 6. Ensure ALL tests pass (not just your new ones)
 7. Commit your changes with a descriptive message: git add -A && git commit -m 'fix: <description> (closes #$issue_num)'
-8. Push: git push -u origin $branch
-9. Create a PR: gh pr create --repo $REPO --head $branch --base main --title 'fix: $title' --body 'Closes #$issue_num\n\n<summary of changes>'
+8. Push: git push origin $branch
+9. Update the PR body with a summary: gh pr edit $draft_pr --repo $REPO --body 'Closes #$issue_num\n\n<summary of changes>'
+10. Mark the PR as ready for review: gh pr ready $draft_pr --repo $REPO
 
 IMPORTANT:
+- A draft PR already exists — do NOT create a new one
 - Do NOT merge the PR — it needs review first
 - Make sure tests pass before pushing
+- The LAST thing you do must be: gh pr ready $draft_pr --repo $REPO
 - Keep changes focused on the issue scope" \
             --output-format text \
             > "$impl_log" 2>&1 &
@@ -638,13 +656,16 @@ phase_promote() {
         pr_num=$(get_pr_for_branch "$branch")
 
         if [[ -n "$pr_num" ]]; then
-            # PR exists — check if CI passed
-            local pr_state
-            pr_state=$(gh pr view "$pr_num" --repo "$REPO" --json mergeable,statusCheckRollup -q '.mergeable' 2>/dev/null)
+            # Only promote if PR is no longer a draft (agent marked it ready)
+            local is_draft
+            is_draft=$(gh pr view "$pr_num" --repo "$REPO" --json isDraft -q '.isDraft' 2>/dev/null)
 
-            # If PR exists, promote to AI Review
-            log "  📤 PR #$pr_num exists for #$issue_num — promoting to AI Review"
-            set_status "$issue_num" "$STATUS_AI_REVIEW"
+            if [[ "$is_draft" == "false" ]]; then
+                log "  📤 PR #$pr_num is ready for review — promoting #$issue_num to AI Review"
+                set_status "$issue_num" "$STATUS_AI_REVIEW"
+            else
+                log "  ⏳ PR #$pr_num for #$issue_num is still a draft — waiting"
+            fi
         fi
     done <<< "$in_progress_issues"
 }
