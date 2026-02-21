@@ -7,6 +7,7 @@ sub-agents and tools, preserving the Ninja Stack delegation hierarchy.
 
 from __future__ import annotations
 
+import re
 from collections.abc import AsyncGenerator
 from typing import Any, Callable
 
@@ -29,6 +30,33 @@ from ninja_agents.safety import (
 )
 from ninja_agents.tools import generate_crud_tools, invoke_tool
 from ninja_agents.tracing import TraceContext
+
+# Pattern for valid agent-facing names: starts with a letter, then letters/digits/underscores/hyphens/spaces.
+_SAFE_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_ -]*$")
+
+
+def sanitize_agent_name(name: str) -> str:
+    """Sanitize a domain or entity name before interpolation into LLM prompts.
+
+    Validates that the name contains no control characters and matches
+    the safe name pattern.  Raises ``ValueError`` if the name is empty,
+    contains control characters (newlines, tabs, null bytes, etc.), or
+    contains disallowed characters.
+    """
+    if not name or not name.strip():
+        raise ValueError(f"Name is empty after sanitization: {name!r}")
+    # Reject any control characters (prevents prompt injection via newlines etc.)
+    if re.search(r"[\x00-\x1f\x7f-\x9f]", name):
+        raise ValueError(
+            f"Name contains disallowed characters (control characters): {name!r}"
+        )
+    cleaned = name.strip()
+    if not _SAFE_NAME_RE.match(cleaned):
+        raise ValueError(
+            f"Name contains disallowed characters: {cleaned!r}. "
+            f"Must match {_SAFE_NAME_RE.pattern}"
+        )
+    return cleaned
 
 # Default model for LLM-powered agents (Gemini via ADK).
 _DEFAULT_MODEL = "gemini-2.5-pro"
@@ -59,10 +87,11 @@ class DataAgent(BaseAgent):
         if isinstance(data, dict):
             entity = data.get("entity")
             if isinstance(entity, EntitySchema):
-                data.setdefault("name", f"data_agent_{entity.name.lower()}")
+                safe_name = sanitize_agent_name(entity.name)
+                data.setdefault("name", f"data_agent_{safe_name.lower()}")
                 data.setdefault(
                     "description",
-                    f"Data agent for {entity.name} — deterministic CRUD",
+                    f"Data agent for {safe_name} — deterministic CRUD",
                 )
         return data
 
@@ -182,19 +211,19 @@ class DomainAgent:
         data_agents: list[DataAgent],
         config: AgentConfig | None = None,
     ) -> None:
-        safe_domain_name = sanitize_for_prompt(domain.name)
         self.domain = domain
         self.config = config or domain.agent_config
-        self.name = f"domain_agent_{safe_domain_name.lower()}"
+        safe_domain = sanitize_agent_name(domain.name)
+        self.name = f"domain_agent_{safe_domain.lower()}"
         self._data_agents: dict[str, DataAgent] = {da.entity.name: da for da in data_agents}
 
         model = _REASONING_MODEL.get(self.config.reasoning_level, _DEFAULT_MODEL)
         self.agent = LlmAgent(
             name=self.name,
             model=model,
-            description=f"Domain agent for {safe_domain_name}",
+            description=f"Domain agent for {safe_domain}",
             instruction=(
-                f"You are the {safe_domain_name} domain agent. "
+                f"You are the {safe_domain} domain agent. "
                 "Delegate CRUD operations to your DataAgent sub-agents."
             ),
             tools=[],
@@ -339,16 +368,16 @@ def create_domain_agent(
     Sanitizes the domain name before interpolation into the LLM instruction.
 
     Raises:
-        UnsafeInputError: If the domain name fails sanitization.
+        ValueError: If the domain name fails sanitization.
     """
-    safe_name = sanitize_for_prompt(domain.name)
+    safe_domain = sanitize_agent_name(domain.name)
     model = _REASONING_MODEL.get(domain.agent_config.reasoning_level, _DEFAULT_MODEL)
     return LlmAgent(
-        name=f"domain_agent_{safe_name.lower()}",
+        name=f"domain_agent_{safe_domain.lower()}",
         model=model,
-        description=f"Domain agent for {safe_name} — cross-entity reasoning",
+        description=f"Domain agent for {safe_domain} — cross-entity reasoning",
         instruction=(
-            f"You are the {safe_name} domain agent. "
+            f"You are the {safe_domain} domain agent. "
             "Delegate CRUD operations to your DataAgent sub-agents."
         ),
         tools=[],
