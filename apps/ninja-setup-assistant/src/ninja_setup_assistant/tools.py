@@ -235,8 +235,13 @@ async def introspect_database(
     if error:
         return f"Connection rejected: {error}"
 
-    engine = IntrospectionEngine(project_name=workspace.schema.project_name)
-    result = await engine.run([connection_string])
+    try:
+        engine = IntrospectionEngine(project_name=workspace.schema.project_name)
+        result = await engine.run([connection_string])
+    except ValueError as exc:
+        return f"Invalid connection string: {exc}"
+    except Exception as exc:
+        return f"Introspection failed: {type(exc).__name__}: {exc}"
 
     new_entities = 0
     existing_names = {e.name for e in workspace.schema.entities}
