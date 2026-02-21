@@ -2,7 +2,7 @@
 
 The main entry point is :func:`build_schema`, which takes an ASD and an
 optional repository-getter callback, and returns a fully executable
-``strawberry.Schema``.
+``strawberry.Schema`` with configurable security extensions.
 """
 
 from typing import Any, Callable
@@ -22,12 +22,14 @@ from ninja_gql.resolvers.crud import (
     make_update_resolver,
 )
 from ninja_gql.resolvers.semantic import make_search_resolver
+from ninja_gql.security import GraphQLSecurityConfig, build_security_extensions
 
 
 def build_schema(
     asd: AgenticSchema,
     repo_getter: Callable[[str], Repository[Any]] | None = None,
     agent_router: AgentRouter | None = None,
+    security_config: GraphQLSecurityConfig | None = None,
 ) -> strawberry.Schema:
     """Build a Strawberry ``Schema`` from an Agentic Schema Definition.
 
@@ -40,6 +42,10 @@ def build_schema(
         that raises at call-time is used (useful for schema-only validation).
     agent_router:
         Optional agent router for ``ask_*`` queries.
+    security_config:
+        Optional security configuration.  When ``None``, default security
+        settings are applied (introspection enabled, depth limit 10,
+        complexity limit 1000).
     """
     gen = GqlGenerator(asd)
     types = gen.generate_types()
@@ -105,7 +111,10 @@ def build_schema(
     mutation_cls = type("Mutation", (), mutation_ns)
     Mutation = strawberry.type(mutation_cls, description="Auto-generated root Mutation")
 
-    return strawberry.Schema(query=Query, mutation=Mutation)
+    # -- build security extensions -------------------------------------------
+    extensions = build_security_extensions(security_config)
+
+    return strawberry.Schema(query=Query, mutation=Mutation, extensions=extensions)
 
 
 def build_schema_sdl(asd: AgenticSchema) -> str:

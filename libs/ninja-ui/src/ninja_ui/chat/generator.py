@@ -11,7 +11,7 @@ from ninja_core.schema.project import AgenticSchema
 def _get_template_env() -> Environment:
     return Environment(
         loader=PackageLoader("ninja_ui", "templates"),
-        autoescape=False,
+        autoescape=True,
         trim_blocks=True,
         lstrip_blocks=True,
     )
