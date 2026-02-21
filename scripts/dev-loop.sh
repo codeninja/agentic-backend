@@ -144,12 +144,17 @@ any_agents_running() {
     if [[ ! -s "$PIDS_FILE" ]]; then
         return 1
     fi
+    local found_alive=false
     while IFS= read -r pid; do
-        if kill -0 "$pid" 2>/dev/null; then
-            return 0
+        [[ -z "$pid" ]] && continue
+        if kill -0 "$pid" 2>/dev/null && [[ -d "/proc/$pid" ]]; then
+            found_alive=true
+            break
         fi
     done < "$PIDS_FILE"
-    # All dead — clean up
+    if $found_alive; then
+        return 0
+    fi
     > "$PIDS_FILE"
     return 1
 }
@@ -686,7 +691,8 @@ main() {
         # Clean up dead PIDs
         clean_pids
 
-        # Skip if agents from previous cycle are still running
+        # Clean dead PIDs first, then check if any are still alive
+        clean_pids
         if any_agents_running; then
             log "⏳ Agents still running from previous cycle — waiting..."
             sleep "$CYCLE_DELAY"
