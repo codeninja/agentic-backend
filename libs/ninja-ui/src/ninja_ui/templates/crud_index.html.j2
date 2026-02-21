@@ -6,10 +6,10 @@
   {% for entity in entities %}
   <div class="card">
     <h3 style="margin-bottom: 0.5rem;">
-      <a href="{{ entity.slug }}.html" style="color: #1a1a2e; text-decoration: none;">{{ entity.name }}</a>
+      <a href="{{ entity.slug | safe_id }}.html" style="color: #1a1a2e; text-decoration: none;">{{ entity.name }}</a>
     </h3>
     <p style="font-size: 0.85rem; color: #718096; margin-bottom: 0.5rem;">{{ entity.field_count }} fields</p>
-    <span class="badge badge-{{ entity.storage_engine | lower }}">{{ entity.storage_engine }}</span>
+    <span class="badge badge-{{ entity.storage_engine | lower | safe_id }}">{{ entity.storage_engine }}</span>
   </div>
   {% endfor %}
 </div>
