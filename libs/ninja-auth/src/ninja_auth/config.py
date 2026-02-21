@@ -12,6 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from ninja_auth.rate_limiter import RateLimitConfig
 from ninja_auth.rbac import RBACConfig
 
 logger = logging.getLogger(__name__)
@@ -164,6 +165,7 @@ class AuthConfig(BaseModel):
     api_key: ApiKeyConfig = Field(default_factory=ApiKeyConfig)
     identity: IdentityConfig = Field(default_factory=IdentityConfig)
     rbac: RBACConfig = Field(default_factory=RBACConfig)
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
 
     @classmethod
     def from_file(cls, path: str | Path = ".ninjastack/auth.json") -> AuthConfig:

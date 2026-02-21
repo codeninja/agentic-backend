@@ -13,6 +13,7 @@ from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_auth.errors import AuthenticationError
 from ninja_auth.gateway import AuthGateway, get_user_context
+from ninja_auth.rate_limiter import RateLimitConfig, RateLimiter
 from ninja_auth.rbac import (
     BUILTIN_ROLES,
     Action,
@@ -40,6 +41,8 @@ __all__ = [
     "IdentityStrategy",
     "InMemoryUserStore",
     "OAuth2Strategy",
+    "RateLimitConfig",
+    "RateLimiter",
     "RBACConfig",
     "RBACPolicy",
     "RoleDefinition",

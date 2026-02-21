@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -12,6 +13,8 @@ import jwt
 from ninja_auth.config import IdentityConfig
 from ninja_auth.context import UserContext
 from ninja_auth.user_store import InMemoryUserStore, UserStore
+
+logger = logging.getLogger(__name__)
 
 
 class IdentityStrategy:
@@ -58,8 +61,10 @@ class IdentityStrategy:
         """Authenticate a user by email and password."""
         user = self._store.get(email)
         if not user:
+            logger.warning("Login failed: unknown email=%s", email)
             return None
         if not self.verify_password(password, user["password_hash"]):
+            logger.warning("Login failed: bad password for email=%s", email)
             return None
 
         return UserContext(

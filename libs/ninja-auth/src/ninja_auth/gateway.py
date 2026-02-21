@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from fnmatch import fnmatch
 from typing import Any
 
@@ -12,12 +13,25 @@ from starlette.responses import JSONResponse, Response
 from ninja_auth.agent_context import set_user_context
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
+from ninja_auth.rate_limiter import RateLimiter
 from ninja_auth.rbac import RBACPolicy
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from ninja_auth.strategies.bearer import BearerStrategy
 
+logger = logging.getLogger(__name__)
+
 # Request state key for user context
 USER_CONTEXT_KEY = "user_context"
+
+
+def _client_ip(request: Request) -> str:
+    """Extract the client IP from a request, respecting X-Forwarded-For."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
 
 
 class AuthGateway(BaseHTTPMiddleware):
@@ -29,6 +43,7 @@ class AuthGateway(BaseHTTPMiddleware):
         self._bearer = BearerStrategy(self.config.bearer)
         self._apikey = ApiKeyStrategy(self.config.api_key)
         self._rbac = RBACPolicy(self.config.rbac)
+        self._rate_limiter = RateLimiter(self.config.rate_limit)
 
     def _is_public_path(self, path: str) -> bool:
         """Check if the request path matches any configured public path pattern."""
@@ -42,14 +57,37 @@ class AuthGateway(BaseHTTPMiddleware):
             set_user_context(ANONYMOUS_USER)
             return await call_next(request)
 
+        client_ip = _client_ip(request)
+
+        # Check rate limit before attempting authentication
+        if self._rate_limiter.is_rate_limited(client_ip):
+            logger.warning(
+                "Rate limited: ip=%s path=%s",
+                client_ip,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many authentication attempts. Please try again later."},
+            )
+
         # Try each strategy in order
         user_ctx = await self._try_authenticate(request)
 
         if user_ctx is None:
+            self._rate_limiter.record_attempt(client_ip, success=False)
+            logger.warning(
+                "Authentication failed: ip=%s path=%s method=%s",
+                client_ip,
+                request.url.path,
+                request.method,
+            )
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Authentication required"},
             )
+
+        self._rate_limiter.record_attempt(client_ip, success=True)
 
         # Enrich user context with RBAC-resolved permissions
         user_ctx = self._enrich_permissions(user_ctx)
