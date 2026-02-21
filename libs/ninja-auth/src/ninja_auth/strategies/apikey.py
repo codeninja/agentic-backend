@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import hmac
 
 from starlette.requests import Request
@@ -29,12 +28,18 @@ class ApiKeyStrategy:
         return self.validate_key(api_key)
 
     def validate_key(self, api_key: str) -> UserContext | None:
-        """Validate an API key against configured keys using constant-time comparison."""
-        for name, known_key in self.config.keys.items():
-            if hmac.compare_digest(
-                hashlib.sha256(api_key.encode()).hexdigest(),
-                hashlib.sha256(known_key.encode()).hexdigest(),
-            ):
+        """Validate an API key against configured keys using constant-time comparison.
+
+        The incoming *api_key* is hashed and compared against the stored value
+        which is already in ``sha256:<hex>`` form (pre-hashed, env-var resolved,
+        or legacy plaintext hashed on the fly via ``ApiKeyConfig.resolve_key``).
+        """
+        input_hash = self.config.hash_key(api_key)
+        for name, stored_value in self.config.keys.items():
+            expected_hash = self.config.resolve_key(stored_value)
+            if expected_hash is None:
+                continue
+            if hmac.compare_digest(input_hash, expected_hash):
                 return UserContext(
                     user_id=f"apikey:{name}",
                     roles=["service"],
