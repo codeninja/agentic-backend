@@ -94,15 +94,16 @@ async def test_delete_not_found(sql_adapter: SQLAdapter):
     assert result is False
 
 
-async def test_search_semantic_returns_empty(sql_adapter: SQLAdapter):
-    """SQL adapter returns empty for semantic search (needs sidecar vector index)."""
-    result = await sql_adapter.search_semantic("test query")
-    assert result == []
+async def test_search_semantic_raises_not_implemented(sql_adapter: SQLAdapter):
+    """SQL adapter raises NotImplementedError for semantic search."""
+    with pytest.raises(NotImplementedError, match="Semantic search not available for SQL adapter"):
+        await sql_adapter.search_semantic("test query")
 
 
-async def test_upsert_embedding_is_noop(sql_adapter: SQLAdapter):
-    """SQL adapter embedding upsert is a no-op (needs sidecar vector adapter)."""
-    await sql_adapter.upsert_embedding("1", [0.1, 0.2, 0.3])
+async def test_upsert_embedding_raises_not_implemented(sql_adapter: SQLAdapter):
+    """SQL adapter raises NotImplementedError for embedding upsert."""
+    with pytest.raises(NotImplementedError, match="Embedding storage not available for SQL adapter"):
+        await sql_adapter.upsert_embedding("1", [0.1, 0.2, 0.3])
 
 
 async def test_custom_table_name():
