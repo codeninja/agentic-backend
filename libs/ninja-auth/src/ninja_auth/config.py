@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from ninja_auth.rbac import RBACConfig
+
+# Prefix constants for key storage formats
+_HASH_PREFIX = "sha256:"
+_ENV_PREFIX = "$env:"
 
 
 class OAuth2ProviderConfig(BaseModel):
@@ -34,10 +40,38 @@ class BearerConfig(BaseModel):
 
 
 class ApiKeyConfig(BaseModel):
-    """API key strategy configuration."""
+    """API key strategy configuration.
+
+    Key values support three formats:
+    - ``sha256:<hex>`` — pre-hashed key (recommended for storage on disk)
+    - ``$env:VAR_NAME`` — resolved from an environment variable at runtime
+    - plain string  — legacy plaintext (hashed on the fly; avoid for production)
+    """
 
     header_name: str = "X-API-Key"
     keys: dict[str, str] = Field(default_factory=dict)
+
+    @staticmethod
+    def hash_key(raw_key: str) -> str:
+        """Return the storage representation of a raw API key (``sha256:<hex>``)."""
+        return f"{_HASH_PREFIX}{hashlib.sha256(raw_key.encode()).hexdigest()}"
+
+    def resolve_key(self, stored_value: str) -> str | None:
+        """Resolve a stored key value to a comparable hash.
+
+        Returns the ``sha256:<hex>`` digest for the stored key, or *None*
+        if the key cannot be resolved (e.g. missing env var).
+        """
+        if stored_value.startswith(_HASH_PREFIX):
+            return stored_value
+        if stored_value.startswith(_ENV_PREFIX):
+            var_name = stored_value[len(_ENV_PREFIX):]
+            raw = os.environ.get(var_name)
+            if raw is None:
+                return None
+            return self.hash_key(raw)
+        # Legacy plaintext — hash it on the fly
+        return self.hash_key(stored_value)
 
 
 class IdentityConfig(BaseModel):
