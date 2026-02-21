@@ -6,7 +6,8 @@ import logging
 import re
 from pathlib import Path
 
-from jinja2 import Environment, PackageLoader, select_autoescape
+from jinja2 import PackageLoader
+from jinja2.sandbox import SandboxedEnvironment
 from ninja_core.schema.entity import StorageEngine
 from ninja_core.schema.project import AgenticSchema
 
@@ -23,10 +24,16 @@ INFRA_IMAGES: dict[StorageEngine, dict[str, str]] = {
 }
 
 
-def _get_template_env() -> Environment:
-    return Environment(
+def _get_template_env() -> SandboxedEnvironment:
+    """Create a sandboxed Jinja2 environment for K8s manifest generation.
+
+    Uses ``SandboxedEnvironment`` to prevent SSTI and YAML injection when
+    project names or other user-supplied values contain Jinja2 syntax or
+    YAML delimiters.  Autoescape is disabled because the output is YAML,
+    not HTML.
+    """
+    return SandboxedEnvironment(
         loader=PackageLoader("ninja_deploy", "templates/k8s"),
-        autoescape=select_autoescape([]),
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=True,

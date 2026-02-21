@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import warnings
 from enum import Enum
 
-import warnings
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from pydantic import BaseModel, Field, model_validator
+from ninja_core.schema.entity import validate_safe_name
 
 
 class RelationshipType(str, Enum):
@@ -30,6 +31,12 @@ class RelationshipSchema(BaseModel):
     """Schema definition for a relationship between two entities."""
 
     name: str = Field(min_length=1, description="Relationship name.")
+
+    @field_validator("name")
+    @classmethod
+    def validate_name_safe(cls, v: str) -> str:
+        """Reject relationship names containing template-injection or XSS characters."""
+        return validate_safe_name(v, "Relationship name")
     source_entity: str = Field(min_length=1, description="Source entity name.")
     target_entity: str = Field(min_length=1, description="Target entity name.")
     relationship_type: RelationshipType = Field(description="Type of link.")

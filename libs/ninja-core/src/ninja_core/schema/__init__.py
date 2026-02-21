@@ -9,6 +9,7 @@ from ninja_core.schema.entity import (
     FieldSchema,
     FieldType,
     StorageEngine,
+    validate_safe_name,
 )
 from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
@@ -27,4 +28,5 @@ __all__ = [
     "RelationshipSchema",
     "RelationshipType",
     "StorageEngine",
+    "validate_safe_name",
 ]

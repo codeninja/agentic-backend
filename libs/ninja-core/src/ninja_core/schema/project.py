@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ninja_core.schema.domain import DomainSchema
-from ninja_core.schema.entity import EntitySchema
+from ninja_core.schema.entity import EntitySchema, validate_safe_name
 from ninja_core.schema.relationship import RelationshipSchema, RelationshipType
 
 
@@ -17,6 +17,12 @@ class AgenticSchema(BaseModel):
 
     version: str = Field(default="1.0", description="ASD schema version.")
     project_name: str = Field(min_length=1, description="Project name.")
+
+    @field_validator("project_name")
+    @classmethod
+    def validate_project_name_safe(cls, v: str) -> str:
+        """Reject project names containing template-injection or XSS characters."""
+        return validate_safe_name(v, "Project name")
     entities: list[EntitySchema] = Field(default_factory=list, description="All entity definitions.")
     relationships: list[RelationshipSchema] = Field(default_factory=list, description="All relationship definitions.")
     domains: list[DomainSchema] = Field(default_factory=list, description="Domain groupings.")

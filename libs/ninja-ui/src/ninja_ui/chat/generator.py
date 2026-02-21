@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jinja2 import Environment, PackageLoader
+from jinja2 import PackageLoader, select_autoescape
+from jinja2.sandbox import SandboxedEnvironment
 from ninja_core.schema.project import AgenticSchema
 
 
-def _get_template_env() -> Environment:
-    return Environment(
+def _get_template_env() -> SandboxedEnvironment:
+    """Create a sandboxed Jinja2 environment with HTML autoescape enabled.
+
+    Autoescape is enabled for ``.html`` and ``.xml`` extensions to prevent
+    XSS when project or domain names contain HTML markup.  The sandboxed
+    environment also blocks SSTI via Jinja2 syntax in names.
+    """
+    return SandboxedEnvironment(
         loader=PackageLoader("ninja_ui", "templates"),
-        autoescape=False,
+        autoescape=select_autoescape(["html", "htm", "xml"]),
         trim_blocks=True,
         lstrip_blocks=True,
     )
