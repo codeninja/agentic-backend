@@ -11,15 +11,19 @@ import jwt
 
 from ninja_auth.config import IdentityConfig
 from ninja_auth.context import UserContext
+from ninja_auth.user_store import InMemoryUserStore, UserStore
 
 
 class IdentityStrategy:
     """Manages local user accounts with password hashing and JWT session tokens."""
 
-    def __init__(self, config: IdentityConfig) -> None:
+    def __init__(
+        self,
+        config: IdentityConfig,
+        user_store: UserStore | None = None,
+    ) -> None:
         self.config = config
-        # In-memory store; production would use ninja-persistence
-        self._users: dict[str, dict[str, Any]] = {}
+        self._store: UserStore = user_store or InMemoryUserStore()
 
     def hash_password(self, password: str) -> str:
         """Hash a plaintext password using bcrypt."""
@@ -31,17 +35,17 @@ class IdentityStrategy:
 
     def register(self, email: str, password: str, roles: list[str] | None = None) -> UserContext:
         """Register a new user account."""
-        if email in self._users:
+        if self._store.exists(email):
             raise ValueError(f"User already exists: {email}")
 
         user_id = secrets.token_hex(16)
-        self._users[email] = {
+        self._store.save(email, {
             "user_id": user_id,
             "email": email,
             "password_hash": self.hash_password(password),
             "roles": roles or [],
             "created_at": datetime.now(timezone.utc).isoformat(),
-        }
+        })
 
         return UserContext(
             user_id=user_id,
@@ -52,7 +56,7 @@ class IdentityStrategy:
 
     def login(self, email: str, password: str) -> UserContext | None:
         """Authenticate a user by email and password."""
-        user = self._users.get(email)
+        user = self._store.get(email)
         if not user:
             return None
         if not self.verify_password(password, user["password_hash"]):
