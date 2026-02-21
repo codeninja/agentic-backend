@@ -2,10 +2,39 @@
 
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Pattern for safe identifier names: alphanumeric, underscores, hyphens.
+# Must start with a letter or underscore.  This prevents template injection
+# (Jinja2 ``{{ }}``), XSS (``<script>``), and YAML injection.
+_SAFE_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_ -]*$")
+
+# Maximum length for names to prevent abuse.
+_MAX_NAME_LENGTH = 128
+
+
+def validate_safe_name(value: str, label: str = "Name") -> str:
+    """Validate that *value* is a safe identifier for use in templates.
+
+    Raises ``ValueError`` when *value* contains characters that could cause
+    template injection, XSS, or YAML injection.
+    """
+    if len(value) > _MAX_NAME_LENGTH:
+        raise ValueError(
+            f"{label} must be at most {_MAX_NAME_LENGTH} characters, "
+            f"got {len(value)}"
+        )
+    if not _SAFE_IDENTIFIER_RE.match(value):
+        raise ValueError(
+            f"{label} '{value}' contains unsafe characters. "
+            f"Only letters, digits, underscores, hyphens, and spaces are "
+            f"allowed, and it must start with a letter or underscore."
+        )
+    return value
 
 
 class StorageEngine(str, Enum):
@@ -102,6 +131,12 @@ class FieldSchema(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    @field_validator("name")
+    @classmethod
+    def validate_name_safe(cls, v: str) -> str:
+        """Reject field names containing template-injection or XSS characters."""
+        return validate_safe_name(v, "Field name")
+
     @model_validator(mode="after")
     def validate_field_coherence(self) -> FieldSchema:
         """Validate default type compatibility and enum constraints."""
@@ -148,6 +183,12 @@ class EntitySchema(BaseModel):
     tags: list[str] = Field(default_factory=list, description="Arbitrary tags for categorization.")
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("name")
+    @classmethod
+    def validate_name_safe(cls, v: str) -> str:
+        """Reject entity names containing template-injection or XSS characters."""
+        return validate_safe_name(v, "Entity name")
 
     @model_validator(mode="after")
     def validate_entity_integrity(self) -> EntitySchema:
