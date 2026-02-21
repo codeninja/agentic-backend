@@ -44,6 +44,7 @@ def _build_full_schema() -> AgenticSchema:
         storage_engine=StorageEngine.VECTOR,
         fields=[
             FieldSchema(name="id", field_type=FieldType.UUID, primary_key=True),
+            FieldSchema(name="user_id", field_type=FieldType.UUID, indexed=True),
             FieldSchema(
                 name="content",
                 field_type=FieldType.TEXT,
