@@ -1,4 +1,4 @@
-"""Neo4j graph adapter implementing the Repository protocol (stub)."""
+"""Neo4j graph adapter implementing the Repository protocol."""
 
 from __future__ import annotations
 
@@ -10,7 +10,9 @@ from ninja_core.schema.entity import EntitySchema
 class GraphAdapter:
     """Async Neo4j adapter for graph-backed entities.
 
-    Implements the Repository protocol for graph databases.
+    Implements the Repository protocol for graph databases. Nodes are stored
+    with a label derived from ``entity.collection_name`` (or ``entity.name``),
+    and all entity fields become node properties.
 
     Requires the ``neo4j`` optional dependency:
         pip install ninja-persistence[graph]
@@ -20,24 +22,220 @@ class GraphAdapter:
         self._entity = entity
         self._driver = driver
         self._label = entity.collection_name or entity.name
+        self._pk_field = self._resolve_pk_field()
+
+    def _resolve_pk_field(self) -> str:
+        """Return the name of the primary key field from the entity schema."""
+        for field in self._entity.fields:
+            if field.primary_key:
+                return field.name
+        return "id"
+
+    def _get_driver(self) -> Any:
+        """Return the Neo4j async driver, raising if not configured."""
+        if self._driver is None:
+            raise RuntimeError(
+                "GraphAdapter requires a neo4j AsyncDriver instance. "
+                "Pass it via the `driver` constructor parameter."
+            )
+        return self._driver
 
     async def find_by_id(self, id: str) -> dict[str, Any] | None:
-        raise NotImplementedError("GraphAdapter.find_by_id is not yet implemented.")
+        """Retrieve a single node by its primary key property.
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        raise NotImplementedError("GraphAdapter.find_many is not yet implemented.")
+        Args:
+            id: The value of the primary key property to match.
+
+        Returns:
+            A dict of node properties, or ``None`` if no matching node exists.
+        """
+        driver = self._get_driver()
+        query = f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id RETURN n"
+        async with driver.session() as session:
+            result = await session.run(query, {"id": id})
+            record = await result.single()
+            if record is None:
+                return None
+            return dict(record["n"])
+
+    async def find_many(
+        self, filters: dict[str, Any] | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Retrieve multiple nodes matching optional property filters.
+
+        Args:
+            filters: A dict of property name/value pairs to match exactly.
+                     If ``None`` or empty, all nodes with the entity label
+                     are returned.
+            limit: Maximum number of nodes to return.
+
+        Returns:
+            A list of dicts, each representing a matched node's properties.
+        """
+        driver = self._get_driver()
+        params: dict[str, Any] = {"limit": limit}
+
+        if filters:
+            where_clauses = []
+            for i, (key, value) in enumerate(filters.items()):
+                param_name = f"f{i}"
+                where_clauses.append(f"n.`{key}` = ${param_name}")
+                params[param_name] = value
+            where_str = " AND ".join(where_clauses)
+            query = f"MATCH (n:`{self._label}`) WHERE {where_str} RETURN n LIMIT $limit"
+        else:
+            query = f"MATCH (n:`{self._label}`) RETURN n LIMIT $limit"
+
+        async with driver.session() as session:
+            result = await session.run(query, params)
+            records = await result.data()
+            return [dict(record["n"]) for record in records]
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
-        raise NotImplementedError("GraphAdapter.create is not yet implemented.")
+        """Create a new node with the given properties.
+
+        Args:
+            data: A dict of property name/value pairs. Must include the
+                  primary key field.
+
+        Returns:
+            The created node's properties as a dict.
+        """
+        driver = self._get_driver()
+        query = f"CREATE (n:`{self._label}` $props) RETURN n"
+        async with driver.session() as session:
+            result = await session.run(query, {"props": data})
+            record = await result.single()
+            return dict(record["n"]) if record else data
 
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
-        raise NotImplementedError("GraphAdapter.update is not yet implemented.")
+        """Apply a partial update to an existing node.
+
+        Uses the Cypher ``+=`` operator to merge the patch into the node's
+        existing properties without removing unmentioned keys.
+
+        Args:
+            id: The primary key value of the node to update.
+            patch: A dict of property name/value pairs to set or overwrite.
+
+        Returns:
+            The updated node's full properties as a dict, or ``None`` if
+            no node matched the given id.
+        """
+        driver = self._get_driver()
+        query = (
+            f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
+            f"SET n += $patch RETURN n"
+        )
+        async with driver.session() as session:
+            result = await session.run(query, {"id": id, "patch": patch})
+            record = await result.single()
+            if record is None:
+                return None
+            return dict(record["n"])
 
     async def delete(self, id: str) -> bool:
-        raise NotImplementedError("GraphAdapter.delete is not yet implemented.")
+        """Delete a node and its relationships by primary key.
 
-    async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        raise NotImplementedError("GraphAdapter.search_semantic is not yet implemented.")
+        Uses ``DETACH DELETE`` to remove the node along with any
+        relationships attached to it, preventing orphaned edges.
+
+        Args:
+            id: The primary key value of the node to delete.
+
+        Returns:
+            ``True`` if a node was deleted, ``False`` if no node matched.
+        """
+        driver = self._get_driver()
+        query = (
+            f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
+            f"DETACH DELETE n RETURN count(n) AS deleted"
+        )
+        async with driver.session() as session:
+            result = await session.run(query, {"id": id})
+            record = await result.single()
+            return record is not None and record["deleted"] > 0
+
+    async def search_semantic(
+        self, query: str, limit: int = 10
+    ) -> list[dict[str, Any]]:
+        """Perform semantic search using a Neo4j full-text index.
+
+        Falls back to a case-insensitive ``CONTAINS`` search across all
+        string-typed fields if no full-text index named
+        ``{label}_fulltext`` is available.
+
+        For true vector similarity search, use a sidecar vector adapter or
+        configure a Neo4j vector index externally.
+
+        Args:
+            query: The search query string.
+            limit: Maximum number of results to return.
+
+        Returns:
+            A list of matching node property dicts, each augmented with a
+            ``_score`` key when a full-text index is used.
+        """
+        driver = self._get_driver()
+        index_name = f"{self._label}_fulltext"
+
+        # Try full-text index search first.
+        ft_query = (
+            "CALL db.index.fulltext.queryNodes($index, $query) "
+            "YIELD node, score "
+            "RETURN node, score LIMIT $limit"
+        )
+        try:
+            async with driver.session() as session:
+                result = await session.run(
+                    ft_query, {"index": index_name, "query": query, "limit": limit}
+                )
+                records = await result.data()
+                if records:
+                    return [
+                        {**dict(r["node"]), "_score": r["score"]} for r in records
+                    ]
+        except Exception:
+            # Full-text index not available; fall through to CONTAINS fallback.
+            pass
+
+        # Fallback: case-insensitive CONTAINS across string fields.
+        string_fields = [
+            f.name
+            for f in self._entity.fields
+            if f.field_type.value in ("string", "text")
+        ]
+        if not string_fields:
+            return []
+
+        or_clauses = " OR ".join(
+            f"toLower(toString(n.`{fname}`)) CONTAINS toLower($query)"
+            for fname in string_fields
+        )
+        fallback_query = (
+            f"MATCH (n:`{self._label}`) WHERE {or_clauses} "
+            f"RETURN n LIMIT $limit"
+        )
+        async with driver.session() as session:
+            result = await session.run(fallback_query, {"query": query, "limit": limit})
+            records = await result.data()
+            return [dict(r["n"]) for r in records]
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
-        raise NotImplementedError("GraphAdapter.upsert_embedding is not yet implemented.")
+        """Store an embedding vector as a node property.
+
+        Sets the ``embedding`` property on the node identified by the
+        given primary key. This property can be used with a Neo4j vector
+        index for approximate nearest-neighbor search.
+
+        Args:
+            id: The primary key value of the node to update.
+            embedding: The embedding vector as a list of floats.
+        """
+        driver = self._get_driver()
+        query = (
+            f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
+            f"SET n.embedding = $embedding"
+        )
+        async with driver.session() as session:
+            await session.run(query, {"id": id, "embedding": embedding})
