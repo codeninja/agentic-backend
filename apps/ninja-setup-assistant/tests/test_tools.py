@@ -7,6 +7,7 @@ the SchemaWorkspace.
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from ninja_core.schema.entity import FieldType, StorageEngine
@@ -20,6 +21,7 @@ from ninja_setup_assistant.tools import (
     confirm_schema,
     create_adk_tools,
     create_domain,
+    introspect_database,
     review_schema,
 )
 
@@ -372,3 +374,104 @@ class TestConnectionStringValidation:
         error = _validate_connection_string("http://evil.com/steal-data")
         assert error is not None
         assert "Unsupported" in error
+
+
+# ---------------------------------------------------------------------------
+# introspect_database — error handling (issue #70)
+# ---------------------------------------------------------------------------
+
+
+class TestIntrospectDatabaseErrorHandling:
+    """Verify that introspect_database catches exceptions gracefully."""
+
+    @pytest.mark.asyncio
+    async def test_value_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
+        with patch(
+            "ninja_setup_assistant.tools.IntrospectionEngine"
+        ) as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(side_effect=ValueError("bad scheme 'foobar'"))
+
+            result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
+
+        assert "Invalid connection string" in result
+        assert "bad scheme 'foobar'" in result
+        # Workspace should remain unchanged
+        assert len(workspace.schema.entities) == 0
+        assert len(workspace.schema.relationships) == 0
+
+    @pytest.mark.asyncio
+    async def test_connection_refused_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
+        with patch(
+            "ninja_setup_assistant.tools.IntrospectionEngine"
+        ) as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(
+                side_effect=ConnectionRefusedError("Connection refused")
+            )
+
+            result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
+
+        assert "Introspection failed" in result
+        assert "ConnectionRefusedError" in result
+        assert "Connection refused" in result
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
+        with patch(
+            "ninja_setup_assistant.tools.IntrospectionEngine"
+        ) as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(side_effect=TimeoutError("timed out"))
+
+            result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
+
+        assert "Introspection failed" in result
+        assert "TimeoutError" in result
+
+    @pytest.mark.asyncio
+    async def test_runtime_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
+        with patch(
+            "ninja_setup_assistant.tools.IntrospectionEngine"
+        ) as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(
+                side_effect=RuntimeError("driver not installed")
+            )
+
+            result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
+
+        assert "Introspection failed" in result
+        assert "RuntimeError" in result
+        assert "driver not installed" in result
+
+    @pytest.mark.asyncio
+    async def test_engine_constructor_error_caught(self, workspace: SchemaWorkspace) -> None:
+        """Error during IntrospectionEngine() construction is also caught."""
+        with patch(
+            "ninja_setup_assistant.tools.IntrospectionEngine",
+            side_effect=ValueError("invalid project name"),
+        ):
+            result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
+
+        assert "Invalid connection string" in result
+        assert "invalid project name" in result
+
+    @pytest.mark.asyncio
+    async def test_workspace_unchanged_on_error(self, workspace: SchemaWorkspace) -> None:
+        """On failure, workspace must not be modified."""
+        add_entity(workspace, name="Existing", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        assert len(workspace.schema.entities) == 1
+
+        with patch(
+            "ninja_setup_assistant.tools.IntrospectionEngine"
+        ) as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(side_effect=Exception("unexpected"))
+
+            result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
+
+        assert "Introspection failed" in result
+        # Pre-existing entity should still be there, nothing else added
+        assert len(workspace.schema.entities) == 1
+        assert workspace.schema.entities[0].name == "Existing"
