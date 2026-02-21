@@ -546,6 +546,10 @@ IF THE CODE PASSES REVIEW:
   
   **Notes for future work:**
   - <any observations, potential improvements, or related areas to watch>'
+- If you identified follow-up work during the review (edge cases not covered, related areas needing attention, tech debt introduced, documentation gaps, etc.), create a ticket for EACH follow-up item:
+  gh issue create --repo $REPO --title '<descriptive title>' --label '<bug|enhancement>' --label 'priority: <high|medium|low>' --body '<description referencing the original issue #$issue_num and explaining what needs to happen next>'
+  NEVER use 'priority: critical' — reserved for humans.
+  Then add each to the project board: gh project item-add $PROJECT_NUM --owner $PROJECT_OWNER --url <issue_url>
 - Then output exactly: REVIEW_RESULT=APPROVED
 
 IF THE CODE FAILS REVIEW:
