@@ -122,14 +122,21 @@ class SQLAdapter:
     async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Semantic search is not natively supported in SQL.
 
-        For SQL-backed entities, this requires a sidecar vector index.
-        Returns an empty list when no sidecar is configured.
+        Raises ``NotImplementedError`` directing callers to configure a vector
+        sidecar (Chroma/Milvus) for the entity.
         """
-        return []
+        raise NotImplementedError(
+            "Semantic search not available for SQL adapter. "
+            "Configure a vector sidecar (Chroma/Milvus) for this entity to enable semantic search."
+        )
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
         """Embedding storage is not natively supported in SQL.
 
-        For SQL-backed entities, embeddings are managed by a sidecar vector adapter.
-        This is a no-op when no sidecar is configured.
+        Raises ``NotImplementedError`` directing callers to configure a vector
+        sidecar (Chroma/Milvus) for the entity.
         """
+        raise NotImplementedError(
+            "Embedding storage not available for SQL adapter. "
+            "Configure a vector sidecar (Chroma/Milvus) for this entity to manage embeddings."
+        )

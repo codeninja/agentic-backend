@@ -56,8 +56,23 @@ class MongoAdapter:
         return result.deleted_count > 0
 
     async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        """Semantic search requires a sidecar vector index for Mongo-backed entities."""
-        return []
+        """Semantic search is not natively supported in MongoDB.
+
+        Raises ``NotImplementedError`` directing callers to configure a vector
+        sidecar (Chroma/Milvus) for the entity.
+        """
+        raise NotImplementedError(
+            "Semantic search not available for MongoDB adapter. "
+            "Configure a vector sidecar (Chroma/Milvus) for this entity to enable semantic search."
+        )
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
-        """Embedding storage requires a sidecar vector adapter for Mongo-backed entities."""
+        """Embedding storage is not natively supported in MongoDB.
+
+        Raises ``NotImplementedError`` directing callers to configure a vector
+        sidecar (Chroma/Milvus) for the entity.
+        """
+        raise NotImplementedError(
+            "Embedding storage not available for MongoDB adapter. "
+            "Configure a vector sidecar (Chroma/Milvus) for this entity to manage embeddings."
+        )
