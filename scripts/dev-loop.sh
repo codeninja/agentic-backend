@@ -137,6 +137,11 @@ set_status() {
             value: { singleSelectOptionId: \"$status_id\" }
         }) { projectV2Item { id } }
     }" >/dev/null 2>&1
+
+    # When moving to Triage, add the triage label to trigger GH Actions triage workflow
+    if [[ "$status_id" == "$STATUS_TRIAGE" ]]; then
+        gh issue edit "$issue_num" --repo "$REPO" --add-label "triage" 2>/dev/null || true
+    fi
 }
 
 # Check if any tracked PIDs are still running
