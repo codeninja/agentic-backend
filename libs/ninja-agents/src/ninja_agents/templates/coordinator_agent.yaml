@@ -1,5 +1,7 @@
 # ADK Coordinator Agent Template
 # Top-level routing agent that delegates across domains
+# SAFETY: All interpolated values (domains) MUST be pre-sanitized via
+# ninja_agents.safety.sanitize_identifier() before template rendering.
 name: "coordinator"
 description: "Coordinator agent — routes requests across domains"
 model:
