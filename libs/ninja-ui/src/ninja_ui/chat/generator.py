@@ -7,14 +7,20 @@ from pathlib import Path
 from jinja2 import Environment, PackageLoader
 from ninja_core.schema.project import AgenticSchema
 
+from ninja_ui.shared.sanitize import safe_identifier, sanitize_for_js_string
+
 
 def _get_template_env() -> Environment:
-    return Environment(
+    """Create a Jinja2 environment with autoescape enabled for HTML safety."""
+    env = Environment(
         loader=PackageLoader("ninja_ui", "templates"),
-        autoescape=False,
+        autoescape=True,
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    env.filters["safe_id"] = safe_identifier
+    env.filters["js_string"] = sanitize_for_js_string
+    return env
 
 
 class ChatGenerator:

@@ -23,7 +23,7 @@
   <div class="domain-selector">
     <span style="font-size: 0.85rem; font-weight: 600; padding: 0.3rem 0;">Domain:</span>
     {% for domain in domains %}
-    <button class="domain-chip{% if loop.first %} active{% endif %}" data-domain="{{ domain.name }}" onclick="selectDomain(this)" title="{{ domain.description }}">
+    <button class="domain-chip{% if loop.first %} active{% endif %}" data-domain="{{ domain.name | safe_id }}" onclick="selectDomain(this)" title="{{ domain.description }}">
       {{ domain.name }}
     </button>
     {% endfor %}
@@ -47,8 +47,8 @@
 
 {% block scripts %}
 <script>
-const GQL_ENDPOINT = "{{ gql_endpoint }}";
-let activeDomain = "{{ domains[0].name if domains else '' }}";
+const GQL_ENDPOINT = "{{ gql_endpoint | js_string }}";
+let activeDomain = "{{ domains[0].name | safe_id if domains else '' }}";
 let uploadedFile = null;
 
 function selectDomain(btn) {
@@ -61,12 +61,16 @@ function addMessage(role, text, toolInfo) {
   const container = document.getElementById("messages");
   const div = document.createElement("div");
   div.className = `message ${role}`;
-  let html = `<div class="bubble">${escapeHtml(text)}`;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
   if (toolInfo) {
-    html += `<div class="tool-info">Consulted: ${escapeHtml(toolInfo)}</div>`;
+    const info = document.createElement("div");
+    info.className = "tool-info";
+    info.textContent = "Consulted: " + toolInfo;
+    bubble.appendChild(info);
   }
-  html += `</div>`;
-  div.innerHTML = html;
+  div.appendChild(bubble);
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
@@ -81,7 +85,7 @@ async function sendMessage() {
 
   document.getElementById("typing").style.display = "block";
 
-  const query = `query($query: String!) { ask_${activeDomain.toLowerCase()}(query: $query) }`;
+  const query = `query AskDomain($query: String!) { ask_${activeDomain.toLowerCase()}(query: $query) }`;
   const data = await gqlQuery(query, { query: text });
   document.getElementById("typing").style.display = "none";
 
@@ -110,18 +114,12 @@ function handleFileUpload(input) {
   const file = input.files[0];
   if (file) {
     uploadedFile = file;
-    addMessage("user", `[Uploaded file: ${file.name}]`);
+    addMessage("user", "[Uploaded file: " + file.name + "]");
   }
 }
 
 function tryParseJson(text) {
   try { return JSON.parse(text); } catch { return null; }
-}
-
-function escapeHtml(text) {
-  const d = document.createElement("div");
-  d.textContent = text;
-  return d.innerHTML;
 }
 </script>
 {% endblock %}

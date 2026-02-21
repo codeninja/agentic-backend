@@ -9,15 +9,20 @@ from ninja_core.schema.entity import EntitySchema
 from ninja_core.schema.project import AgenticSchema
 
 from ninja_ui.shared.assets import FIELD_TYPE_INPUT_MAP, snake_case
+from ninja_ui.shared.sanitize import safe_identifier, safe_slug, sanitize_for_js_string
 
 
 def _get_template_env() -> Environment:
-    return Environment(
+    """Create a Jinja2 environment with autoescape enabled for HTML safety."""
+    env = Environment(
         loader=PackageLoader("ninja_ui", "templates"),
-        autoescape=False,
+        autoescape=True,
         trim_blocks=True,
         lstrip_blocks=True,
     )
+    env.filters["safe_id"] = safe_identifier
+    env.filters["js_string"] = sanitize_for_js_string
+    return env
 
 
 def _build_field_meta(entity: EntitySchema) -> list[dict]:
@@ -62,7 +67,7 @@ def _find_relationships(entity: EntitySchema, schema: AgenticSchema) -> list[dic
                 {
                     "name": r.name,
                     "target_entity": r.target_entity,
-                    "target_slug": snake_case(r.target_entity),
+                    "target_slug": safe_slug(snake_case(r.target_entity)),
                     "cardinality": r.cardinality.value if hasattr(r.cardinality, "value") else str(r.cardinality),
                     "direction": "outgoing",
                 }
@@ -72,7 +77,7 @@ def _find_relationships(entity: EntitySchema, schema: AgenticSchema) -> list[dic
                 {
                     "name": r.name,
                     "target_entity": r.source_entity,
-                    "target_slug": snake_case(r.source_entity),
+                    "target_slug": safe_slug(snake_case(r.source_entity)),
                     "cardinality": r.cardinality.value if hasattr(r.cardinality, "value") else str(r.cardinality),
                     "direction": "incoming",
                 }
@@ -93,7 +98,7 @@ class CrudGenerator:
         fields_meta = _build_field_meta(entity)
         relationships = _find_relationships(entity, self.schema)
         has_embedding = any(f.embedding is not None for f in entity.fields)
-        slug = snake_case(entity.name)
+        slug = safe_slug(snake_case(entity.name))
 
         html = template.render(
             entity=entity,
@@ -115,7 +120,7 @@ class CrudGenerator:
         entities_meta = [
             {
                 "name": e.name,
-                "slug": snake_case(e.name),
+                "slug": safe_slug(snake_case(e.name)),
                 "field_count": len(e.fields),
                 "storage_engine": (
                     e.storage_engine.value if hasattr(e.storage_engine, "value") else str(e.storage_engine)

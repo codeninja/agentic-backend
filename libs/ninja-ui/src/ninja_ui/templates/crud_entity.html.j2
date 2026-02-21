@@ -13,7 +13,7 @@
 <div style="margin: 1.5rem 0 1rem; display: flex; align-items: center; gap: 1rem;">
   <a href="index.html" style="color: #4c51bf; text-decoration: none;">&larr; Back</a>
   <h1>{{ entity.name }}</h1>
-  <span class="badge badge-{{ entity.storage_engine.value | lower if entity.storage_engine.value is defined else entity.storage_engine | lower }}">
+  <span class="badge badge-{{ entity.storage_engine.value | lower | safe_id if entity.storage_engine.value is defined else entity.storage_engine | lower | safe_id }}">
     {{ entity.storage_engine.value if entity.storage_engine.value is defined else entity.storage_engine }}
   </span>
 </div>
@@ -30,7 +30,7 @@
 <div class="card" style="padding: 0.75rem 1rem;">
   <strong style="font-size: 0.85rem;">Relationships:</strong>
   {% for rel in relationships %}
-  <a href="{{ rel.target_slug }}.html" style="margin-left: 0.75rem; font-size: 0.85rem; color: #4c51bf;">
+  <a href="{{ rel.target_slug | safe_id }}.html" style="margin-left: 0.75rem; font-size: 0.85rem; color: #4c51bf;">
     {{ rel.name }} &rarr; {{ rel.target_entity }} ({{ rel.cardinality }})
   </a>
   {% endfor %}
@@ -42,7 +42,7 @@
     <thead>
       <tr>
         {% for field in fields_meta %}
-        <th class="sort-header" data-field="{{ field.name }}">{{ field.name }}</th>
+        <th class="sort-header" data-field="{{ field.name | safe_id }}">{{ field.name }}</th>
         {% endfor %}
         <th>Actions</th>
       </tr>
@@ -65,20 +65,20 @@
     <div style="margin-bottom: 0.75rem;">
       <label style="font-size: 0.85rem; font-weight: 600;">{{ field.name }}{% if not field.nullable %} *{% endif %}</label>
       {% if field.input_type == "textarea" %}
-      <textarea name="{{ field.name }}" {% if not field.nullable %}required{% endif %}
+      <textarea name="{{ field.name | safe_id }}" {% if not field.nullable %}required{% endif %}
         {% if field.constraints.maxlength is defined %}maxlength="{{ field.constraints.maxlength }}"{% endif %}
       ></textarea>
       {% elif field.input_type == "select" and field.constraints.enum_values is defined %}
-      <select name="{{ field.name }}" {% if not field.nullable %}required{% endif %}>
+      <select name="{{ field.name | safe_id }}" {% if not field.nullable %}required{% endif %}>
         <option value="">-- Select --</option>
         {% for val in field.constraints.enum_values %}
         <option value="{{ val }}">{{ val }}</option>
         {% endfor %}
       </select>
       {% elif field.input_type == "checkbox" %}
-      <input type="checkbox" name="{{ field.name }}" style="width: auto;">
+      <input type="checkbox" name="{{ field.name | safe_id }}" style="width: auto;">
       {% else %}
-      <input type="{{ field.input_type }}" name="{{ field.name }}"
+      <input type="{{ field.input_type }}" name="{{ field.name | safe_id }}"
         {% if not field.nullable %}required{% endif %}
         {% if field.constraints.minlength is defined %}minlength="{{ field.constraints.minlength }}"{% endif %}
         {% if field.constraints.maxlength is defined %}maxlength="{{ field.constraints.maxlength }}"{% endif %}
@@ -87,7 +87,7 @@
         {% if field.constraints.max is defined %}max="{{ field.constraints.max }}"{% endif %}
       >
       {% endif %}
-      <div class="validation-error" id="err-{{ field.name }}"></div>
+      <div class="validation-error" id="err-{{ field.name | safe_id }}"></div>
     </div>
     {% endif %}
     {% endfor %}
@@ -99,8 +99,8 @@
 
 {% block scripts %}
 <script>
-const GQL_ENDPOINT = "{{ gql_endpoint }}";
-const ENTITY = "{{ slug }}";
+const GQL_ENDPOINT = "{{ gql_endpoint | js_string }}";
+const ENTITY = "{{ slug | safe_id }}";
 const FIELDS = {{ fields_meta | tojson }};
 let currentPage = 0;
 const PAGE_SIZE = 25;
@@ -121,7 +121,7 @@ async function gqlQuery(query, variables) {
 
 async function loadData() {
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const query = `query($limit: Int!, $offset: Int!) { list_${ENTITY}(limit: $limit, offset: $offset) { ${fieldNames} } }`;
+  const query = `query ListEntities($limit: Int, $offset: Int) { list_${ENTITY}(limit: $limit, offset: $offset) { ${fieldNames} } }`;
   const data = await gqlQuery(query, { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE });
   renderTable(data?.data?.[`list_${ENTITY}`] || []);
 }
@@ -134,15 +134,25 @@ function renderTable(rows) {
     FIELDS.forEach(f => {
       const td = document.createElement("td");
       const val = row[f.name] ?? "";
-      td.innerHTML = `<span class="inline-view">${escapeHtml(String(val))}</span>`;
+      const viewSpan = document.createElement("span");
+      viewSpan.className = "inline-view";
+      viewSpan.textContent = String(val);
+      td.appendChild(viewSpan);
       if (!f.primary_key) {
-        td.innerHTML += `<span class="inline-edit"><input type="${f.input_type === 'textarea' ? 'text' : f.input_type}" value="${escapeHtml(String(val))}" data-field="${f.name}"></span>`;
+        const editSpan = document.createElement("span");
+        editSpan.className = "inline-edit";
+        const input = document.createElement("input");
+        input.type = f.input_type === "textarea" ? "text" : f.input_type;
+        input.value = String(val);
+        input.dataset.field = f.name;
+        editSpan.appendChild(input);
+        td.appendChild(editSpan);
       }
       tr.appendChild(td);
     });
     const actionTd = document.createElement("td");
     const pk = FIELDS.find(f => f.primary_key);
-    const pkVal = pk ? row[pk.name] : "";
+    const pkVal = pk ? String(row[pk.name] ?? "") : "";
 
     const editBtn = document.createElement("button");
     editBtn.className = "btn btn-sm";
@@ -153,16 +163,20 @@ function renderTable(rows) {
     saveBtn.className = "btn btn-sm btn-primary";
     saveBtn.style.display = "none";
     saveBtn.textContent = "Save";
-    saveBtn.addEventListener("click", function() { saveEdit(this, pkVal); });
+    saveBtn.dataset.pkval = pkVal;
+    saveBtn.addEventListener("click", function() { saveEdit(this, this.dataset.pkval); });
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn btn-sm btn-danger";
-    delBtn.textContent = "Delete";
-    delBtn.addEventListener("click", function() { deleteRecord(pkVal); });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "btn btn-sm btn-danger";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.dataset.pkval = pkVal;
+    deleteBtn.addEventListener("click", function() { deleteRecord(this.dataset.pkval); });
 
     actionTd.appendChild(editBtn);
+    actionTd.appendChild(document.createTextNode(" "));
     actionTd.appendChild(saveBtn);
-    actionTd.appendChild(delBtn);
+    actionTd.appendChild(document.createTextNode(" "));
+    actionTd.appendChild(deleteBtn);
     tr.appendChild(actionTd);
     tbody.appendChild(tr);
   });
@@ -183,8 +197,8 @@ async function saveEdit(btn, id) {
   const patch = {};
   inputs.forEach(inp => { patch[inp.dataset.field] = inp.value; });
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const query = `mutation($id: ID!, $patch: JSON!) { update_${ENTITY}(id: $id, patch: $patch) { ${fieldNames} } }`;
-  await gqlQuery(query, { id, patch });
+  const query = `mutation UpdateEntity($id: ID!, $patch: JSON!) { update_${ENTITY}(id: $id, patch: $patch) { ${fieldNames} } }`;
+  await gqlQuery(query, { id: id, patch: patch });
   tr.classList.remove("editing");
   loadData();
 }
@@ -198,8 +212,8 @@ async function createRecord(e) {
     if (el) input[f.name] = f.input_type === "checkbox" ? el.checked : el.value;
   });
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const query = `mutation($input: JSON!) { create_${ENTITY}(input: $input) { ${fieldNames} } }`;
-  await gqlQuery(query, { input });
+  const query = `mutation CreateEntity($input: JSON!) { create_${ENTITY}(input: $input) { ${fieldNames} } }`;
+  await gqlQuery(query, { input: input });
   hideCreateForm();
   form.reset();
   loadData();
@@ -207,19 +221,13 @@ async function createRecord(e) {
 
 async function deleteRecord(id) {
   if (!confirm("Delete this record?")) return;
-  const query = `mutation($id: ID!) { delete_${ENTITY}(id: $id) }`;
-  await gqlQuery(query, { id });
+  const query = `mutation DeleteEntity($id: ID!) { delete_${ENTITY}(id: $id) }`;
+  await gqlQuery(query, { id: id });
   loadData();
 }
 
 function prevPage() { if (currentPage > 0) { currentPage--; loadData(); } }
 function nextPage() { currentPage++; loadData(); }
-
-function escapeHtml(text) {
-  const d = document.createElement("div");
-  d.textContent = text;
-  return d.innerHTML;
-}
 
 document.getElementById("filter-input")?.addEventListener("input", function(e) {
   const val = e.target.value.toLowerCase();
@@ -248,10 +256,11 @@ document.querySelectorAll(".sort-header").forEach(th => {
 {% if has_embedding %}
 document.getElementById("semantic-search")?.addEventListener("keydown", async function(e) {
   if (e.key !== "Enter") return;
-  const query = e.target.value;
-  if (!query) { loadData(); return; }
+  const searchText = e.target.value;
+  if (!searchText) { loadData(); return; }
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const data = await gqlQuery(`query($query: String!) { search_${ENTITY}(query: $query) { ${fieldNames} } }`, { query });
+  const query = `query SearchEntities($query: String!) { search_${ENTITY}(query: $query) { ${fieldNames} } }`;
+  const data = await gqlQuery(query, { query: searchText });
   renderTable(data?.data?.[`search_${ENTITY}`] || []);
 });
 {% endif %}
