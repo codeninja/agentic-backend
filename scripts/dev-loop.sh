@@ -323,30 +323,40 @@ phase_implement() {
     all_issues=$(echo -e "${rejected_issues}\n${todo_issues}" | grep -v '^$')
 
     local slots=$(( MAX_IN_PROGRESS - in_progress_count ))
-    local started=0
 
-    while IFS= read -r issue_num && (( started < slots )); do
+    # -----------------------------------------------------------------------
+    # Step 1: Collect up to $slots candidates and validate them in PARALLEL
+    # -----------------------------------------------------------------------
+    local -a candidates=()
+    while IFS= read -r issue_num; do
         [[ -z "$issue_num" ]] && continue
-        check_stop
+        (( ${#candidates[@]} >= slots )) && break
 
+        # Skip if worktree already exists (previous run still active)
+        if [[ -d "$WORKTREE_BASE/issue-${issue_num}" ]]; then
+            log "  ⏭️  #$issue_num worktree already exists, skipping."
+            continue
+        fi
+        candidates+=("$issue_num")
+    done <<< "$all_issues"
+
+    if (( ${#candidates[@]} == 0 )); then
+        log "  No candidates to validate."
+        return
+    fi
+
+    log "  🔬 Validating ${#candidates[@]} tickets in parallel..."
+    local -a validate_pids=()
+    local -a validate_logs=()
+    for issue_num in "${candidates[@]}"; do
+        check_stop
         local title
         title=$(get_issue_title "$issue_num")
         local body
         body=$(get_issue_body "$issue_num")
-        local branch="fix/issue-${issue_num}"
-        local worktree="$WORKTREE_BASE/issue-${issue_num}"
-        local impl_log="$LOG_DIR/impl-${issue_num}-$(date +%s).log"
-
-        # Skip if worktree already exists (previous run still active)
-        if [[ -d "$worktree" ]]; then
-            log "  ⏭️  #$issue_num worktree already exists, skipping."
-            continue
-        fi
-
-        log "  🔬 Validating ticket #$issue_num before implementation..."
         local validate_log="$LOG_DIR/validate-${issue_num}-$(date +%s).log"
+        validate_logs+=("$validate_log")
 
-        # Synchronous validation gate — decide if ticket is still needed
         claude --dangerously-skip-permissions -p "You are a developer picking up a ticket for implementation. Before writing any code, you need to verify the ticket is still valid and actionable.
 
 PROJECT ROOT: $PROJECT_ROOT
@@ -375,7 +385,32 @@ VALIDATE_RESULT=NEEDS_PLANNING
 
 Output the verdict as the LAST line of your response." \
             --output-format text \
-            > "$validate_log" 2>&1
+            > "$validate_log" 2>&1 &
+        validate_pids+=($!)
+        log "    🔬 #$issue_num validation started (PID $!)"
+    done
+
+    # Wait for ALL validations to complete
+    log "  ⏳ Waiting for all validations to complete..."
+    for pid in "${validate_pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+    log "  ✅ All validations complete."
+
+    # -----------------------------------------------------------------------
+    # Step 2: Process results and spawn implementations for validated tickets
+    # -----------------------------------------------------------------------
+    local started=0
+    for i in "${!candidates[@]}"; do
+        local issue_num="${candidates[$i]}"
+        local validate_log="${validate_logs[$i]}"
+        local title
+        title=$(get_issue_title "$issue_num")
+        local body
+        body=$(get_issue_body "$issue_num")
+        local branch="fix/issue-${issue_num}"
+        local worktree="$WORKTREE_BASE/issue-${issue_num}"
+        local impl_log="$LOG_DIR/impl-${issue_num}-$(date +%s).log"
 
         if grep -q "VALIDATE_RESULT=UNNECESSARY" "$validate_log"; then
             local reason
@@ -451,7 +486,6 @@ Your task:
 8. Push: git push origin $branch
 9. Update the PR body with a summary: gh pr edit $draft_pr --repo $REPO --body 'Closes #$issue_num\n\n<summary of changes>'
 10. Mark the PR as ready for review: gh pr ready $draft_pr --repo $REPO
-11. Move the ticket to AI Review on the board (set_status $issue_num $STATUS_AI_REVIEW)
 
 IMPORTANT:
 - A draft PR already exists — do NOT create a new one
@@ -464,7 +498,9 @@ IMPORTANT:
         track_pid $!
         log "  🤖 Implementation agent started for #$issue_num (PID $!, log: $impl_log)"
         started=$(( started + 1 ))
-    done <<< "$all_issues"
+    done
+
+    log "  🚀 $started implementation agents spawned in parallel"
 }
 
 # ---------------------------------------------------------------------------
