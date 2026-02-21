@@ -179,13 +179,18 @@ def require_domain_permission(
 ) -> None:
     """Raise :class:`PermissionError` if the current user lacks the permission.
 
+    The RBAC policy is resolved in the following order:
+    1. Explicit *policy* parameter (for direct caller control).
+    2. The contextvar set by ``AuthGateway`` via ``set_rbac_policy``.
+    3. A default ``RBACPolicy()`` with only built-in roles (fallback).
+
     Imports ``current_user_context`` lazily to avoid circular imports.
     """
-    from ninja_auth.agent_context import current_user_context
+    from ninja_auth.agent_context import current_rbac_policy, current_user_context
 
     ctx = current_user_context()
     if not ctx.is_authenticated:
         raise PermissionError("Authenticated user context required")
 
-    _policy = policy or RBACPolicy()
-    _policy.check(ctx.permissions, action, domain, entity)
+    resolved = policy or current_rbac_policy() or RBACPolicy()
+    resolved.check(ctx.permissions, action, domain, entity)
