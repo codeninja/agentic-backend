@@ -94,8 +94,12 @@ def test_gateway_invalid_bearer_falls_through():
     assert resp.json()["provider"] == "apikey"
 
 
-def test_gateway_public_path_wildcard():
-    config = AuthConfig(public_paths=["/docs*"])
+def test_gateway_wildcard_patterns_not_interpreted():
+    """Wildcard characters in public_paths are treated literally, not as globs."""
+    config = AuthConfig(
+        public_paths=["/docs*"],
+        bearer=BearerConfig(secret_key=SECRET),
+    )
     app = _build_app(config)
 
     async def docs(request):
@@ -104,8 +108,53 @@ def test_gateway_public_path_wildcard():
     app.routes.append(Route("/docs/openapi", docs))
     client = TestClient(app)
 
+    # "/docs/openapi" should NOT match the literal pattern "/docs*"
     resp = client.get("/docs/openapi")
+    assert resp.status_code == 401
+
+
+def test_gateway_trailing_slash_normalized():
+    """Trailing slashes are stripped so /health/ matches the /health public path."""
+    config = AuthConfig(public_paths=["/health"])
+
+    async def health(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "ok"})
+
+    app = Starlette(routes=[Route("/health", health), Route("/health/", health)])
+    app.add_middleware(AuthGateway, config=config)
+    client = TestClient(app)
+
+    resp = client.get("/health/")
     assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+def test_gateway_query_string_stripped():
+    """Query strings are stripped before public path comparison."""
+    config = AuthConfig(public_paths=["/health"])
+    app = _build_app(config)
+    client = TestClient(app)
+
+    resp = client.get("/health?foo=1&bar=2")
+    assert resp.status_code == 200
+
+
+def test_gateway_no_partial_prefix_match():
+    """Public path /health must not match /healthcheck or /health-admin."""
+    config = AuthConfig(
+        public_paths=["/health"],
+        bearer=BearerConfig(secret_key=SECRET),
+    )
+
+    async def healthcheck(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "extended"})
+
+    app = Starlette(routes=[Route("/healthcheck", healthcheck)])
+    app.add_middleware(AuthGateway, config=config)
+    client = TestClient(app)
+
+    resp = client.get("/healthcheck")
+    assert resp.status_code == 401
 
 
 def test_gateway_context_injection_into_request_state():
