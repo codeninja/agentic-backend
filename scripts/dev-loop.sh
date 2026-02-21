@@ -9,7 +9,8 @@
 # Stop:      touch stop.txt      (immediate abort)
 # Shutdown:  touch shutdown.txt   (graceful — waits for agents, then exits)
 # =============================================================================
-set -euo pipefail
+set -uo pipefail
+# Note: NOT using set -e — individual failures are handled per-phase
 
 # ---------------------------------------------------------------------------
 # Config
@@ -435,7 +436,7 @@ IMPORTANT:
             > "$impl_log" 2>&1 &
         track_pid $!
         log "  🤖 Implementation agent started for #$issue_num (PID $!, log: $impl_log)"
-        (( started++ ))
+        started=$(( started + 1 ))
     done <<< "$all_issues"
 }
 
@@ -665,7 +666,7 @@ main() {
     local cycle=0
     while true; do
         check_stop
-        (( cycle++ ))
+        cycle=$(( cycle + 1 ))
         log ""
         log "═══════════════ Cycle $cycle ═══════════════"
 
