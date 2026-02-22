@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import keyword
 import re
+import sre_parse
 from enum import Enum
 from typing import Any
 
@@ -52,17 +53,172 @@ class EmbeddingConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+# ---------------------------------------------------------------------------
+# ReDoS safety — detect nested quantifiers prone to catastrophic backtracking
+# ---------------------------------------------------------------------------
+
+_QUANTIFIER_OPS = {
+    sre_parse.MAX_REPEAT,
+    sre_parse.MIN_REPEAT,
+}
+
+
+def _has_variable_quantifier(items: list[tuple[int, Any]]) -> bool:
+    """Return True if *items* contain a variable-width quantifier at any depth.
+
+    Fixed-width quantifiers like ``{3}`` are safe and are not counted.
+    """
+    for op, av in items:
+        if op in _QUANTIFIER_OPS:
+            min_count, max_count, _ = av
+            if min_count != max_count:
+                return True
+        if op == sre_parse.SUBPATTERN:
+            # av = (group, add_flags, del_flags, pattern)
+            if _has_variable_quantifier(list(av[-1])):
+                return True
+        if op == sre_parse.BRANCH:
+            # av = [None, [branch1_items, branch2_items, ...]]
+            for branch in av[1]:
+                if _has_variable_quantifier(list(branch)):
+                    return True
+    return False
+
+
+def _check_redos_safety(pattern: str) -> None:
+    """Raise :class:`ValueError` if *pattern* contains nested quantifiers.
+
+    A nested quantifier is a quantifier (``+``, ``*``, ``{m,n}``) applied to a
+    group that itself contains a quantifier on a variable-width sub-expression.
+    These constructs are the primary source of ReDoS via catastrophic
+    backtracking.
+
+    Examples of rejected patterns::
+
+        (a+)+       — quantifier on group containing quantifier
+        (a+)*       — same
+        (a*)*       — same
+        (a|a)+      — branch inside quantified group (ambiguous alternation)
+        ((a+)b)+    — nested group with inner quantifier
+
+    Examples of accepted patterns::
+
+        [a-z]+      — character class with quantifier (no nesting)
+        (abc)+      — group with quantifier but no inner quantifier
+        a{2,4}      — bounded quantifier, no group
+        (a{2})+     — inner quantifier is fixed-width ({2}), outer is fine
+    """
+    try:
+        parsed = sre_parse.parse(pattern)
+    except re.error:
+        # Syntax errors are caught separately by the field_validator; skip here.
+        return
+
+    _walk_for_nested_quantifiers(list(parsed), in_quantifier=False)
+
+
+def _walk_for_nested_quantifiers(
+    items: list[tuple[int, Any]],
+    in_quantifier: bool,
+) -> None:
+    """Recursively walk the parsed regex tree looking for nested quantifiers.
+
+    Args:
+        items: Parsed regex items from :mod:`sre_parse`.
+        in_quantifier: True if we are already inside a quantified group.
+
+    Raises:
+        ValueError: If a nested quantifier is detected.
+    """
+    for op, av in items:
+        if op in _QUANTIFIER_OPS:
+            # av = (min, max, [sub-items])
+            min_count, max_count, sub_items = av
+            is_fixed = (min_count == max_count)
+
+            if in_quantifier and not is_fixed:
+                raise ValueError(
+                    "ReDoS safety: pattern contains nested quantifiers "
+                    "prone to catastrophic backtracking. "
+                    "Avoid patterns like (a+)+, (a*)*,  (a+)*, (a|a)+, etc."
+                )
+
+            # The contents of this quantifier may themselves contain quantifiers
+            # Check if any sub-expression has a variable-width quantifier
+            if not is_fixed and _has_variable_quantifier(list(sub_items)):
+                raise ValueError(
+                    "ReDoS safety: pattern contains nested quantifiers "
+                    "prone to catastrophic backtracking. "
+                    "Avoid patterns like (a+)+, (a*)*,  (a+)*, (a|a)+, etc."
+                )
+
+            # Walk children — they are now "inside a quantifier" if this one
+            # is variable-width.
+            _walk_for_nested_quantifiers(
+                list(sub_items),
+                in_quantifier=in_quantifier or (not is_fixed),
+            )
+
+        elif op == sre_parse.SUBPATTERN:
+            _walk_for_nested_quantifiers(list(av[-1]), in_quantifier=in_quantifier)
+
+        elif op == sre_parse.BRANCH:
+            for branch in av[1]:
+                _walk_for_nested_quantifiers(list(branch), in_quantifier=in_quantifier)
+
+
 class FieldConstraint(BaseModel):
-    """Validation constraints for a field."""
+    """Validation constraints for a field.
+
+    The ``pattern`` field accepts a subset of regular expressions suitable for
+    field-level string validation.  At model construction time the pattern is:
+
+    1. Compiled with :func:`re.compile` — invalid syntax is rejected.
+    2. Checked for *ReDoS-prone* constructs (nested quantifiers such as
+       ``(a+)+``, ``(a*)*``, ``(a|a)*``, ``(a+)*``, etc.) that can cause
+       catastrophic backtracking.
+
+    Supported patterns include any valid Python regex that does **not** contain
+    nested quantifiers (a quantifier applied to a group that itself contains a
+    quantifier on a non-fixed-width sub-expression).
+    """
 
     min_length: int | None = Field(default=None, ge=0)
     max_length: int | None = Field(default=None, ge=1)
-    pattern: str | None = Field(default=None, description="Regex pattern for string validation.")
+    pattern: str | None = Field(
+        default=None,
+        description=(
+            "Regex pattern for string validation. Must be valid Python regex "
+            "syntax and free of ReDoS-prone constructs (nested quantifiers)."
+        ),
+    )
     ge: float | None = Field(default=None, description="Greater than or equal.")
     le: float | None = Field(default=None, description="Less than or equal.")
     enum_values: list[str] | None = Field(default=None, description="Allowed values for enum-type fields.")
 
     model_config = {"extra": "forbid"}
+
+    @field_validator("pattern")
+    @classmethod
+    def validate_pattern(cls, v: str | None) -> str | None:
+        """Validate the regex pattern for syntax correctness and ReDoS safety.
+
+        Rejects:
+        - Patterns that are not valid Python regular expressions.
+        - Patterns containing nested quantifiers that can cause catastrophic
+          backtracking (ReDoS).  Detected constructs include ``(a+)+``,
+          ``(a*)*``, ``(a+)*``, ``(a|a)*``, and similar variations.
+        """
+        if v is None:
+            return v
+        # 1. Compile to verify syntax
+        try:
+            re.compile(v)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {exc}") from exc
+        # 2. Check for ReDoS-prone nested quantifiers
+        _check_redos_safety(v)
+        return v
 
     @model_validator(mode="after")
     def validate_constraint_coherence(self) -> FieldConstraint:

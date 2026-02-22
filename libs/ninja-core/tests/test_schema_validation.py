@@ -73,6 +73,100 @@ class TestFieldConstraintValidation:
         assert c.min_length == 5
         assert c.max_length is None
 
+    # -------------------------------------------------------------------
+    # Pattern validation — syntax
+    # -------------------------------------------------------------------
+
+    def test_valid_pattern_simple(self):
+        """Simple regex patterns are accepted."""
+        c = FieldConstraint(pattern=r"^[a-z]+$")
+        assert c.pattern == r"^[a-z]+$"
+
+    def test_valid_pattern_email_like(self):
+        """Email-like pattern is accepted."""
+        c = FieldConstraint(pattern=r"^[\w.+-]+@[\w-]+\.[\w.]+$")
+        assert c.pattern is not None
+
+    def test_valid_pattern_uuid(self):
+        """UUID pattern is accepted."""
+        c = FieldConstraint(
+            pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        )
+        assert c.pattern is not None
+
+    def test_valid_pattern_fixed_repetition_in_group(self):
+        """Fixed-width quantifier inside a quantified group is safe."""
+        c = FieldConstraint(pattern=r"([a-z]{3})+")
+        assert c.pattern is not None
+
+    def test_invalid_pattern_syntax_rejected(self):
+        """Malformed regex is rejected at model construction."""
+        with pytest.raises(ValidationError, match="Invalid regex pattern"):
+            FieldConstraint(pattern=r"[unclosed")
+
+    def test_invalid_pattern_unbalanced_paren(self):
+        with pytest.raises(ValidationError, match="Invalid regex pattern"):
+            FieldConstraint(pattern=r"(abc")
+
+    # -------------------------------------------------------------------
+    # Pattern validation — ReDoS safety
+    # -------------------------------------------------------------------
+
+    def test_redos_nested_plus_plus(self):
+        """(a+)+ is a classic ReDoS pattern — must be rejected."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"(a+)+$")
+
+    def test_redos_nested_star_star(self):
+        """(a*)* — must be rejected."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"(a*)*")
+
+    def test_redos_nested_plus_star(self):
+        """(a+)* — must be rejected."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"(a+)*")
+
+    def test_redos_nested_star_plus(self):
+        """(a*)+ — must be rejected."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"(a*)+")
+
+    def test_redos_alternation_in_quantified_group(self):
+        """(a|a)+ — ambiguous alternation inside quantifier."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"(a|a+)+")
+
+    def test_redos_deeply_nested(self):
+        """((a+)b)+ — inner quantifier inside quantified group."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"((a+)b)+")
+
+    def test_redos_complex_evil_regex(self):
+        """(([a-z])+.)+ — known evil pattern."""
+        with pytest.raises(ValidationError, match="nested quantifiers"):
+            FieldConstraint(pattern=r"(([a-z])+.)+")
+
+    def test_safe_pattern_character_class_quantifier(self):
+        """[a-z]+ is safe — no nesting."""
+        c = FieldConstraint(pattern=r"[a-z]+")
+        assert c.pattern is not None
+
+    def test_safe_pattern_group_without_inner_quantifier(self):
+        """(abc)+ is safe — group contents have no quantifier."""
+        c = FieldConstraint(pattern=r"(abc)+")
+        assert c.pattern is not None
+
+    def test_safe_pattern_bounded_quantifier(self):
+        """a{2,4} — bounded, no group."""
+        c = FieldConstraint(pattern=r"a{2,4}")
+        assert c.pattern is not None
+
+    def test_none_pattern_accepted(self):
+        """None pattern is fine (no constraint)."""
+        c = FieldConstraint(pattern=None)
+        assert c.pattern is None
+
 
 # ===========================================================================
 # FieldSchema validation
