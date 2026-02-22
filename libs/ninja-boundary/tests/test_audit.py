@@ -2,7 +2,7 @@
 
 import logging
 
-from ninja_boundary.audit import AuditLog, CoercionAction, _REDACTED
+from ninja_boundary.audit import _REDACTED, AuditLog, CoercionAction
 
 
 class TestAuditLog:

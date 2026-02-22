@@ -386,9 +386,7 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_value_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
             mock_engine.run = AsyncMock(side_effect=ValueError("bad scheme 'foobar'"))
 
@@ -402,13 +400,9 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_connection_refused_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
-            mock_engine.run = AsyncMock(
-                side_effect=ConnectionRefusedError("Connection refused")
-            )
+            mock_engine.run = AsyncMock(side_effect=ConnectionRefusedError("Connection refused"))
 
             result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
 
@@ -418,9 +412,7 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_timeout_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
             mock_engine.run = AsyncMock(side_effect=TimeoutError("timed out"))
 
@@ -431,13 +423,9 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_runtime_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
-            mock_engine.run = AsyncMock(
-                side_effect=RuntimeError("driver not installed")
-            )
+            mock_engine.run = AsyncMock(side_effect=RuntimeError("driver not installed"))
 
             result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
 
@@ -463,9 +451,7 @@ class TestIntrospectDatabaseErrorHandling:
         add_entity(workspace, name="Existing", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         assert len(workspace.schema.entities) == 1
 
-        with patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
             mock_engine.run = AsyncMock(side_effect=Exception("unexpected"))
 

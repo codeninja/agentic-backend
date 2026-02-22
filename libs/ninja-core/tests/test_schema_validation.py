@@ -17,10 +17,10 @@ from ninja_core.schema import (
 )
 from pydantic import ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _pk_field(name: str = "id") -> FieldSchema:
     """Create a standard UUID primary key field."""
@@ -42,6 +42,7 @@ def _simple_entity(name: str, extra_fields: list[FieldSchema] | None = None) -> 
 # ===========================================================================
 # FieldConstraint validation
 # ===========================================================================
+
 
 class TestFieldConstraintValidation:
     def test_valid_constraints(self):
@@ -78,12 +79,15 @@ class TestFieldConstraintValidation:
 # FieldSchema validation
 # ===========================================================================
 
+
 class TestFieldSchemaValidation:
     def test_primary_key_nullable_rejected(self):
         with pytest.raises(ValidationError, match="must not be nullable"):
             FieldSchema(
-                name="id", field_type=FieldType.UUID,
-                primary_key=True, nullable=True,
+                name="id",
+                field_type=FieldType.UUID,
+                primary_key=True,
+                nullable=True,
             )
 
     def test_primary_key_non_nullable_ok(self):
@@ -98,13 +102,15 @@ class TestFieldSchemaValidation:
     def test_enum_with_empty_enum_values_rejected(self):
         with pytest.raises(ValidationError, match="ENUM requires.*enum_values"):
             FieldSchema(
-                name="status", field_type=FieldType.ENUM,
+                name="status",
+                field_type=FieldType.ENUM,
                 constraints=FieldConstraint(enum_values=[]),
             )
 
     def test_enum_with_enum_values_ok(self):
         f = FieldSchema(
-            name="status", field_type=FieldType.ENUM,
+            name="status",
+            field_type=FieldType.ENUM,
             constraints=FieldConstraint(enum_values=["active", "inactive"]),
         )
         assert f.constraints.enum_values == ["active", "inactive"]
@@ -161,6 +167,7 @@ class TestFieldSchemaValidation:
 # EntitySchema validation
 # ===========================================================================
 
+
 class TestEntitySchemaValidation:
     def test_valid_entity(self):
         e = _simple_entity("User")
@@ -206,6 +213,7 @@ class TestEntitySchemaValidation:
 # ===========================================================================
 # RelationshipSchema validation
 # ===========================================================================
+
 
 class TestRelationshipSchemaValidation:
     def test_hard_without_source_field_rejected(self):
@@ -285,6 +293,7 @@ class TestRelationshipSchemaValidation:
 # AgenticSchema cross-entity validation
 # ===========================================================================
 
+
 class TestAgenticSchemaValidation:
     def test_empty_schema_valid(self):
         """Empty schemas (no entities/relationships/domains) should pass."""
@@ -300,9 +309,12 @@ class TestAgenticSchemaValidation:
 
     def test_duplicate_relationship_names_rejected(self):
         user = _simple_entity("User")
-        order = _simple_entity("Order", [
-            FieldSchema(name="user_id", field_type=FieldType.UUID),
-        ])
+        order = _simple_entity(
+            "Order",
+            [
+                FieldSchema(name="user_id", field_type=FieldType.UUID),
+            ],
+        )
         rel = RelationshipSchema(
             name="link",
             source_entity="User",
@@ -374,9 +386,12 @@ class TestAgenticSchemaValidation:
 
     def test_fk_field_not_on_source_entity_rejected(self):
         user = _simple_entity("User")
-        order = _simple_entity("Order", [
-            FieldSchema(name="user_id", field_type=FieldType.UUID),
-        ])
+        order = _simple_entity(
+            "Order",
+            [
+                FieldSchema(name="user_id", field_type=FieldType.UUID),
+            ],
+        )
         rel = RelationshipSchema(
             name="link",
             source_entity="User",
@@ -414,9 +429,12 @@ class TestAgenticSchemaValidation:
 
     def test_valid_fk_fields_accepted(self):
         user = _simple_entity("User")
-        order = _simple_entity("Order", [
-            FieldSchema(name="user_id", field_type=FieldType.UUID),
-        ])
+        order = _simple_entity(
+            "Order",
+            [
+                FieldSchema(name="user_id", field_type=FieldType.UUID),
+            ],
+        )
         rel = RelationshipSchema(
             name="user_orders",
             source_entity="User",
@@ -435,9 +453,12 @@ class TestAgenticSchemaValidation:
 
     def test_self_referential_relationship_allowed(self):
         """Employee → Employee for manager hierarchy is valid."""
-        employee = _simple_entity("Employee", [
-            FieldSchema(name="manager_id", field_type=FieldType.UUID, nullable=True),
-        ])
+        employee = _simple_entity(
+            "Employee",
+            [
+                FieldSchema(name="manager_id", field_type=FieldType.UUID, nullable=True),
+            ],
+        )
         rel = RelationshipSchema(
             name="manager",
             source_entity="Employee",
@@ -484,22 +505,31 @@ class TestAgenticSchemaValidation:
         c = _simple_entity("C", [FieldSchema(name="b_id", field_type=FieldType.UUID)])
         rels = [
             RelationshipSchema(
-                name="a_to_b", source_entity="A", target_entity="B",
+                name="a_to_b",
+                source_entity="A",
+                target_entity="B",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_MANY,
-                source_field="id", target_field="a_id",
+                source_field="id",
+                target_field="a_id",
             ),
             RelationshipSchema(
-                name="b_to_c", source_entity="B", target_entity="C",
+                name="b_to_c",
+                source_entity="B",
+                target_entity="C",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_MANY,
-                source_field="id", target_field="b_id",
+                source_field="id",
+                target_field="b_id",
             ),
             RelationshipSchema(
-                name="c_to_a", source_entity="C", target_entity="A",
+                name="c_to_a",
+                source_entity="C",
+                target_entity="A",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_MANY,
-                source_field="id", target_field="c_id",
+                source_field="id",
+                target_field="c_id",
             ),
         ]
         with pytest.raises(ValidationError, match="Circular dependency"):
@@ -515,12 +545,16 @@ class TestAgenticSchemaValidation:
         b = _simple_entity("B")
         rels = [
             RelationshipSchema(
-                name="a_to_b", source_entity="A", target_entity="B",
+                name="a_to_b",
+                source_entity="A",
+                target_entity="B",
                 relationship_type=RelationshipType.SOFT,
                 cardinality=Cardinality.ONE_TO_MANY,
             ),
             RelationshipSchema(
-                name="b_to_a", source_entity="B", target_entity="A",
+                name="b_to_a",
+                source_entity="B",
+                target_entity="A",
                 relationship_type=RelationshipType.SOFT,
                 cardinality=Cardinality.ONE_TO_MANY,
             ),
@@ -538,16 +572,22 @@ class TestAgenticSchemaValidation:
         b = _simple_entity("B", [FieldSchema(name="a_id", field_type=FieldType.UUID)])
         rels = [
             RelationshipSchema(
-                name="a_to_b", source_entity="A", target_entity="B",
+                name="a_to_b",
+                source_entity="A",
+                target_entity="B",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_ONE,
-                source_field="b_id", target_field="id",
+                source_field="b_id",
+                target_field="id",
             ),
             RelationshipSchema(
-                name="b_to_a", source_entity="B", target_entity="A",
+                name="b_to_a",
+                source_entity="B",
+                target_entity="A",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_ONE,
-                source_field="a_id", target_field="id",
+                source_field="a_id",
+                target_field="id",
             ),
         ]
         with pytest.raises(ValidationError, match="Circular dependency"):
@@ -564,16 +604,22 @@ class TestAgenticSchemaValidation:
         c = _simple_entity("C", [FieldSchema(name="b_id", field_type=FieldType.UUID)])
         rels = [
             RelationshipSchema(
-                name="a_to_b", source_entity="A", target_entity="B",
+                name="a_to_b",
+                source_entity="A",
+                target_entity="B",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_MANY,
-                source_field="id", target_field="a_id",
+                source_field="id",
+                target_field="a_id",
             ),
             RelationshipSchema(
-                name="b_to_c", source_entity="B", target_entity="C",
+                name="b_to_c",
+                source_entity="B",
+                target_entity="C",
                 relationship_type=RelationshipType.HARD,
                 cardinality=Cardinality.ONE_TO_MANY,
-                source_field="id", target_field="b_id",
+                source_field="id",
+                target_field="b_id",
             ),
         ]
         s = AgenticSchema(

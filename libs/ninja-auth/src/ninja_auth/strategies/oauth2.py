@@ -91,9 +91,7 @@ class OAuth2Strategy:
             resp.raise_for_status()
             return resp.json()
 
-    async def authenticate_with_code(
-        self, code: str, *, expected_state: str, received_state: str
-    ) -> UserContext:
+    async def authenticate_with_code(self, code: str, *, expected_state: str, received_state: str) -> UserContext:
         """Full OAuth2 flow: exchange code -> fetch userinfo -> return context.
 
         Both ``expected_state`` and ``received_state`` are **required** to
@@ -119,9 +117,7 @@ class OAuth2Strategy:
                 "forwarded on callback."
             )
         if not hmac.compare_digest(expected_state, received_state):
-            raise AuthenticationError(
-                "OAuth2 state mismatch — possible CSRF attack."
-            )
+            raise AuthenticationError("OAuth2 state mismatch — possible CSRF attack.")
 
         tokens = await self.exchange_code(code)
         access_token = tokens.get("access_token", "")

@@ -6,7 +6,6 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import bcrypt
 import jwt
@@ -43,13 +42,16 @@ class IdentityStrategy:
             raise ValueError(f"User already exists: {email}")
 
         user_id = secrets.token_hex(16)
-        self._store.save(email, {
-            "user_id": user_id,
-            "email": email,
-            "password_hash": self.hash_password(password),
-            "roles": roles or [],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        self._store.save(
+            email,
+            {
+                "user_id": user_id,
+                "email": email,
+                "password_hash": self.hash_password(password),
+                "roles": roles or [],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
         return UserContext(
             user_id=user_id,

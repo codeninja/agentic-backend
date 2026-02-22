@@ -1,17 +1,15 @@
 """Tests for AuthConfig loading."""
 
 import json
-import os
 import tempfile
 
 import pytest
-
 from ninja_auth.config import (
+    _INSECURE_TOKEN_SECRET,
     AuthConfig,
     BearerConfig,
     IdentityConfig,
     OAuth2ProviderConfig,
-    _INSECURE_TOKEN_SECRET,
 )
 
 
@@ -164,40 +162,55 @@ class TestBearerConfigValidation:
 class TestRedirectUriValidation:
     def test_empty_redirect_uri_accepted(self):
         cfg = OAuth2ProviderConfig(
-            client_id="c", client_secret="s",
-            authorize_url="https://a.com", token_url="https://t.com",
-            userinfo_url="https://u.com", redirect_uri="",
+            client_id="c",
+            client_secret="s",
+            authorize_url="https://a.com",
+            token_url="https://t.com",
+            userinfo_url="https://u.com",
+            redirect_uri="",
         )
         assert cfg.redirect_uri == ""
 
     def test_valid_https_redirect_uri(self):
         cfg = OAuth2ProviderConfig(
-            client_id="c", client_secret="s",
-            authorize_url="https://a.com", token_url="https://t.com",
-            userinfo_url="https://u.com", redirect_uri="https://myapp.com/callback",
+            client_id="c",
+            client_secret="s",
+            authorize_url="https://a.com",
+            token_url="https://t.com",
+            userinfo_url="https://u.com",
+            redirect_uri="https://myapp.com/callback",
         )
         assert cfg.redirect_uri == "https://myapp.com/callback"
 
     def test_valid_http_redirect_uri(self):
         cfg = OAuth2ProviderConfig(
-            client_id="c", client_secret="s",
-            authorize_url="https://a.com", token_url="https://t.com",
-            userinfo_url="https://u.com", redirect_uri="http://localhost:3000/callback",
+            client_id="c",
+            client_secret="s",
+            authorize_url="https://a.com",
+            token_url="https://t.com",
+            userinfo_url="https://u.com",
+            redirect_uri="http://localhost:3000/callback",
         )
         assert cfg.redirect_uri == "http://localhost:3000/callback"
 
     def test_invalid_scheme_rejected(self):
         with pytest.raises(ValueError, match="HTTP\\(S\\) URL"):
             OAuth2ProviderConfig(
-                client_id="c", client_secret="s",
-                authorize_url="https://a.com", token_url="https://t.com",
-                userinfo_url="https://u.com", redirect_uri="ftp://evil.com/callback",
+                client_id="c",
+                client_secret="s",
+                authorize_url="https://a.com",
+                token_url="https://t.com",
+                userinfo_url="https://u.com",
+                redirect_uri="ftp://evil.com/callback",
             )
 
     def test_missing_hostname_rejected(self):
         with pytest.raises(ValueError, match="hostname"):
             OAuth2ProviderConfig(
-                client_id="c", client_secret="s",
-                authorize_url="https://a.com", token_url="https://t.com",
-                userinfo_url="https://u.com", redirect_uri="https:///callback",
+                client_id="c",
+                client_secret="s",
+                authorize_url="https://a.com",
+                token_url="https://t.com",
+                userinfo_url="https://u.com",
+                redirect_uri="https:///callback",
             )

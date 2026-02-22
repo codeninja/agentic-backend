@@ -1,11 +1,10 @@
 """Tests for the OAuth2 auth router factory."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import FastAPI
-from httpx import AsyncClient, ASGITransport
-
+from httpx import ASGITransport, AsyncClient
 from ninja_auth.config import AuthConfig, OAuth2ProviderConfig
 from ninja_auth.context import UserContext
 from ninja_auth.router import create_auth_router
@@ -68,9 +67,7 @@ async def test_authorize_redirects_to_provider(app: FastAPI):
     assert "response_type=code" in location
 
 
-async def test_authorize_stores_state(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_authorize_stores_state(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """The authorize endpoint should persist a state token in the state store."""
     app = _build_app(config, state_store=state_store)
     transport = ASGITransport(app=app)
@@ -81,6 +78,7 @@ async def test_authorize_stores_state(
     location = resp.headers["location"]
     # Parse state param from URL
     from urllib.parse import parse_qs, urlparse
+
     query = parse_qs(urlparse(location).query)
     state_token = query["state"][0]
 
@@ -100,9 +98,7 @@ async def test_authorize_unknown_provider_returns_404(app: FastAPI):
     assert "Unknown OAuth2 provider" in resp.json()["detail"]
 
 
-async def test_callback_success(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_callback_success(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """A valid callback should exchange the code and return a JWT."""
     app = _build_app(config, state_store=state_store)
 
@@ -137,9 +133,7 @@ async def test_callback_success(
     assert body["email"] == "user@example.com"
 
 
-async def test_callback_deletes_state_after_use(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_callback_deletes_state_after_use(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """State token should be deleted after successful callback to prevent replay."""
     app = _build_app(config, state_store=state_store)
 
@@ -172,9 +166,7 @@ async def test_callback_deletes_state_after_use(
     assert result is None
 
 
-async def test_callback_invalid_state_returns_403(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_callback_invalid_state_returns_403(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """Callback with an unknown state token should return 403."""
     app = _build_app(config, state_store=state_store)
 
@@ -201,9 +193,7 @@ async def test_callback_unknown_provider_returns_404(app: FastAPI):
     assert resp.status_code == 404
 
 
-async def test_callback_code_exchange_failure_returns_502(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_callback_code_exchange_failure_returns_502(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """If authenticate_with_code raises AuthenticationError, return 502."""
     from ninja_auth.errors import AuthenticationError
 
@@ -228,9 +218,7 @@ async def test_callback_code_exchange_failure_returns_502(
     assert "Token exchange failed" in resp.json()["detail"]
 
 
-async def test_callback_unexpected_error_returns_502(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_callback_unexpected_error_returns_502(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """If authenticate_with_code raises an unexpected error, return 502."""
     app = _build_app(config, state_store=state_store)
 
@@ -253,9 +241,7 @@ async def test_callback_unexpected_error_returns_502(
     assert "Failed to complete OAuth2 code exchange" in resp.json()["detail"]
 
 
-async def test_callback_jwt_is_valid(
-    config: AuthConfig, state_store: InMemoryOAuthStateStore
-):
+async def test_callback_jwt_is_valid(config: AuthConfig, state_store: InMemoryOAuthStateStore):
     """The JWT returned by callback should be decodable by IdentityStrategy."""
     app = _build_app(config, state_store=state_store)
 

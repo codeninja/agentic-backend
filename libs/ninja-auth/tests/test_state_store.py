@@ -1,11 +1,9 @@
 """Tests for OAuthStateStore protocol and InMemoryOAuthStateStore."""
 
-import asyncio
 import time
 from unittest.mock import patch
 
 import pytest
-
 from ninja_auth.state_store import InMemoryOAuthStateStore, OAuthStateStore
 
 

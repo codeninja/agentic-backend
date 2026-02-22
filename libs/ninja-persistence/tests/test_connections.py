@@ -4,8 +4,8 @@ import json
 import tempfile
 
 import pytest
+from ninja_persistence.connections import ConnectionManager, ConnectionProfile
 from pydantic import ValidationError
-from ninja_persistence.connections import ConnectionManager, ConnectionProfile, InvalidConnectionURL
 
 
 def test_connection_profile_creation():

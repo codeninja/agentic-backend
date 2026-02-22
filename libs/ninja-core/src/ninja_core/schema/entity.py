@@ -69,15 +69,10 @@ class FieldConstraint(BaseModel):
         """Ensure min/max constraints are logically consistent."""
         if self.min_length is not None and self.max_length is not None:
             if self.min_length > self.max_length:
-                raise ValueError(
-                    f"min_length ({self.min_length}) cannot exceed "
-                    f"max_length ({self.max_length})"
-                )
+                raise ValueError(f"min_length ({self.min_length}) cannot exceed max_length ({self.max_length})")
         if self.ge is not None and self.le is not None:
             if self.ge > self.le:
-                raise ValueError(
-                    f"ge ({self.ge}) cannot exceed le ({self.le})"
-                )
+                raise ValueError(f"ge ({self.ge}) cannot exceed le ({self.le})")
         return self
 
 
@@ -129,10 +124,7 @@ class FieldSchema(BaseModel):
     def validate_field_description(cls, v: str | None) -> str | None:
         """Enforce maximum length on description."""
         if v is not None and len(v) > MAX_DESCRIPTION_LENGTH:
-            raise ValueError(
-                f"Description too long ({len(v)} chars). "
-                f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
-            )
+            raise ValueError(f"Description too long ({len(v)} chars). Maximum is {MAX_DESCRIPTION_LENGTH} characters.")
         return v
 
     @model_validator(mode="after")
@@ -140,9 +132,7 @@ class FieldSchema(BaseModel):
         """Validate default type compatibility and enum constraints."""
         # Primary key must not be nullable
         if self.primary_key and self.nullable:
-            raise ValueError(
-                f"Primary key field '{self.name}' must not be nullable"
-            )
+            raise ValueError(f"Primary key field '{self.name}' must not be nullable")
 
         # Enum field requires enum_values in constraints
         if self.field_type == FieldType.ENUM:
@@ -151,10 +141,7 @@ class FieldSchema(BaseModel):
                 or self.constraints.enum_values is None
                 or len(self.constraints.enum_values) == 0
             ):
-                raise ValueError(
-                    f"Field '{self.name}' with field_type=ENUM requires "
-                    f"non-empty constraints.enum_values"
-                )
+                raise ValueError(f"Field '{self.name}' with field_type=ENUM requires non-empty constraints.enum_values")
 
         # Default value type checking (skip None defaults)
         if self.default is not None:
@@ -206,10 +193,7 @@ class EntitySchema(BaseModel):
     def validate_entity_description(cls, v: str | None) -> str | None:
         """Enforce maximum length on description."""
         if v is not None and len(v) > MAX_DESCRIPTION_LENGTH:
-            raise ValueError(
-                f"Description too long ({len(v)} chars). "
-                f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
-            )
+            raise ValueError(f"Description too long ({len(v)} chars). Maximum is {MAX_DESCRIPTION_LENGTH} characters.")
         return v
 
     @model_validator(mode="after")
@@ -219,21 +203,14 @@ class EntitySchema(BaseModel):
         seen: set[str] = set()
         for f in self.fields:
             if f.name in seen:
-                raise ValueError(
-                    f"Entity '{self.name}' has duplicate field name '{f.name}'"
-                )
+                raise ValueError(f"Entity '{self.name}' has duplicate field name '{f.name}'")
             seen.add(f.name)
 
         # Exactly one primary key
         pk_fields = [f for f in self.fields if f.primary_key]
         if len(pk_fields) == 0:
-            raise ValueError(
-                f"Entity '{self.name}' must have exactly one primary key field"
-            )
+            raise ValueError(f"Entity '{self.name}' must have exactly one primary key field")
         if len(pk_fields) > 1:
             pk_names = [f.name for f in pk_fields]
-            raise ValueError(
-                f"Entity '{self.name}' has multiple primary key fields: "
-                f"{pk_names}"
-            )
+            raise ValueError(f"Entity '{self.name}' has multiple primary key fields: {pk_names}")
         return self

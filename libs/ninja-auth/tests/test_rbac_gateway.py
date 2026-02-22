@@ -134,9 +134,7 @@ class TestGatewayRBACPolicyPropagation:
     def test_policy_contextvar_set_by_gateway(self) -> None:
         """After a request passes through the gateway, the RBAC policy
         contextvar should be set with the gateway's configured policy."""
-        rbac = RBACConfig(
-            roles={"auditor": RoleDefinition(permissions=["read:Audit"])}
-        )
+        rbac = RBACConfig(roles={"auditor": RoleDefinition(permissions=["read:Audit"])})
         config = AuthConfig(
             bearer=BearerConfig(secret_key=SECRET),
             rbac=rbac,
@@ -146,9 +144,7 @@ class TestGatewayRBACPolicyPropagation:
             policy = current_rbac_policy()
             has_policy = policy is not None
             has_custom_role = "auditor" in policy.roles() if policy else False
-            return JSONResponse(
-                {"has_policy": has_policy, "has_custom_role": has_custom_role}
-            )
+            return JSONResponse({"has_policy": has_policy, "has_custom_role": has_custom_role})
 
         app = Starlette(routes=[Route("/check", check_policy)])
         app.add_middleware(AuthGateway, config=config)
@@ -163,9 +159,7 @@ class TestGatewayRBACPolicyPropagation:
     def test_require_domain_access_uses_gateway_policy(self) -> None:
         """End-to-end: require_domain_access inside an endpoint uses the
         gateway's RBAC policy (with custom roles), not a bare default."""
-        rbac = RBACConfig(
-            roles={"support": RoleDefinition(permissions=["read:Support"])}
-        )
+        rbac = RBACConfig(roles={"support": RoleDefinition(permissions=["read:Support"])})
         config = AuthConfig(
             bearer=BearerConfig(secret_key=SECRET),
             rbac=rbac,
@@ -189,9 +183,7 @@ class TestGatewayRBACPolicyPropagation:
 
     def test_policy_propagated_on_public_paths(self) -> None:
         """Even for public paths, the RBAC policy contextvar should be set."""
-        rbac = RBACConfig(
-            roles={"custom": RoleDefinition(permissions=["read:Custom"])}
-        )
+        rbac = RBACConfig(roles={"custom": RoleDefinition(permissions=["read:Custom"])})
         config = AuthConfig(
             bearer=BearerConfig(secret_key=SECRET),
             rbac=rbac,

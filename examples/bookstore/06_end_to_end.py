@@ -14,6 +14,17 @@ No API key required — runs entirely locally with deterministic agents.
 import tempfile
 from pathlib import Path
 
+from _bookstore_schema import (
+    BOOK,
+    CATALOG_DOMAIN,
+    COMMERCE_DOMAIN,
+    CUSTOMER,
+    DOMAINS,
+    ENTITIES,
+    ORDER,
+    REVIEW,
+    SCHEMA,
+)
 from ninja_agents.base import CoordinatorAgent, DataAgent, DomainAgent
 from ninja_agents.tracing import TraceContext
 from ninja_auth.context import UserContext
@@ -22,12 +33,6 @@ from ninja_codegen.generators.agents import generate_agents
 from ninja_codegen.generators.graphql import generate_graphql
 from ninja_codegen.generators.models import generate_models
 from ninja_core.serialization.io import save_schema
-
-from _bookstore_schema import (
-    SCHEMA, ENTITIES, DOMAINS,
-    BOOK, CUSTOMER, ORDER, REVIEW,
-    CATALOG_DOMAIN, COMMERCE_DOMAIN,
-)
 
 print("=" * 60)
 print("  NinjaStack End-to-End: Online Bookstore")
@@ -73,7 +78,7 @@ commerce = DomainAgent(domain=COMMERCE_DOMAIN, data_agents=[customer_da, order_d
 # Coordinator
 coordinator = CoordinatorAgent(domain_agents=[catalog, commerce])
 
-print(f"\n✅ Step 3: Agent hierarchy wired")
+print("\n✅ Step 3: Agent hierarchy wired")
 print(f"   Coordinator → {coordinator.domain_names}")
 
 # ---------------------------------------------------------------------------
@@ -83,10 +88,14 @@ print(f"   Coordinator → {coordinator.domain_names}")
 rbac_config = RBACConfig(
     enabled=True,
     roles={
-        "customer": RoleDefinition(permissions=[
-            "read:Catalog", "write:Catalog.Review",
-            "read:Commerce.Order", "read:Commerce.Customer",
-        ]),
+        "customer": RoleDefinition(
+            permissions=[
+                "read:Catalog",
+                "write:Catalog.Review",
+                "read:Commerce.Order",
+                "read:Commerce.Customer",
+            ]
+        ),
     },
 )
 policy = RBACPolicy(config=rbac_config)
@@ -94,9 +103,9 @@ policy = RBACPolicy(config=rbac_config)
 admin = UserContext(user_id="admin-1", roles=["admin"])
 customer_user = UserContext(user_id="customer-42", roles=["customer"])
 
-print(f"\n✅ Step 4: RBAC configured")
-print(f"   Admin:    full access")
-print(f"   Customer: read catalog, read/write reviews, read own orders")
+print("\n✅ Step 4: RBAC configured")
+print("   Admin:    full access")
+print("   Customer: read catalog, read/write reviews, read own orders")
 
 # ---------------------------------------------------------------------------
 # Step 5: Process Requests
@@ -109,8 +118,7 @@ print(f"{'=' * 60}")
 trace = TraceContext()
 
 
-def process_request(user: UserContext, domain_name: str, entity_name: str,
-                    tool_name: str, **kwargs):
+def process_request(user: UserContext, domain_name: str, entity_name: str, tool_name: str, **kwargs):
     """Simulate a full authenticated request through the stack."""
     # 1. Determine action from tool name
     if tool_name.endswith(("_get", "_list", "_search_semantic")):
@@ -141,14 +149,14 @@ print(f"   {r}")
 
 # --- Customer searches reviews ---
 print("\n🔍 Customer searches reviews:")
-r = process_request(customer_user, "Catalog", "Review", "review_search_semantic",
-                    query="best mystery novels this year")
+r = process_request(customer_user, "Catalog", "Review", "review_search_semantic", query="best mystery novels this year")
 print(f"   {r}")
 
 # --- Customer writes a review ---
 print("\n✍️  Customer writes a review:")
-r = process_request(customer_user, "Catalog", "Review", "review_create",
-                    book_id="book-001", rating=5, text="Absolutely loved it!")
+r = process_request(
+    customer_user, "Catalog", "Review", "review_create", book_id="book-001", rating=5, text="Absolutely loved it!"
+)
 print(f"   {r}")
 
 # --- Customer tries to delete a book (DENIED) ---
@@ -158,14 +166,12 @@ print(f"   {r}")
 
 # --- Customer tries to create an order (DENIED - write on Order) ---
 print("\n🚫 Customer tries to create an order:")
-r = process_request(customer_user, "Commerce", "Order", "order_create",
-                    customer_id="customer-42", total=29.99)
+r = process_request(customer_user, "Commerce", "Order", "order_create", customer_id="customer-42", total=29.99)
 print(f"   {r}")
 
 # --- Admin creates an order (OK) ---
 print("\n✅ Admin creates an order:")
-r = process_request(admin, "Commerce", "Order", "order_create",
-                    customer_id="customer-42", total=29.99)
+r = process_request(admin, "Commerce", "Order", "order_create", customer_id="customer-42", total=29.99)
 print(f"   {r}")
 
 # --- Admin deletes a book (OK) ---
@@ -185,5 +191,5 @@ print(f"  Generated: {total} files (models + agents + GraphQL)")
 print(f"  Agents:    {len(coordinator.domain_names)} domains, 4 data agents")
 print(f"  Auth:      {len(policy.roles())} roles, RBAC enforced")
 print(f"  Trace:     {len(trace.spans)} spans recorded")
-print(f"\n💡 Add GOOGLE_API_KEY to enable real LLM-powered agent conversations.")
-print(f"   The coordinator will use Gemini to classify intent and delegate.")
+print("\n💡 Add GOOGLE_API_KEY to enable real LLM-powered agent conversations.")
+print("   The coordinator will use Gemini to classify intent and delegate.")

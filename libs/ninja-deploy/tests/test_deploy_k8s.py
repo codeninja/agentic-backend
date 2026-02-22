@@ -225,6 +225,7 @@ class TestK8sInfraImages:
 class TestK8sPlaceholderWarnings:
     def test_generate_all_warns_about_placeholder_credentials(self, sample_asd, caplog):
         import logging
+
         gen = K8sGenerator(sample_asd)
         with caplog.at_level(logging.WARNING):
             gen.generate_all()

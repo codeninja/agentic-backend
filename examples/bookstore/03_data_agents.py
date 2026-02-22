@@ -9,11 +9,10 @@ Demonstrates:
 - Tracing tool execution
 """
 
+from _bookstore_schema import BOOK, CUSTOMER, ORDER, REVIEW
 from ninja_agents.base import DataAgent
 from ninja_agents.tools import generate_crud_tools
 from ninja_agents.tracing import TraceContext
-
-from _bookstore_schema import BOOK, CUSTOMER, ORDER, REVIEW
 
 # ---------------------------------------------------------------------------
 # 1. Create Data Agents
@@ -37,12 +36,12 @@ print("\n--- Direct Tool Execution ---")
 
 # Get a book by ID
 result = book_agent.execute("book_get", id="abc-123")
-print(f"\n📖 book_get(id='abc-123'):")
+print("\n📖 book_get(id='abc-123'):")
 print(f"   {result}")
 
 # List customers with a filter
 result = customer_agent.execute("customer_list", email_contains="@example.com")
-print(f"\n👤 customer_list(email_contains='@example.com'):")
+print("\n👤 customer_list(email_contains='@example.com'):")
 print(f"   {result}")
 
 # Create an order
@@ -52,7 +51,7 @@ result = order_agent.execute(
     total=29.99,
     status="pending",
 )
-print(f"\n🛒 order_create(...):")
+print("\n🛒 order_create(...):")
 print(f"   {result}")
 
 # Semantic search on reviews
@@ -60,7 +59,7 @@ result = review_agent.execute(
     "review_search_semantic",
     query="great character development and plot twists",
 )
-print(f"\n🔍 review_search_semantic(query='great character development...'):")
+print("\n🔍 review_search_semantic(query='great character development...'):")
 print(f"   {result}")
 
 # ---------------------------------------------------------------------------
