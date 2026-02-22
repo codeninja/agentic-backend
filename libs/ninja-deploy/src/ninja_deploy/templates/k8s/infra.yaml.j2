@@ -16,11 +16,29 @@ spec:
         app: {{ svc.name }}
         project: {{ project_name }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: {{ svc.run_as_user }}
+        runAsGroup: {{ svc.run_as_group }}
+        fsGroup: {{ svc.run_as_group }}
       containers:
         - name: {{ svc.name }}
           image: {{ svc.image }}
           ports:
             - containerPort: {{ svc.port }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: {{ svc.read_only_fs }}
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: {{ svc.cpu_request }}
+              memory: {{ svc.memory_request }}
+            limits:
+              cpu: {{ svc.cpu_limit }}
+              memory: {{ svc.memory_limit }}
 ---
 apiVersion: v1
 kind: Service

@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from ninja_core.security import check_ssrf
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
@@ -24,8 +25,12 @@ class ConnectionProfile(BaseModel):
 
     @field_validator("url")
     @classmethod
-    def validate_url(cls, v: str) -> str:
-        """Validate the connection URL has required components."""
+    def validate_url(cls, v: str, info: ValidationInfo) -> str:
+        """Validate the connection URL has required components and is not targeting private hosts.
+
+        Pass ``context={"allow_private_hosts": True}`` via
+        :meth:`model_validate` to skip the SSRF check (local dev only).
+        """
         parsed = urlparse(v)
         scheme = parsed.scheme.split("+")[0]  # e.g. "sqlite+aiosqlite" -> "sqlite"
 
@@ -57,6 +62,13 @@ class ConnectionProfile(BaseModel):
                     f"Invalid MongoDB URL '{v}': missing hostname. "
                     "Expected format: 'mongodb://host:port/dbname'"
                 )
+
+        # SSRF protection — block private/reserved IP ranges.
+        # allow_private_hosts can be set via Pydantic validation context.
+        allow_private = (info.context or {}).get("allow_private_hosts", False) if info else False
+        ssrf_error = check_ssrf(v, allow_private_hosts=allow_private)
+        if ssrf_error:
+            raise InvalidConnectionURL(ssrf_error)
 
         return v
 

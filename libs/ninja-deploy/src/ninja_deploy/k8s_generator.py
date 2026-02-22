@@ -13,13 +13,67 @@ from ninja_core.schema.project import AgenticSchema
 logger = logging.getLogger(__name__)
 
 _PLACEHOLDER_PATTERN = re.compile(r"changeme", re.IGNORECASE)
+_LATEST_TAG_PATTERN = re.compile(r"image:\s*\S+:latest", re.MULTILINE)
 
-# Maps storage engines to infra container images used in raw K8s manifests
+
+class PlaceholderCredentialError(ValueError):
+    """Raised when generated manifests still contain placeholder credentials."""
+
+# Maps storage engines to infra container images used in raw K8s manifests.
+# run_as_user / run_as_group follow upstream image conventions:
+#   - PostgreSQL: UID 70 (official postgres alpine)
+#   - MongoDB: UID 999 (official mongo image)
+#   - Neo4j: UID 7474 (official neo4j community image)
+#   - Milvus: UID 1000 (milvusdb image)
 INFRA_IMAGES: dict[StorageEngine, dict[str, str]] = {
-    StorageEngine.SQL: {"name": "postgresql", "image": "postgres:16-alpine", "port": "5432"},
-    StorageEngine.MONGO: {"name": "mongodb", "image": "mongo:7", "port": "27017"},
-    StorageEngine.GRAPH: {"name": "neo4j", "image": "neo4j:5-community", "port": "7687"},
-    StorageEngine.VECTOR: {"name": "milvus", "image": "milvusdb/milvus:v2.4.0", "port": "19530"},
+    StorageEngine.SQL: {
+        "name": "postgresql",
+        "image": "postgres:16-alpine",
+        "port": "5432",
+        "run_as_user": "70",
+        "run_as_group": "70",
+        "read_only_fs": "false",
+        "cpu_request": "100m",
+        "memory_request": "256Mi",
+        "cpu_limit": "500m",
+        "memory_limit": "512Mi",
+    },
+    StorageEngine.MONGO: {
+        "name": "mongodb",
+        "image": "mongo:7",
+        "port": "27017",
+        "run_as_user": "999",
+        "run_as_group": "999",
+        "read_only_fs": "false",
+        "cpu_request": "100m",
+        "memory_request": "256Mi",
+        "cpu_limit": "500m",
+        "memory_limit": "512Mi",
+    },
+    StorageEngine.GRAPH: {
+        "name": "neo4j",
+        "image": "neo4j:5-community",
+        "port": "7687",
+        "run_as_user": "7474",
+        "run_as_group": "7474",
+        "read_only_fs": "false",
+        "cpu_request": "200m",
+        "memory_request": "512Mi",
+        "cpu_limit": "1000m",
+        "memory_limit": "1Gi",
+    },
+    StorageEngine.VECTOR: {
+        "name": "milvus",
+        "image": "milvusdb/milvus:v2.4.0",
+        "port": "19530",
+        "run_as_user": "1000",
+        "run_as_group": "1000",
+        "read_only_fs": "false",
+        "cpu_request": "200m",
+        "memory_request": "256Mi",
+        "cpu_limit": "1000m",
+        "memory_limit": "1Gi",
+    },
 }
 
 
@@ -51,13 +105,23 @@ class K8sGenerator:
                 services.append(INFRA_IMAGES[engine])
         return services
 
-    def generate_deployment(self, app_name: str = "ninja-api", port: str = "8000") -> str:
-        """Generate a Deployment manifest for the app."""
+    def generate_deployment(
+        self, app_name: str = "ninja-api", port: str = "8000", image_tag: str = "SET_IMAGE_TAG",
+    ) -> str:
+        """Generate a Deployment manifest for the app.
+
+        Args:
+            app_name: Name of the application container.
+            port: Container port to expose.
+            image_tag: Docker image tag. Defaults to a placeholder that must be
+                explicitly set before deploying.
+        """
         template = self.env.get_template("deployment.yaml.j2")
         return template.render(
             project_name=self.schema.project_name,
             app_name=app_name,
             port=port,
+            image_tag=image_tag,
         )
 
     def generate_service(self, app_name: str = "ninja-api", port: str = "8000") -> str:
@@ -101,23 +165,48 @@ class K8sGenerator:
         return manifests
 
     @staticmethod
-    def _warn_placeholder_credentials(files: dict[str, str]) -> list[str]:
-        """Emit warnings for any placeholder credentials found in generated manifests."""
-        warnings: list[str] = []
+    def _check_placeholder_credentials(files: dict[str, str]) -> list[str]:
+        """Find any placeholder credentials ('changeme') in generated manifests.
+
+        Returns a list of ``filename:line`` location strings.
+        """
+        locations: list[str] = []
         for filename, content in files.items():
             for match in _PLACEHOLDER_PATTERN.finditer(content):
                 line_num = content[:match.start()].count("\n") + 1
-                warnings.append(f"{filename}:{line_num}")
-        if warnings:
-            logger.warning(
-                "Generated manifests contain placeholder credentials ('changeme') "
-                "that MUST be replaced before deployment: %s",
-                ", ".join(warnings),
-            )
-        return warnings
+                locations.append(f"{filename}:{line_num}")
+        return locations
 
-    def generate_all(self, app_name: str = "ninja-api", port: str = "8000") -> dict[str, str]:
-        """Generate all raw K8s manifests. Returns dict of relative_path -> content."""
+    @staticmethod
+    def _check_latest_tag(files: dict[str, str]) -> list[str]:
+        """Find any image references using the ``latest`` tag."""
+        locations: list[str] = []
+        for filename, content in files.items():
+            for match in _LATEST_TAG_PATTERN.finditer(content):
+                line_num = content[:match.start()].count("\n") + 1
+                locations.append(f"{filename}:{line_num}")
+        return locations
+
+    def generate_all(
+        self,
+        app_name: str = "ninja-api",
+        port: str = "8000",
+        *,
+        allow_placeholder_creds: bool = False,
+    ) -> dict[str, str]:
+        """Generate all raw K8s manifests. Returns dict of relative_path -> content.
+
+        Args:
+            app_name: The application deployment name.
+            port: Container port to expose.
+            allow_placeholder_creds: If ``True``, skip the hard error when placeholder
+                credentials (``changeme``) are detected.  Intended only for local
+                development.
+
+        Raises:
+            PlaceholderCredentialError: If placeholder credentials are detected and
+                *allow_placeholder_creds* is ``False``.
+        """
         files: dict[str, str] = {}
         files["deployment.yaml"] = self.generate_deployment(app_name, port)
         files["service.yaml"] = self.generate_service(app_name, port)
@@ -127,13 +216,37 @@ class K8sGenerator:
         for name, content in self.generate_infra_deployments().items():
             files[f"infra/{name}"] = content
 
-        self._warn_placeholder_credentials(files)
+        # Validate: placeholder credentials
+        cred_locations = self._check_placeholder_credentials(files)
+        if cred_locations:
+            msg = (
+                "Generated manifests contain placeholder credentials ('changeme') "
+                f"that MUST be replaced before deployment: {', '.join(cred_locations)}"
+            )
+            if allow_placeholder_creds:
+                logger.warning(msg)
+            else:
+                raise PlaceholderCredentialError(msg)
+
+        # Validate: 'latest' tags
+        tag_locations = self._check_latest_tag(files)
+        if tag_locations:
+            logger.warning(
+                "Generated manifests reference 'latest' image tag at: %s. "
+                "Pin to a specific version for production use.",
+                ", ".join(tag_locations),
+            )
+
         return files
 
-    def write_manifests(self, output_dir: Path) -> list[Path]:
+    def write_manifests(
+        self, output_dir: Path, *, allow_placeholder_creds: bool = False,
+    ) -> list[Path]:
         """Write all K8s manifests to disk, return list of written paths."""
         written: list[Path] = []
-        for rel_path, content in self.generate_all().items():
+        for rel_path, content in self.generate_all(
+            allow_placeholder_creds=allow_placeholder_creds,
+        ).items():
             full_path = output_dir / rel_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(content)
