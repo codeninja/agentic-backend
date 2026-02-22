@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from ninja_core.schema.entity import EntitySchema
 
@@ -17,19 +18,61 @@ from ninja_persistence.exceptions import (
 logger = logging.getLogger(__name__)
 
 
+@runtime_checkable
+class VectorSidecar(Protocol):
+    """Minimal protocol for a vector sidecar repository."""
+
+    async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]: ...
+    async def upsert_embedding(self, id: str, embedding: list[float]) -> None: ...
+
+
 class MongoAdapter:
     """Async MongoDB adapter backed by Motor.
 
     Implements the Repository protocol for document databases.
 
+    Supports two vector search modes controlled by ``vector_mode``:
+
+    - ``"native"``: Uses MongoDB Atlas Vector Search via the ``$vectorSearch``
+      aggregation stage.  Embeddings are stored inline in each document under
+      the ``_embedding`` field, and an Atlas Search index must exist on the
+      collection.
+    - ``"sidecar"`` (default): Delegates semantic search and embedding storage
+      to an external vector adapter (Chroma/Milvus) passed as ``vector_sidecar``.
+
     Requires the ``motor`` optional dependency:
         pip install ninja-persistence[mongo]
     """
 
-    def __init__(self, entity: EntitySchema, database: Any = None) -> None:
+    def __init__(
+        self,
+        entity: EntitySchema,
+        database: Any = None,
+        *,
+        vector_mode: str = "sidecar",
+        vector_sidecar: VectorSidecar | None = None,
+        embedding_dimensions: int = 1536,
+        vector_index_name: str = "vector_index",
+        embedding_field: str = "_embedding",
+    ) -> None:
         self._entity = entity
         self._database = database
         self._collection_name = entity.collection_name or entity.name.lower()
+        self._vector_mode = vector_mode
+        self._vector_sidecar = vector_sidecar
+        self._embedding_dimensions = embedding_dimensions
+        self._vector_index_name = vector_index_name
+        self._embedding_field = embedding_field
+
+    @property
+    def has_native_vector(self) -> bool:
+        """True when vector_mode is 'native' (Atlas Vector Search)."""
+        return self._vector_mode == "native"
+
+    @property
+    def has_vector_support(self) -> bool:
+        """True when either native Atlas Vector Search or a sidecar is configured."""
+        return self._vector_mode == "native" or self._vector_sidecar is not None
 
     def _get_collection(self) -> Any:
         """Return the Motor collection, raising if no database is configured."""
@@ -134,7 +177,9 @@ class MongoAdapter:
                     cause=exc,
                 ) from exc
             if _is_connection_error(exc):
-                logger.error("Mongo update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Mongo update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="update",
@@ -157,7 +202,9 @@ class MongoAdapter:
             return result.deleted_count > 0
         except Exception as exc:
             if _is_connection_error(exc):
-                logger.error("Mongo delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Mongo delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="delete",
@@ -172,27 +219,221 @@ class MongoAdapter:
                 cause=exc,
             ) from exc
 
-    async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        """Semantic search is not natively supported in MongoDB.
+    # -- Semantic / Vector operations -----------------------------------------
 
-        Raises ``NotImplementedError`` directing callers to configure a vector
-        sidecar (Chroma/Milvus) for the entity.
+    async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Perform semantic (vector similarity) search.
+
+        Uses Atlas Vector Search ``$vectorSearch`` aggregation when
+        ``vector_mode='native'``, otherwise delegates to the configured
+        ``vector_sidecar``.
         """
+        if self._vector_mode == "native":
+            return await self._atlas_vector_search(query, limit)
+        if self._vector_sidecar is not None:
+            return await self._vector_sidecar.search_semantic(query, limit)
         raise NotImplementedError(
             "Semantic search not available for MongoDB adapter. "
-            "Configure a vector sidecar (Chroma/Milvus) for this entity to enable semantic search."
+            "Configure a vector sidecar (Chroma/Milvus) or enable Atlas Vector Search (vector_mode='native')."
         )
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
-        """Embedding storage is not natively supported in MongoDB.
+        """Insert or update the embedding vector for a document.
 
-        Raises ``NotImplementedError`` directing callers to configure a vector
-        sidecar (Chroma/Milvus) for the entity.
+        In native mode, stores the embedding inline in the document under
+        the configured ``embedding_field``.  In sidecar mode, delegates to
+        the ``vector_sidecar``.  On sidecar failure, logs a warning but does
+        not raise — best-effort consistency.
         """
+        if self._vector_mode == "native":
+            await self._atlas_upsert_embedding(id, embedding)
+            return
+        if self._vector_sidecar is not None:
+            try:
+                await self._vector_sidecar.upsert_embedding(id, embedding)
+            except Exception:
+                logger.warning(
+                    "Sidecar upsert_embedding failed for %s (id=%s); primary store unaffected.",
+                    self._entity.name,
+                    id,
+                    exc_info=True,
+                )
+            return
         raise NotImplementedError(
             "Embedding storage not available for MongoDB adapter. "
-            "Configure a vector sidecar (Chroma/Milvus) for this entity to manage embeddings."
+            "Configure a vector sidecar (Chroma/Milvus) or enable Atlas Vector Search (vector_mode='native')."
         )
+
+    # -- Atlas Vector Search internals ----------------------------------------
+
+    async def _atlas_upsert_embedding(self, id: str, embedding: list[float]) -> None:
+        """Store an embedding inline in the document for Atlas Vector Search."""
+        coll = self._get_collection()
+        try:
+            await coll.update_one(
+                {"_id": id},
+                {"$set": {self._embedding_field: embedding}},
+                upsert=True,
+            )
+        except Exception as exc:
+            if _is_connection_error(exc):
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="upsert_embedding",
+                    detail="Database connection failed during embedding upsert.",
+                    cause=exc,
+                ) from exc
+            logger.error(
+                "Atlas upsert_embedding failed for %s (id=%s): %s",
+                self._entity.name,
+                id,
+                type(exc).__name__,
+            )
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="upsert_embedding",
+                detail="Failed to upsert embedding in MongoDB.",
+                cause=exc,
+            ) from exc
+
+    async def _atlas_vector_search(self, query: str, limit: int) -> list[dict[str, Any]]:
+        """Search using Atlas Vector Search ``$vectorSearch`` aggregation stage.
+
+        ``query`` must be a JSON-encoded list of floats (the embedding vector).
+        Callers should pre-embed text queries via the model layer.
+        """
+        try:
+            query_vec = json.loads(query) if isinstance(query, str) else query
+            if not isinstance(query_vec, list):
+                raise ValueError("Expected a list of floats")
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="search_semantic",
+                detail=(
+                    "Atlas Vector Search requires an embedding vector (JSON list of floats). "
+                    "Pre-embed the text query via the model layer before calling search_semantic()."
+                ),
+                cause=exc,
+            ) from exc
+
+        coll = self._get_collection()
+        pipeline = [
+            {
+                "$vectorSearch": {
+                    "index": self._vector_index_name,
+                    "path": self._embedding_field,
+                    "queryVector": query_vec,
+                    "numCandidates": limit * 10,
+                    "limit": limit,
+                }
+            },
+            {
+                "$addFields": {
+                    "_score": {"$meta": "vectorSearchScore"},
+                }
+            },
+        ]
+        try:
+            results: list[dict[str, Any]] = []
+            async for doc in coll.aggregate(pipeline):
+                results.append(dict(doc))
+            return results
+        except Exception as exc:
+            if _is_connection_error(exc):
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="search_semantic",
+                    detail="Database connection failed during vector search.",
+                    cause=exc,
+                ) from exc
+            logger.error(
+                "Atlas vector search failed for %s: %s",
+                self._entity.name,
+                type(exc).__name__,
+            )
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="search_semantic",
+                detail="Atlas Vector Search query failed.",
+                cause=exc,
+            ) from exc
+
+    # -- Catch-up re-index utility --------------------------------------------
+
+    async def reindex_missing_embeddings(
+        self,
+        embed_fn: Any,
+        text_field: str = "name",
+        batch_size: int = 100,
+    ) -> int:
+        """Re-index documents that are missing embeddings.
+
+        In native mode, scans for documents where the embedding field is null
+        or missing.  In sidecar mode, fetches all documents and upserts
+        embeddings for each (the sidecar handles deduplication).
+
+        Args:
+            embed_fn: An async callable ``(str) -> list[float]`` that converts
+                text to an embedding vector.
+            text_field: The entity field to embed (default ``"name"``).
+            batch_size: Number of documents to process per batch.
+
+        Returns:
+            The count of documents that were re-indexed.
+        """
+        if not self.has_vector_support:
+            raise NotImplementedError(
+                "Cannot reindex: no vector backend configured. "
+                "Enable Atlas Vector Search (vector_mode='native') or provide a vector_sidecar."
+            )
+
+        reindexed = 0
+
+        if self._vector_mode == "native":
+            coll = self._get_collection()
+            try:
+                cursor = coll.find(
+                    {"$or": [{self._embedding_field: None}, {self._embedding_field: {"$exists": False}}]}
+                ).limit(batch_size)
+                async for doc in cursor:
+                    doc_id = doc.get("_id")
+                    if doc_id is None:
+                        continue
+                    text = str(doc.get(text_field, ""))
+                    if not text:
+                        continue
+                    embedding = await embed_fn(text)
+                    await self.upsert_embedding(str(doc_id), embedding)
+                    reindexed += 1
+            except Exception as exc:
+                if _is_connection_error(exc):
+                    raise ConnectionFailedError(
+                        entity_name=self._entity.name,
+                        operation="reindex_missing_embeddings",
+                        detail="Database connection failed during reindex scan.",
+                        cause=exc,
+                    ) from exc
+                raise QueryError(
+                    entity_name=self._entity.name,
+                    operation="reindex_missing_embeddings",
+                    detail="Failed to scan for missing embeddings.",
+                    cause=exc,
+                ) from exc
+        elif self._vector_sidecar is not None:
+            records = await self.find_many(limit=batch_size)
+            for record in records:
+                doc_id = record.get("_id")
+                if doc_id is None:
+                    continue
+                text = str(record.get(text_field, ""))
+                if not text:
+                    continue
+                embedding = await embed_fn(text)
+                await self.upsert_embedding(str(doc_id), embedding)
+                reindexed += 1
+
+        return reindexed
 
 
 def _is_duplicate_key_error(exc: Exception) -> bool:
