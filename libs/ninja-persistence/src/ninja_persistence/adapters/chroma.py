@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -21,6 +22,8 @@ class ChromaVectorAdapter:
     """Chroma-backed vector store adapter.
 
     Implements the Repository protocol with native semantic search support.
+    All synchronous Chroma client calls are offloaded to a thread via
+    ``asyncio.to_thread`` so that the asyncio event loop is never blocked.
 
     Requires the ``chromadb`` optional dependency:
         pip install ninja-persistence[chroma]
@@ -31,14 +34,20 @@ class ChromaVectorAdapter:
         self._client = client
         self._collection_name = entity.collection_name or entity.name.lower()
 
-    def _get_collection(self) -> Any:
-        """Return the Chroma collection, raising if no client is configured."""
+    async def _get_collection(self) -> Any:
+        """Return the Chroma collection, raising if no client is configured.
+
+        The synchronous ``get_or_create_collection`` call is offloaded to a
+        thread so it does not block the event loop.
+        """
         if self._client is None:
             raise RuntimeError(
                 "ChromaVectorAdapter requires a Chroma client instance. Pass it via the `client` constructor parameter."
             )
         try:
-            return self._client.get_or_create_collection(name=self._collection_name)
+            return await asyncio.to_thread(
+                self._client.get_or_create_collection, name=self._collection_name
+            )
         except Exception as exc:
             logger.error("Chroma collection access failed for %s: %s", self._entity.name, type(exc).__name__)
             raise ConnectionFailedError(
@@ -51,8 +60,8 @@ class ChromaVectorAdapter:
     async def find_by_id(self, id: str) -> dict[str, Any] | None:
         """Retrieve a single record by primary key."""
         try:
-            coll = self._get_collection()
-            result = coll.get(ids=[id])
+            coll = await self._get_collection()
+            result = await asyncio.to_thread(coll.get, ids=[id])
         except PersistenceError:
             raise
         except Exception as exc:
@@ -75,11 +84,11 @@ class ChromaVectorAdapter:
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters."""
         try:
-            coll = self._get_collection()
+            coll = await self._get_collection()
             kwargs: dict[str, Any] = {"limit": limit}
             if filters and "where" in filters:
                 kwargs["where"] = filters["where"]
-            result = coll.get(**kwargs)
+            result = await asyncio.to_thread(coll.get, **kwargs)
         except PersistenceError:
             raise
         except Exception as exc:
@@ -103,7 +112,7 @@ class ChromaVectorAdapter:
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """Insert a new record and return the created entity."""
         try:
-            coll = self._get_collection()
+            coll = await self._get_collection()
             doc_id = data.get("id", "")
             document = data.get("document", "")
             metadata = {k: v for k, v in data.items() if k not in ("id", "document", "embedding")}
@@ -116,7 +125,7 @@ class ChromaVectorAdapter:
                 kwargs["metadatas"] = [metadata]
             if embedding:
                 kwargs["embeddings"] = [embedding]
-            coll.add(**kwargs)
+            await asyncio.to_thread(coll.add, **kwargs)
         except PersistenceError:
             raise
         except Exception as exc:
@@ -140,7 +149,7 @@ class ChromaVectorAdapter:
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
         """Apply a partial update to an existing record."""
         try:
-            coll = self._get_collection()
+            coll = await self._get_collection()
             kwargs: dict[str, Any] = {"ids": [id]}
             if "document" in patch:
                 kwargs["documents"] = [patch["document"]]
@@ -149,7 +158,7 @@ class ChromaVectorAdapter:
                 kwargs["metadatas"] = [metadata]
             if "embedding" in patch:
                 kwargs["embeddings"] = [patch["embedding"]]
-            coll.update(**kwargs)
+            await asyncio.to_thread(coll.update, **kwargs)
         except PersistenceError:
             raise
         except Exception as exc:
@@ -165,8 +174,8 @@ class ChromaVectorAdapter:
     async def delete(self, id: str) -> bool:
         """Delete a record by primary key. Returns True if deleted."""
         try:
-            coll = self._get_collection()
-            coll.delete(ids=[id])
+            coll = await self._get_collection()
+            await asyncio.to_thread(coll.delete, ids=[id])
             return True
         except PersistenceError:
             raise
@@ -182,8 +191,8 @@ class ChromaVectorAdapter:
     async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Perform semantic (vector similarity) search."""
         try:
-            coll = self._get_collection()
-            result = coll.query(query_texts=[query], n_results=limit)
+            coll = await self._get_collection()
+            result = await asyncio.to_thread(coll.query, query_texts=[query], n_results=limit)
         except PersistenceError:
             raise
         except Exception as exc:
@@ -210,8 +219,8 @@ class ChromaVectorAdapter:
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
         """Insert or update the embedding vector for a record."""
         try:
-            coll = self._get_collection()
-            coll.update(ids=[id], embeddings=[embedding])
+            coll = await self._get_collection()
+            await asyncio.to_thread(coll.update, ids=[id], embeddings=[embedding])
         except PersistenceError:
             raise
         except Exception as exc:
