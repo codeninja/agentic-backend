@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -59,8 +58,7 @@ def create_auth_router(
 
     # Build OAuth2Strategy instances for each configured provider
     _strategies: dict[str, OAuth2Strategy] = {
-        name: OAuth2Strategy(name, provider_config)
-        for name, provider_config in config.oauth2_providers.items()
+        name: OAuth2Strategy(name, provider_config) for name, provider_config in config.oauth2_providers.items()
     }
 
     def _get_strategy(provider: str) -> OAuth2Strategy:
