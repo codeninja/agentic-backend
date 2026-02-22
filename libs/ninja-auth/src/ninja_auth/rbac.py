@@ -17,10 +17,13 @@ Built-in roles:
 
 from __future__ import annotations
 
+import logging
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -156,7 +159,26 @@ class RBACPolicy:
         """Check whether *permissions* grant *action* on *domain* (optionally *entity*)."""
         scope = f"{domain}.{entity}" if entity else domain
         required = f"{action}:{scope}"
-        return any(permission_matches(grant, required) for grant in permissions)
+        allowed = any(permission_matches(grant, required) for grant in permissions)
+        if not allowed:
+            logger.warning(
+                "Permission denied: action=%s domain=%s entity=%s granted_permissions=%s",
+                action, domain, entity, permissions,
+                extra={
+                    "event": "permission_denied",
+                    "action": action,
+                    "domain": domain,
+                    "entity": entity,
+                    "granted_permissions": permissions,
+                },
+            )
+        else:
+            logger.debug(
+                "Permission check passed: action=%s domain=%s entity=%s",
+                action, domain, entity,
+                extra={"event": "permission_granted", "action": action, "domain": domain, "entity": entity},
+            )
+        return allowed
 
     def check(self, permissions: list[str], action: str, domain: str, entity: str | None = None) -> None:
         """Like :meth:`is_allowed` but raises :class:`PermissionError` on denial."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import secrets
 from typing import Any
 from urllib.parse import urlencode
@@ -12,6 +13,8 @@ import httpx
 from ninja_auth.config import OAuth2ProviderConfig
 from ninja_auth.context import UserContext
 from ninja_auth.errors import AuthenticationError
+
+logger = logging.getLogger(__name__)
 
 # Well-known provider presets
 GOOGLE_PRESET = OAuth2ProviderConfig(
@@ -65,31 +68,47 @@ class OAuth2Strategy:
 
     async def exchange_code(self, code: str) -> dict[str, Any]:
         """Exchange an authorization code for tokens."""
-        async with httpx.AsyncClient() as client:
-            headers = {"Accept": "application/json"}
-            resp = await client.post(
-                self.config.token_url,
-                data={
-                    "grant_type": "authorization_code",
-                    "client_id": self.config.client_id,
-                    "client_secret": self.config.client_secret,
-                    "code": code,
-                    "redirect_uri": self.config.redirect_uri,
-                },
-                headers=headers,
+        try:
+            async with httpx.AsyncClient() as client:
+                headers = {"Accept": "application/json"}
+                resp = await client.post(
+                    self.config.token_url,
+                    data={
+                        "grant_type": "authorization_code",
+                        "client_id": self.config.client_id,
+                        "client_secret": self.config.client_secret,
+                        "code": code,
+                        "redirect_uri": self.config.redirect_uri,
+                    },
+                    headers=headers,
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "OAuth2 code exchange failed: provider=%s status_code=%s",
+                self.provider_name, exc.response.status_code,
+                extra={"event": "oauth2_exchange_failed", "provider": self.provider_name, "status_code": exc.response.status_code},
             )
-            resp.raise_for_status()
-            return resp.json()
+            raise
 
     async def get_userinfo(self, access_token: str) -> dict[str, Any]:
         """Fetch user profile from the provider's userinfo endpoint."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                self.config.userinfo_url,
-                headers={"Authorization": f"Bearer {access_token}"},
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    self.config.userinfo_url,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.HTTPStatusError as exc:
+            logger.error(
+                "OAuth2 userinfo fetch failed: provider=%s status_code=%s",
+                self.provider_name, exc.response.status_code,
+                extra={"event": "oauth2_userinfo_failed", "provider": self.provider_name, "status_code": exc.response.status_code},
             )
-            resp.raise_for_status()
-            return resp.json()
+            raise
 
     async def authenticate_with_code(
         self, code: str, *, expected_state: str, received_state: str
@@ -112,6 +131,11 @@ class OAuth2Strategy:
                 are empty.
         """
         if not expected_state or not received_state:
+            logger.error(
+                "OAuth2 state validation failed: provider=%s reason=missing_state",
+                self.provider_name,
+                extra={"event": "oauth2_csrf_failure", "provider": self.provider_name, "reason": "missing_state"},
+            )
             raise AuthenticationError(
                 "OAuth2 state validation requires both expected_state and "
                 "received_state. Ensure the state token from "
@@ -119,6 +143,11 @@ class OAuth2Strategy:
                 "forwarded on callback."
             )
         if not hmac.compare_digest(expected_state, received_state):
+            logger.error(
+                "OAuth2 state mismatch: provider=%s",
+                self.provider_name,
+                extra={"event": "oauth2_csrf_failure", "provider": self.provider_name, "reason": "state_mismatch"},
+            )
             raise AuthenticationError(
                 "OAuth2 state mismatch — possible CSRF attack."
             )
@@ -130,6 +159,12 @@ class OAuth2Strategy:
         # Normalize across providers
         user_id = str(userinfo.get("sub") or userinfo.get("id", ""))
         email = userinfo.get("email")
+
+        logger.info(
+            "OAuth2 login successful: provider=%s user_id=%s email=%s",
+            self.provider_name, user_id, email,
+            extra={"event": "oauth2_login_success", "provider": self.provider_name, "user_id": user_id, "email": email},
+        )
 
         return UserContext(
             user_id=user_id,

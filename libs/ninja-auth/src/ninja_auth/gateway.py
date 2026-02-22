@@ -80,6 +80,19 @@ class AuthGateway(BaseHTTPMiddleware):
         # Try each strategy in order
         user_ctx = await self._try_authenticate(request)
 
+        if user_ctx is not None:
+            logger.info(
+                "Authentication successful: user_id=%s provider=%s ip=%s path=%s",
+                user_ctx.user_id, user_ctx.provider, client_ip, request.url.path,
+                extra={
+                    "event": "auth_success",
+                    "user_id": user_ctx.user_id,
+                    "provider": user_ctx.provider,
+                    "ip": client_ip,
+                    "path": str(request.url.path),
+                },
+            )
+
         if user_ctx is None:
             self._rate_limiter.record_attempt(client_ip, success=False)
             logger.warning(

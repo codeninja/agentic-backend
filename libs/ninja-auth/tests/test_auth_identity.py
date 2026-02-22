@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import jwt
+import pytest
 from ninja_auth.config import IdentityConfig
 from ninja_auth.strategies.identity import IdentityStrategy
 from ninja_auth.user_store import InMemoryUserStore, UserStore
@@ -152,3 +154,79 @@ def test_in_memory_store_warns(caplog: Any) -> None:
         InMemoryUserStore()
 
     assert any("in-memory user store" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Audit logging tests
+# ---------------------------------------------------------------------------
+
+IDENTITY_LOGGER = "ninja_auth.strategies.identity"
+
+
+def test_login_failure_logs_warning_without_password(caplog: pytest.LogCaptureFixture) -> None:
+    """Failed login emits WARNING and does NOT contain the password."""
+    strategy = _make_strategy()
+    strategy.register("user@example.com", "correct-password")
+
+    with caplog.at_level(logging.WARNING, logger=IDENTITY_LOGGER):
+        strategy.login("user@example.com", "wrong-password-secret")
+
+    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and r.name == IDENTITY_LOGGER]
+    assert len(warning_records) >= 1
+    assert "user@example.com" in warning_records[0].message
+    # Password must NEVER appear in the log
+    full_output = " ".join(r.message for r in caplog.records)
+    assert "wrong-password-secret" not in full_output
+    assert "correct-password" not in full_output
+
+
+def test_login_failure_unknown_email_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Failed login for unknown email emits WARNING."""
+    strategy = _make_strategy()
+
+    with caplog.at_level(logging.WARNING, logger=IDENTITY_LOGGER):
+        strategy.login("nobody@example.com", "some-pass")
+
+    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and r.name == IDENTITY_LOGGER]
+    assert len(warning_records) >= 1
+    assert "nobody@example.com" in warning_records[0].message
+
+
+def test_successful_login_logs_info(caplog: pytest.LogCaptureFixture) -> None:
+    """Successful login emits INFO with email."""
+    strategy = _make_strategy()
+    strategy.register("user@example.com", "password123")
+
+    with caplog.at_level(logging.INFO, logger=IDENTITY_LOGGER):
+        ctx = strategy.login("user@example.com", "password123")
+
+    assert ctx is not None
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO and "Login successful" in r.message]
+    assert len(info_records) == 1
+    assert "user@example.com" in info_records[0].message
+
+
+def test_register_logs_info(caplog: pytest.LogCaptureFixture) -> None:
+    """User registration emits INFO with email and user_id."""
+    strategy = _make_strategy()
+
+    with caplog.at_level(logging.INFO, logger=IDENTITY_LOGGER):
+        ctx = strategy.register("newuser@example.com", "pass123", roles=["editor"])
+
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO and "registered" in r.message]
+    assert len(info_records) == 1
+    assert "newuser@example.com" in info_records[0].message
+    assert ctx.user_id in info_records[0].message
+
+
+def test_issue_token_logs_info(caplog: pytest.LogCaptureFixture) -> None:
+    """Token issuance emits INFO with user_id."""
+    strategy = _make_strategy()
+    ctx = strategy.register("user@example.com", "pass")
+
+    with caplog.at_level(logging.INFO, logger=IDENTITY_LOGGER):
+        strategy.issue_token(ctx)
+
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO and "Token issued" in r.message]
+    assert len(info_records) == 1
+    assert ctx.user_id in info_records[0].message
