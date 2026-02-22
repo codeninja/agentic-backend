@@ -13,6 +13,11 @@ from ninja_core.schema.project import AgenticSchema
 logger = logging.getLogger(__name__)
 
 _PLACEHOLDER_PATTERN = re.compile(r"changeme", re.IGNORECASE)
+_LATEST_TAG_PATTERN = re.compile(r":\s*[\"']?latest[\"']?\s*$", re.MULTILINE)
+
+
+class PlaceholderCredentialError(ValueError):
+    """Raised when generated manifests still contain placeholder credentials."""
 
 # Maps ASD storage engines to Helm dependency charts
 INFRA_CHART_MAP: dict[StorageEngine, dict[str, str]] = {
@@ -130,23 +135,40 @@ class HelmGenerator:
         return template.render(project_name=self.schema.project_name)
 
     @staticmethod
-    def _warn_placeholder_credentials(files: dict[str, str]) -> list[str]:
-        """Emit warnings for any placeholder credentials found in generated manifests."""
-        warnings: list[str] = []
+    def _check_placeholder_credentials(files: dict[str, str]) -> list[str]:
+        """Find any placeholder credentials ('changeme') in generated manifests.
+
+        Returns a list of ``filename:line`` location strings.
+        """
+        locations: list[str] = []
         for filename, content in files.items():
             for match in _PLACEHOLDER_PATTERN.finditer(content):
                 line_num = content[:match.start()].count("\n") + 1
-                warnings.append(f"{filename}:{line_num}")
-        if warnings:
-            logger.warning(
-                "Generated Helm values contain placeholder credentials ('changeme') "
-                "that MUST be replaced before deployment: %s",
-                ", ".join(warnings),
-            )
-        return warnings
+                locations.append(f"{filename}:{line_num}")
+        return locations
 
-    def generate_all(self) -> dict[str, str]:
-        """Generate a complete Helm chart as a dict of relative_path -> content."""
+    @staticmethod
+    def _check_latest_tag(files: dict[str, str]) -> list[str]:
+        """Find any image references using the ``latest`` tag."""
+        locations: list[str] = []
+        for filename, content in files.items():
+            for match in _LATEST_TAG_PATTERN.finditer(content):
+                line_num = content[:match.start()].count("\n") + 1
+                locations.append(f"{filename}:{line_num}")
+        return locations
+
+    def generate_all(self, *, allow_placeholder_creds: bool = False) -> dict[str, str]:
+        """Generate a complete Helm chart as a dict of relative_path -> content.
+
+        Args:
+            allow_placeholder_creds: If ``True``, skip the hard error when placeholder
+                credentials (``changeme``) are detected.  Intended only for local
+                development.
+
+        Raises:
+            PlaceholderCredentialError: If placeholder credentials are detected and
+                *allow_placeholder_creds* is ``False``.
+        """
         chart_name = self.schema.project_name
         files: dict[str, str] = {}
         files[f"{chart_name}/Chart.yaml"] = self.generate_chart_yaml()
@@ -159,13 +181,37 @@ class HelmGenerator:
         # Default values.yaml = dev
         files[f"{chart_name}/values.yaml"] = self.generate_values_yaml("dev")
 
-        self._warn_placeholder_credentials(files)
+        # Validate: placeholder credentials
+        cred_locations = self._check_placeholder_credentials(files)
+        if cred_locations:
+            msg = (
+                "Generated Helm values contain placeholder credentials ('changeme') "
+                f"that MUST be replaced before deployment: {', '.join(cred_locations)}"
+            )
+            if allow_placeholder_creds:
+                logger.warning(msg)
+            else:
+                raise PlaceholderCredentialError(msg)
+
+        # Validate: 'latest' tags
+        tag_locations = self._check_latest_tag(files)
+        if tag_locations:
+            logger.warning(
+                "Generated Helm chart references 'latest' image tag at: %s. "
+                "Pin to a specific version for production use.",
+                ", ".join(tag_locations),
+            )
+
         return files
 
-    def write_chart(self, output_dir: Path) -> list[Path]:
+    def write_chart(
+        self, output_dir: Path, *, allow_placeholder_creds: bool = False,
+    ) -> list[Path]:
         """Write the full Helm chart to disk, return list of written paths."""
         written: list[Path] = []
-        for rel_path, content in self.generate_all().items():
+        for rel_path, content in self.generate_all(
+            allow_placeholder_creds=allow_placeholder_creds,
+        ).items():
             full_path = output_dir / rel_path
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(content)

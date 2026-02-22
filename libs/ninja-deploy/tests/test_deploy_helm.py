@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 import yaml
 from ninja_core.schema.project import AgenticSchema
-from ninja_deploy.helm_generator import ENV_PROFILES, INFRA_CHART_MAP, HelmGenerator
+from ninja_deploy.helm_generator import ENV_PROFILES, INFRA_CHART_MAP, HelmGenerator, PlaceholderCredentialError
 
 
 class TestHelmGeneratorChart:
@@ -115,6 +116,19 @@ class TestHelmGeneratorValues:
         assert parsed["resources"]["requests"]["cpu"] == "500m"
         assert parsed["resources"]["limits"]["memory"] == "2Gi"
 
+    def test_values_no_hardcoded_changeme(self, sample_asd: AgenticSchema):
+        """Values should use env-var placeholders instead of 'changeme'."""
+        gen = HelmGenerator(sample_asd)
+        values = gen.generate_values_yaml("dev")
+        assert "changeme" not in values
+
+    def test_values_image_tag_not_latest(self, sample_asd: AgenticSchema):
+        """Image tag must not default to 'latest'."""
+        gen = HelmGenerator(sample_asd)
+        values = gen.generate_values_yaml("dev")
+        parsed = yaml.safe_load(values)
+        assert parsed["image"]["tag"] != "latest"
+
 
 class TestHelmGeneratorTemplates:
     def test_deployment_template_renders(self, sample_asd: AgenticSchema):
@@ -138,6 +152,24 @@ class TestHelmGeneratorTemplates:
         assert "test-shop.fullname" in helpers
         assert "test-shop.labels" in helpers
         assert "test-shop.selectorLabels" in helpers
+
+
+class TestHelmDeploymentSecurityContext:
+    """Tests for pod security contexts in Helm deployment template."""
+
+    def test_pod_security_context(self, sample_asd: AgenticSchema):
+        gen = HelmGenerator(sample_asd)
+        deployment = gen.generate_deployment_template()
+        assert "runAsNonRoot: true" in deployment
+        assert "runAsUser: 1000" in deployment
+
+    def test_container_security_context(self, sample_asd: AgenticSchema):
+        gen = HelmGenerator(sample_asd)
+        deployment = gen.generate_deployment_template()
+        assert "allowPrivilegeEscalation: false" in deployment
+        assert "readOnlyRootFilesystem: true" in deployment
+        assert "drop:" in deployment
+        assert "- ALL" in deployment
 
 
 class TestHelmGeneratorGenerateAll:
@@ -189,24 +221,38 @@ class TestHelmInfraMapping:
             assert "memory_limit" in profile
 
 
-class TestHelmPlaceholderWarnings:
-    def test_generate_all_warns_about_placeholder_credentials(self, sample_asd, caplog):
-        import logging
+class TestHelmPlaceholderCredentials:
+    def test_generate_all_succeeds_without_changeme(self, sample_asd):
+        """Templates now use env-var placeholders, so generate_all() should succeed."""
         gen = HelmGenerator(sample_asd)
-        with caplog.at_level(logging.WARNING):
-            gen.generate_all()
-        assert "changeme" in caplog.text.lower()
-        assert "placeholder" in caplog.text.lower()
+        files = gen.generate_all()
+        assert len(files) > 0
 
-    def test_warn_placeholder_credentials_returns_locations(self, sample_asd):
-        gen = HelmGenerator(sample_asd)
-        values_content = gen.generate_values_yaml("dev")
-        files = {"values.yaml": values_content}
-        warnings = HelmGenerator._warn_placeholder_credentials(files)
-        assert len(warnings) > 0
-        assert any("values.yaml" in w for w in warnings)
+    def test_check_placeholder_detects_changeme(self):
+        files = {"values.yaml": "postgresPassword: changeme\nrootPassword: changeme\n"}
+        locations = HelmGenerator._check_placeholder_credentials(files)
+        assert len(locations) == 2
 
-    def test_no_warnings_when_no_placeholders(self, sample_asd):
+    def test_no_warnings_when_no_placeholders(self):
         files = {"values.yaml": "postgresql:\n  auth:\n    postgresPassword: real-secret\n"}
-        warnings = HelmGenerator._warn_placeholder_credentials(files)
-        assert len(warnings) == 0
+        locations = HelmGenerator._check_placeholder_credentials(files)
+        assert len(locations) == 0
+
+    def test_values_template_no_changeme(self, sample_asd):
+        """Verify values.yaml no longer contains 'changeme'."""
+        gen = HelmGenerator(sample_asd)
+        for env in ("dev", "staging", "prod"):
+            values = gen.generate_values_yaml(env)
+            assert "changeme" not in values, f"{env} values still contain changeme"
+
+
+class TestHelmLatestTagWarning:
+    def test_check_latest_tag_detects_latest(self):
+        files = {"values.yaml": '  tag: "latest"\n'}
+        locations = HelmGenerator._check_latest_tag(files)
+        assert len(locations) > 0
+
+    def test_check_latest_tag_clean(self):
+        files = {"values.yaml": '  tag: "v1.2.3"\n'}
+        locations = HelmGenerator._check_latest_tag(files)
+        assert len(locations) == 0

@@ -23,6 +23,7 @@ from ninja_core.schema.entity import (
 )
 from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
+from ninja_core.security import check_ssrf
 from ninja_introspect.engine import IntrospectionEngine
 
 _ALLOWED_DB_SCHEMES = {
@@ -273,8 +274,16 @@ def confirm_schema(workspace: SchemaWorkspace) -> str:
     return json.dumps(schema.model_dump(), indent=2)
 
 
-def _validate_connection_string(connection_string: str) -> str | None:
-    """Validate a connection string format. Returns an error message or None."""
+def _validate_connection_string(
+    connection_string: str, *, allow_private_hosts: bool = False,
+) -> str | None:
+    """Validate a connection string format. Returns an error message or None.
+
+    Args:
+        connection_string: The database connection URI to validate.
+        allow_private_hosts: If ``True``, skip SSRF checks for private/internal
+            network addresses.  Intended for legitimate local development only.
+    """
     parsed = urlparse(connection_string)
     scheme = parsed.scheme
     if not scheme:
@@ -294,6 +303,10 @@ def _validate_connection_string(connection_string: str) -> str | None:
                 f"Rejected SQLite URL '{connection_string}': "
                 "absolute paths via sqlite:////... are not allowed in this context."
             )
+    # SSRF protection — block private/reserved IP ranges
+    ssrf_error = check_ssrf(connection_string, allow_private_hosts=allow_private_hosts)
+    if ssrf_error:
+        return ssrf_error
     return None
 
 

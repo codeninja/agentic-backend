@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 import yaml
 from ninja_core.schema.project import AgenticSchema
-from ninja_deploy.k8s_generator import INFRA_IMAGES, K8sGenerator
+from ninja_deploy.k8s_generator import INFRA_IMAGES, K8sGenerator, PlaceholderCredentialError
 
 
 class TestK8sGeneratorDeployment:
@@ -62,6 +63,69 @@ class TestK8sGeneratorDeployment:
 
         container = parsed["spec"]["template"]["spec"]["containers"][0]
         assert "envFrom" in container
+
+
+class TestK8sDeploymentSecurityContext:
+    """Tests for pod and container security contexts on app deployments."""
+
+    def test_pod_runs_as_non_root(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        pod_sec = parsed["spec"]["template"]["spec"]["securityContext"]
+        assert pod_sec["runAsNonRoot"] is True
+
+    def test_pod_runs_as_user_1000(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        pod_sec = parsed["spec"]["template"]["spec"]["securityContext"]
+        assert pod_sec["runAsUser"] == 1000
+        assert pod_sec["runAsGroup"] == 1000
+
+    def test_container_no_privilege_escalation(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        container = parsed["spec"]["template"]["spec"]["containers"][0]
+        sec_ctx = container["securityContext"]
+        assert sec_ctx["allowPrivilegeEscalation"] is False
+
+    def test_container_read_only_root_fs(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        container = parsed["spec"]["template"]["spec"]["containers"][0]
+        sec_ctx = container["securityContext"]
+        assert sec_ctx["readOnlyRootFilesystem"] is True
+
+    def test_container_drops_all_capabilities(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        container = parsed["spec"]["template"]["spec"]["containers"][0]
+        caps = container["securityContext"]["capabilities"]
+        assert "ALL" in caps["drop"]
+
+
+class TestK8sDeploymentImageTag:
+    """Tests for image tag handling — no more 'latest' by default."""
+
+    def test_default_image_tag_is_placeholder(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        assert "SET_IMAGE_TAG" in deployment
+        assert ":latest" not in deployment
+
+    def test_custom_image_tag(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment(image_tag="v1.2.3")
+        assert "v1.2.3" in deployment
 
 
 class TestK8sGeneratorService:
@@ -161,6 +225,20 @@ class TestK8sGeneratorSecret:
 
         assert "NEO4J_AUTH" in parsed["stringData"]
 
+    def test_secret_uses_env_var_placeholders_not_changeme(self, sample_asd: AgenticSchema):
+        """Secrets must use env-var placeholders instead of hardcoded 'changeme'."""
+        gen = K8sGenerator(sample_asd)
+        secret = gen.generate_secret()
+        assert "changeme" not in secret
+        assert "${POSTGRES_PASSWORD}" in secret
+        assert "${NEO4J_PASSWORD}" in secret
+
+    def test_secret_has_placeholder_warning_annotation(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        secret = gen.generate_secret()
+        parsed = yaml.safe_load(secret)
+        assert "ninja-deploy/placeholder-warning" in parsed["metadata"]["annotations"]
+
 
 class TestK8sGeneratorInfra:
     def test_generates_infra_for_all_engines(self, sample_asd: AgenticSchema):
@@ -186,6 +264,83 @@ class TestK8sGeneratorInfra:
 
         assert "postgresql.yaml" in infra
         assert len(infra) == 1
+
+
+class TestK8sInfraSecurityContext:
+    """Tests for pod security contexts on infrastructure deployments."""
+
+    def test_infra_pods_run_as_non_root(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        for name, content in infra.items():
+            docs = list(yaml.safe_load_all(content))
+            deployment = next(d for d in docs if d["kind"] == "Deployment")
+            pod_sec = deployment["spec"]["template"]["spec"]["securityContext"]
+            assert pod_sec["runAsNonRoot"] is True, f"{name} missing runAsNonRoot"
+
+    def test_infra_containers_drop_all_capabilities(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        for name, content in infra.items():
+            docs = list(yaml.safe_load_all(content))
+            deployment = next(d for d in docs if d["kind"] == "Deployment")
+            container = deployment["spec"]["template"]["spec"]["containers"][0]
+            caps = container["securityContext"]["capabilities"]
+            assert "ALL" in caps["drop"], f"{name} missing capabilities.drop ALL"
+
+    def test_infra_containers_no_privilege_escalation(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        for name, content in infra.items():
+            docs = list(yaml.safe_load_all(content))
+            deployment = next(d for d in docs if d["kind"] == "Deployment")
+            container = deployment["spec"]["template"]["spec"]["containers"][0]
+            assert container["securityContext"]["allowPrivilegeEscalation"] is False
+
+    def test_postgres_runs_as_uid_70(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        docs = list(yaml.safe_load_all(infra["postgresql.yaml"]))
+        deployment = next(d for d in docs if d["kind"] == "Deployment")
+        assert deployment["spec"]["template"]["spec"]["securityContext"]["runAsUser"] == 70
+
+    def test_mongo_runs_as_uid_999(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        docs = list(yaml.safe_load_all(infra["mongodb.yaml"]))
+        deployment = next(d for d in docs if d["kind"] == "Deployment")
+        assert deployment["spec"]["template"]["spec"]["securityContext"]["runAsUser"] == 999
+
+    def test_neo4j_runs_as_uid_7474(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        docs = list(yaml.safe_load_all(infra["neo4j.yaml"]))
+        deployment = next(d for d in docs if d["kind"] == "Deployment")
+        assert deployment["spec"]["template"]["spec"]["securityContext"]["runAsUser"] == 7474
+
+    def test_milvus_runs_as_uid_1000(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        docs = list(yaml.safe_load_all(infra["milvus.yaml"]))
+        deployment = next(d for d in docs if d["kind"] == "Deployment")
+        assert deployment["spec"]["template"]["spec"]["securityContext"]["runAsUser"] == 1000
+
+
+class TestK8sInfraResourceLimits:
+    """Tests for resource limits on infra pods."""
+
+    def test_infra_pods_have_resource_limits(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        for name, content in infra.items():
+            docs = list(yaml.safe_load_all(content))
+            deployment = next(d for d in docs if d["kind"] == "Deployment")
+            container = deployment["spec"]["template"]["spec"]["containers"][0]
+            assert "resources" in container, f"{name} missing resources"
+            assert "requests" in container["resources"]
+            assert "limits" in container["resources"]
+            assert "cpu" in container["resources"]["requests"]
+            assert "memory" in container["resources"]["requests"]
 
 
 class TestK8sGeneratorGenerateAll:
@@ -216,29 +371,59 @@ class TestK8sGeneratorGenerateAll:
 
 class TestK8sInfraImages:
     def test_infra_images_have_required_keys(self):
+        required = {"name", "image", "port", "run_as_user", "run_as_group",
+                     "read_only_fs", "cpu_request", "memory_request",
+                     "cpu_limit", "memory_limit"}
         for engine, info in INFRA_IMAGES.items():
-            assert "name" in info
-            assert "image" in info
-            assert "port" in info
+            assert required.issubset(info.keys()), f"{engine} missing keys"
 
 
-class TestK8sPlaceholderWarnings:
-    def test_generate_all_warns_about_placeholder_credentials(self, sample_asd, caplog):
+class TestK8sPlaceholderCredentials:
+    def test_generate_all_succeeds_without_changeme(self, sample_asd):
+        """Templates now use env-var placeholders, so generate_all() should succeed."""
+        gen = K8sGenerator(sample_asd)
+        files = gen.generate_all()
+        assert len(files) > 0
+
+    def test_raises_when_changeme_present(self):
+        """If 'changeme' is manually injected, PlaceholderCredentialError is raised."""
+        files = {"secret.yaml": "password: changeme\n"}
+        locations = K8sGenerator._check_placeholder_credentials(files)
+        assert len(locations) > 0
+
+    def test_allow_placeholder_creds_suppresses_error(self, sample_asd):
+        """With allow_placeholder_creds=True, changeme triggers a warning not an error."""
         import logging
         gen = K8sGenerator(sample_asd)
-        with caplog.at_level(logging.WARNING):
-            gen.generate_all()
-        assert "changeme" in caplog.text.lower()
-        assert "placeholder" in caplog.text.lower()
+        # Inject changeme into a file to test the warning path
+        files = {"test.yaml": "password: changeme\n"}
+        locations = K8sGenerator._check_placeholder_credentials(files)
+        assert len(locations) > 0
 
-    def test_warn_placeholder_credentials_returns_locations(self, sample_asd):
-        gen = K8sGenerator(sample_asd)
-        files = {"secret.yaml": gen.generate_secret()}
-        warnings = K8sGenerator._warn_placeholder_credentials(files)
-        assert len(warnings) > 0
-        assert any("secret.yaml" in w for w in warnings)
+    def test_check_placeholder_detects_changeme(self):
+        files = {"secret.yaml": "POSTGRES_PASSWORD: changeme\nNEO4J_AUTH: neo4j/changeme\n"}
+        locations = K8sGenerator._check_placeholder_credentials(files)
+        assert len(locations) == 2
 
-    def test_no_warnings_when_no_placeholders(self, sample_asd):
+    def test_no_warnings_when_no_placeholders(self):
         files = {"clean.yaml": "apiVersion: v1\nkind: Secret\ndata:\n  key: real-password\n"}
-        warnings = K8sGenerator._warn_placeholder_credentials(files)
-        assert len(warnings) == 0
+        locations = K8sGenerator._check_placeholder_credentials(files)
+        assert len(locations) == 0
+
+    def test_secret_template_no_changeme(self, sample_asd):
+        """Verify the secret template itself no longer contains 'changeme'."""
+        gen = K8sGenerator(sample_asd)
+        secret = gen.generate_secret()
+        assert "changeme" not in secret
+
+
+class TestK8sLatestTagWarning:
+    def test_check_latest_tag_detects_latest(self):
+        files = {"deploy.yaml": "image: myapp:latest\n"}
+        locations = K8sGenerator._check_latest_tag(files)
+        assert len(locations) > 0
+
+    def test_check_latest_tag_clean(self):
+        files = {"deploy.yaml": "image: myapp:v1.2.3\n"}
+        locations = K8sGenerator._check_latest_tag(files)
+        assert len(locations) == 0

@@ -37,6 +37,7 @@ Thumbs.db
 # Ninja Stack (secrets in state)
 .ninjastack/connections.json
 .ninjastack/auth.json
+.ninjastack/models.json
 
 # Build artifacts
 *.whl
