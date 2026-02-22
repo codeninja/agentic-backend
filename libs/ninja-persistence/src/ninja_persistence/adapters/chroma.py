@@ -2,9 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
+
+from ninja_persistence.exceptions import (
+    ConnectionFailedError,
+    DuplicateEntityError,
+    PersistenceError,
+    QueryError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class ChromaVectorAdapter:
@@ -22,15 +32,37 @@ class ChromaVectorAdapter:
         self._collection_name = entity.collection_name or entity.name.lower()
 
     def _get_collection(self) -> Any:
+        """Return the Chroma collection, raising if no client is configured."""
         if self._client is None:
             raise RuntimeError(
                 "ChromaVectorAdapter requires a Chroma client instance. Pass it via the `client` constructor parameter."
             )
-        return self._client.get_or_create_collection(name=self._collection_name)
+        try:
+            return self._client.get_or_create_collection(name=self._collection_name)
+        except Exception as exc:
+            logger.error("Chroma collection access failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="_get_collection",
+                detail="Failed to access or create Chroma collection.",
+                cause=exc,
+            ) from exc
 
     async def find_by_id(self, id: str) -> dict[str, Any] | None:
-        coll = self._get_collection()
-        result = coll.get(ids=[id])
+        """Retrieve a single record by primary key."""
+        try:
+            coll = self._get_collection()
+            result = coll.get(ids=[id])
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            logger.error("Chroma find_by_id failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_by_id",
+                detail="Failed to retrieve document from Chroma.",
+                cause=exc,
+            ) from exc
         if not result["ids"]:
             return None
         doc: dict[str, Any] = {"id": id}
@@ -41,11 +73,23 @@ class ChromaVectorAdapter:
         return doc
 
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        coll = self._get_collection()
-        kwargs: dict[str, Any] = {"limit": limit}
-        if filters and "where" in filters:
-            kwargs["where"] = filters["where"]
-        result = coll.get(**kwargs)
+        """Retrieve multiple records matching the given filters."""
+        try:
+            coll = self._get_collection()
+            kwargs: dict[str, Any] = {"limit": limit}
+            if filters and "where" in filters:
+                kwargs["where"] = filters["where"]
+            result = coll.get(**kwargs)
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            logger.error("Chroma find_many failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_many",
+                detail="Failed to query documents from Chroma.",
+                cause=exc,
+            ) from exc
         docs: list[dict[str, Any]] = []
         for i, doc_id in enumerate(result["ids"]):
             doc: dict[str, Any] = {"id": doc_id}
@@ -57,43 +101,99 @@ class ChromaVectorAdapter:
         return docs
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
-        coll = self._get_collection()
-        doc_id = data.get("id", "")
-        document = data.get("document", "")
-        metadata = {k: v for k, v in data.items() if k not in ("id", "document", "embedding")}
-        embedding = data.get("embedding")
-        kwargs: dict[str, Any] = {
-            "ids": [doc_id],
-            "documents": [document],
-        }
-        if metadata:
-            kwargs["metadatas"] = [metadata]
-        if embedding:
-            kwargs["embeddings"] = [embedding]
-        coll.add(**kwargs)
+        """Insert a new record and return the created entity."""
+        try:
+            coll = self._get_collection()
+            doc_id = data.get("id", "")
+            document = data.get("document", "")
+            metadata = {k: v for k, v in data.items() if k not in ("id", "document", "embedding")}
+            embedding = data.get("embedding")
+            kwargs: dict[str, Any] = {
+                "ids": [doc_id],
+                "documents": [document],
+            }
+            if metadata:
+                kwargs["metadatas"] = [metadata]
+            if embedding:
+                kwargs["embeddings"] = [embedding]
+            coll.add(**kwargs)
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            if _is_duplicate_id_error(exc):
+                logger.error("Chroma create failed for %s: duplicate ID", self._entity.name)
+                raise DuplicateEntityError(
+                    entity_name=self._entity.name,
+                    operation="create",
+                    detail="A document with the same ID already exists in Chroma.",
+                    cause=exc,
+                ) from exc
+            logger.error("Chroma create failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="create",
+                detail="Failed to add document to Chroma.",
+                cause=exc,
+            ) from exc
         return data
 
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
-        coll = self._get_collection()
-        kwargs: dict[str, Any] = {"ids": [id]}
-        if "document" in patch:
-            kwargs["documents"] = [patch["document"]]
-        metadata = {k: v for k, v in patch.items() if k not in ("id", "document", "embedding")}
-        if metadata:
-            kwargs["metadatas"] = [metadata]
-        if "embedding" in patch:
-            kwargs["embeddings"] = [patch["embedding"]]
-        coll.update(**kwargs)
+        """Apply a partial update to an existing record."""
+        try:
+            coll = self._get_collection()
+            kwargs: dict[str, Any] = {"ids": [id]}
+            if "document" in patch:
+                kwargs["documents"] = [patch["document"]]
+            metadata = {k: v for k, v in patch.items() if k not in ("id", "document", "embedding")}
+            if metadata:
+                kwargs["metadatas"] = [metadata]
+            if "embedding" in patch:
+                kwargs["embeddings"] = [patch["embedding"]]
+            coll.update(**kwargs)
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            logger.error("Chroma update failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="update",
+                detail="Failed to update document in Chroma.",
+                cause=exc,
+            ) from exc
         return await self.find_by_id(id)
 
     async def delete(self, id: str) -> bool:
-        coll = self._get_collection()
-        coll.delete(ids=[id])
-        return True
+        """Delete a record by primary key. Returns True if deleted."""
+        try:
+            coll = self._get_collection()
+            coll.delete(ids=[id])
+            return True
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            logger.error("Chroma delete failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="delete",
+                detail="Failed to delete document from Chroma.",
+                cause=exc,
+            ) from exc
 
     async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        coll = self._get_collection()
-        result = coll.query(query_texts=[query], n_results=limit)
+        """Perform semantic (vector similarity) search."""
+        try:
+            coll = self._get_collection()
+            result = coll.query(query_texts=[query], n_results=limit)
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            logger.error("Chroma search_semantic failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="search_semantic",
+                detail="Semantic search query failed in Chroma.",
+                cause=exc,
+            ) from exc
         docs: list[dict[str, Any]] = []
         if result["ids"] and result["ids"][0]:
             for i, doc_id in enumerate(result["ids"][0]):
@@ -108,5 +208,32 @@ class ChromaVectorAdapter:
         return docs
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
-        coll = self._get_collection()
-        coll.update(ids=[id], embeddings=[embedding])
+        """Insert or update the embedding vector for a record."""
+        try:
+            coll = self._get_collection()
+            coll.update(ids=[id], embeddings=[embedding])
+        except PersistenceError:
+            raise
+        except Exception as exc:
+            logger.error("Chroma upsert_embedding failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="upsert_embedding",
+                detail="Failed to upsert embedding in Chroma.",
+                cause=exc,
+            ) from exc
+
+
+def _is_duplicate_id_error(exc: Exception) -> bool:
+    """Check whether *exc* indicates a Chroma duplicate-ID error.
+
+    Chroma raises a ``ValueError`` whose message contains ``"already exists"``
+    when adding a document with an existing ID.  This heuristic avoids
+    importing Chroma internals.
+    """
+    if isinstance(exc, ValueError) and "already exists" in str(exc).lower():
+        return True
+    # Also check chromadb-specific exception type names.
+    if type(exc).__name__ in ("DuplicateIDError", "IDAlreadyExistsError"):
+        return True
+    return False

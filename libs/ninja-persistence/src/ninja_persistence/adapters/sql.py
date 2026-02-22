@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import sqlalchemy as sa
 from ninja_core.schema.entity import EntitySchema, FieldType
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+
+from ninja_persistence.exceptions import (
+    ConnectionFailedError,
+    DuplicateEntityError,
+    PersistenceError,
+    QueryError,
+    TransactionError,
+)
+
+logger = logging.getLogger(__name__)
 
 _FIELD_TYPE_MAP: dict[FieldType, type[sa.types.TypeEngine]] = {
     FieldType.STRING: sa.String,
@@ -77,47 +89,150 @@ class SQLAdapter:
             await conn.run_sync(self._metadata.create_all)
 
     async def find_by_id(self, id: str) -> dict[str, Any] | None:
+        """Retrieve a single record by primary key."""
         pk = _get_pk_column(self._table)
         stmt = self._table.select().where(pk == id)
-        async with AsyncSession(self._engine) as session:
-            result = await session.execute(stmt)
-            row = result.mappings().first()
-            return dict(row) if row else None
+        try:
+            async with AsyncSession(self._engine) as session:
+                result = await session.execute(stmt)
+                row = result.mappings().first()
+                return dict(row) if row else None
+        except OperationalError as exc:
+            logger.error("SQL find_by_id failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="find_by_id",
+                detail="Database connection failed during read.",
+                cause=exc,
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.error("SQL find_by_id failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_by_id",
+                detail="Query execution failed.",
+                cause=exc,
+            ) from exc
 
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        """Retrieve multiple records matching the given filters."""
         stmt = self._table.select().limit(limit)
         if filters:
             for col_name, value in filters.items():
                 if col_name in self._table.c:
                     stmt = stmt.where(self._table.c[col_name] == value)
-        async with AsyncSession(self._engine) as session:
-            result = await session.execute(stmt)
-            return [dict(row) for row in result.mappings().all()]
+        try:
+            async with AsyncSession(self._engine) as session:
+                result = await session.execute(stmt)
+                return [dict(row) for row in result.mappings().all()]
+        except OperationalError as exc:
+            logger.error("SQL find_many failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="find_many",
+                detail="Database connection failed during read.",
+                cause=exc,
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.error("SQL find_many failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_many",
+                detail="Query execution failed.",
+                cause=exc,
+            ) from exc
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Insert a new record and return the created entity."""
         stmt = self._table.insert().values(**data)
-        async with AsyncSession(self._engine) as session:
-            await session.execute(stmt)
-            await session.commit()
+        try:
+            async with self._engine.begin() as conn:
+                await conn.execute(stmt)
+        except IntegrityError as exc:
+            logger.error("SQL create failed for %s: duplicate or constraint violation", self._entity.name)
+            raise DuplicateEntityError(
+                entity_name=self._entity.name,
+                operation="create",
+                detail="A record with the same key or unique constraint already exists.",
+                cause=exc,
+            ) from exc
+        except OperationalError as exc:
+            logger.error("SQL create failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="create",
+                detail="Database connection failed during insert.",
+                cause=exc,
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.error("SQL create failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise TransactionError(
+                entity_name=self._entity.name,
+                operation="create",
+                detail="Insert transaction failed.",
+                cause=exc,
+            ) from exc
         return data
 
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
+        """Apply a partial update to an existing record."""
         pk = _get_pk_column(self._table)
         stmt = self._table.update().where(pk == id).values(**patch)
-        async with AsyncSession(self._engine) as session:
-            result = await session.execute(stmt)
-            await session.commit()
-            if result.rowcount == 0:
-                return None
+        try:
+            async with self._engine.begin() as conn:
+                result = await conn.execute(stmt)
+                if result.rowcount == 0:
+                    return None
+        except IntegrityError as exc:
+            logger.error("SQL update failed for %s (id=%s): constraint violation", self._entity.name, id)
+            raise DuplicateEntityError(
+                entity_name=self._entity.name,
+                operation="update",
+                detail="Update violates a uniqueness constraint.",
+                cause=exc,
+            ) from exc
+        except OperationalError as exc:
+            logger.error("SQL update failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="update",
+                detail="Database connection failed during update.",
+                cause=exc,
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.error("SQL update failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise TransactionError(
+                entity_name=self._entity.name,
+                operation="update",
+                detail="Update transaction failed.",
+                cause=exc,
+            ) from exc
         return await self.find_by_id(id)
 
     async def delete(self, id: str) -> bool:
+        """Delete a record by primary key. Returns True if deleted."""
         pk = _get_pk_column(self._table)
         stmt = self._table.delete().where(pk == id)
-        async with AsyncSession(self._engine) as session:
-            result = await session.execute(stmt)
-            await session.commit()
-            return result.rowcount > 0
+        try:
+            async with self._engine.begin() as conn:
+                result = await conn.execute(stmt)
+                return result.rowcount > 0
+        except OperationalError as exc:
+            logger.error("SQL delete failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="delete",
+                detail="Database connection failed during delete.",
+                cause=exc,
+            ) from exc
+        except SQLAlchemyError as exc:
+            logger.error("SQL delete failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="delete",
+                detail="Delete operation failed.",
+                cause=exc,
+            ) from exc
 
     async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Semantic search is not natively supported in SQL.

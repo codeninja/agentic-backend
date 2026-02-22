@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from functools import partial
 from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
+
+from ninja_persistence.exceptions import (
+    ConnectionFailedError,
+    PersistenceError,
+    QueryError,
+)
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_DIMENSION = 1536
 _DEFAULT_METRIC_TYPE = "COSINE"
@@ -91,19 +100,30 @@ class MilvusVectorAdapter:
             return
 
         client = self._require_client()
-        exists = await self._run_sync(client.has_collection, self._collection_name)
-        if not exists:
-            await self._run_sync(
-                client.create_collection,
-                collection_name=self._collection_name,
-                dimension=self._dimension,
-                primary_field_name=_ID_FIELD,
-                id_type="string",
-                vector_field_name=_VECTOR_FIELD,
-                metric_type=self._metric_type,
-                max_length=65_535,
-                auto_id=False,
-            )
+        try:
+            exists = await self._run_sync(client.has_collection, self._collection_name)
+            if not exists:
+                await self._run_sync(
+                    client.create_collection,
+                    collection_name=self._collection_name,
+                    dimension=self._dimension,
+                    primary_field_name=_ID_FIELD,
+                    id_type="string",
+                    vector_field_name=_VECTOR_FIELD,
+                    metric_type=self._metric_type,
+                    max_length=65_535,
+                    auto_id=False,
+                )
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            logger.error("Milvus collection setup failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise ConnectionFailedError(
+                entity_name=self._entity.name,
+                operation="_ensure_collection",
+                detail="Failed to access or create Milvus collection.",
+                cause=exc,
+            ) from exc
         self._collection_ready = True
 
     def _output_fields(self) -> list[str]:
@@ -134,12 +154,21 @@ class MilvusVectorAdapter:
         """
         await self._ensure_collection()
         client = self._require_client()
-        results = await self._run_sync(
-            client.get,
-            collection_name=self._collection_name,
-            ids=[id],
-            output_fields=self._output_fields(),
-        )
+        try:
+            results = await self._run_sync(
+                client.get,
+                collection_name=self._collection_name,
+                ids=[id],
+                output_fields=self._output_fields(),
+            )
+        except Exception as exc:
+            logger.error("Milvus find_by_id failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_by_id",
+                detail="Failed to retrieve record from Milvus.",
+                cause=exc,
+            ) from exc
         if not results:
             return None
         return self._row_to_dict(results[0])
@@ -175,7 +204,16 @@ class MilvusVectorAdapter:
             # MilvusClient.query requires a filter; use a tautology to list all.
             kwargs["filter"] = f'{_ID_FIELD} != ""'
 
-        results = await self._run_sync(client.query, **kwargs)
+        try:
+            results = await self._run_sync(client.query, **kwargs)
+        except Exception as exc:
+            logger.error("Milvus find_many failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_many",
+                detail="Failed to query records from Milvus.",
+                cause=exc,
+            ) from exc
         return [self._row_to_dict(r) for r in results]
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -212,7 +250,16 @@ class MilvusVectorAdapter:
             if k not in _RESERVED_FIELDS:
                 row[k] = v
 
-        await self._run_sync(client.insert, collection_name=self._collection_name, data=[row])
+        try:
+            await self._run_sync(client.insert, collection_name=self._collection_name, data=[row])
+        except Exception as exc:
+            logger.error("Milvus create failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="create",
+                detail="Failed to insert record into Milvus.",
+                cause=exc,
+            ) from exc
         return data
 
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
@@ -248,7 +295,16 @@ class MilvusVectorAdapter:
             if k not in _RESERVED_FIELDS:
                 row[k] = v
 
-        await self._run_sync(client.upsert, collection_name=self._collection_name, data=[row])
+        try:
+            await self._run_sync(client.upsert, collection_name=self._collection_name, data=[row])
+        except Exception as exc:
+            logger.error("Milvus update failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="update",
+                detail="Failed to update record in Milvus.",
+                cause=exc,
+            ) from exc
         return await self.find_by_id(id)
 
     async def delete(self, id: str) -> bool:
@@ -262,7 +318,16 @@ class MilvusVectorAdapter:
         """
         await self._ensure_collection()
         client = self._require_client()
-        await self._run_sync(client.delete, collection_name=self._collection_name, ids=[id])
+        try:
+            await self._run_sync(client.delete, collection_name=self._collection_name, ids=[id])
+        except Exception as exc:
+            logger.error("Milvus delete failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="delete",
+                detail="Failed to delete record from Milvus.",
+                cause=exc,
+            ) from exc
         return True
 
     async def search_semantic(
@@ -290,13 +355,22 @@ class MilvusVectorAdapter:
         await self._ensure_collection()
         client = self._require_client()
 
-        results = await self._run_sync(
-            client.search,
-            collection_name=self._collection_name,
-            data=[query_embedding],
-            limit=limit,
-            output_fields=self._output_fields(),
-        )
+        try:
+            results = await self._run_sync(
+                client.search,
+                collection_name=self._collection_name,
+                data=[query_embedding],
+                limit=limit,
+                output_fields=self._output_fields(),
+            )
+        except Exception as exc:
+            logger.error("Milvus search_semantic failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="search_semantic",
+                detail="Semantic search query failed in Milvus.",
+                cause=exc,
+            ) from exc
 
         docs: list[dict[str, Any]] = []
         if results and results[0]:
@@ -327,4 +401,13 @@ class MilvusVectorAdapter:
         else:
             row = {_ID_FIELD: id, _DOCUMENT_FIELD: "", _VECTOR_FIELD: embedding}
 
-        await self._run_sync(client.upsert, collection_name=self._collection_name, data=[row])
+        try:
+            await self._run_sync(client.upsert, collection_name=self._collection_name, data=[row])
+        except Exception as exc:
+            logger.error("Milvus upsert_embedding failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="upsert_embedding",
+                detail="Failed to upsert embedding in Milvus.",
+                cause=exc,
+            ) from exc
