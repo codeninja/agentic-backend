@@ -1,5 +1,7 @@
 """Tests for OAuth2 strategy."""
 
+import logging
+
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -206,3 +208,71 @@ def test_google_preset_urls():
 def test_github_preset_urls():
     assert "github" in GITHUB_PRESET.authorize_url
     assert "github" in GITHUB_PRESET.token_url
+
+
+# ---------------------------------------------------------------------------
+# Audit logging tests
+# ---------------------------------------------------------------------------
+
+OAUTH2_LOGGER = "ninja_auth.strategies.oauth2"
+
+
+async def test_oauth2_state_mismatch_logs_error(caplog: pytest.LogCaptureFixture) -> None:
+    """OAuth2 state mismatch emits ERROR before raising."""
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with (
+        patch.object(strategy, "exchange_code", new_callable=AsyncMock),
+        patch.object(strategy, "get_userinfo", new_callable=AsyncMock),
+        caplog.at_level(logging.ERROR, logger=OAUTH2_LOGGER),
+    ):
+        with pytest.raises(AuthenticationError, match="state mismatch"):
+            await strategy.authenticate_with_code(
+                "code-abc",
+                expected_state="correct-state",
+                received_state="wrong-state",
+            )
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) >= 1
+    assert "state mismatch" in error_records[0].message.lower() or "csrf" in error_records[0].message.lower()
+
+
+async def test_oauth2_missing_state_logs_error(caplog: pytest.LogCaptureFixture) -> None:
+    """OAuth2 missing state emits ERROR before raising."""
+    config = _make_config()
+    strategy = OAuth2Strategy("test", config)
+
+    with caplog.at_level(logging.ERROR, logger=OAUTH2_LOGGER):
+        with pytest.raises(AuthenticationError):
+            await strategy.authenticate_with_code(
+                "code-abc", expected_state="", received_state="some-state"
+            )
+
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) >= 1
+
+
+async def test_oauth2_success_logs_info(caplog: pytest.LogCaptureFixture) -> None:
+    """Successful OAuth2 login emits INFO with provider and user_id."""
+    config = _make_config()
+    strategy = OAuth2Strategy("google", config)
+
+    with (
+        patch.object(strategy, "exchange_code", new_callable=AsyncMock) as mock_exchange,
+        patch.object(strategy, "get_userinfo", new_callable=AsyncMock) as mock_userinfo,
+        caplog.at_level(logging.INFO, logger=OAUTH2_LOGGER),
+    ):
+        mock_exchange.return_value = {"access_token": "at-123"}
+        mock_userinfo.return_value = {"sub": "u1", "email": "user@gmail.com"}
+
+        ctx = await strategy.authenticate_with_code(
+            "code-abc", expected_state="state-tok", received_state="state-tok"
+        )
+
+    assert ctx is not None
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO and "successful" in r.message.lower()]
+    assert len(info_records) == 1
+    assert "google" in info_records[0].message
+    assert "u1" in info_records[0].message

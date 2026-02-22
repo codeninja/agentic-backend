@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from ninja_auth.context import UserContext
 from ninja_auth.rbac import (
@@ -252,3 +254,38 @@ class TestRequireDomainPermission:
         ctx = UserContext(user_id="u1", permissions=["read:Billing"])
         set_user_context(ctx)
         require_domain_permission("read", "Billing", entity="Invoice")  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# Audit logging tests
+# ---------------------------------------------------------------------------
+
+RBAC_LOGGER = "ninja_auth.rbac"
+
+
+class TestRBACLogging:
+    def test_permission_denied_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Permission denial emits WARNING with action and domain."""
+        policy = RBACPolicy()
+        perms = policy.permissions_for_roles(["viewer"])
+
+        with caplog.at_level(logging.WARNING, logger=RBAC_LOGGER):
+            result = policy.is_allowed(perms, "write", "Orders")
+
+        assert result is False
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and "Permission denied" in r.message]
+        assert len(warning_records) == 1
+        assert "write" in warning_records[0].message
+        assert "Orders" in warning_records[0].message
+
+    def test_permission_granted_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Permission grant does NOT emit WARNING (only DEBUG)."""
+        policy = RBACPolicy()
+        perms = policy.permissions_for_roles(["viewer"])
+
+        with caplog.at_level(logging.WARNING, logger=RBAC_LOGGER):
+            result = policy.is_allowed(perms, "read", "Orders")
+
+        assert result is True
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warning_records) == 0

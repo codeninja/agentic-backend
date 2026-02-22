@@ -53,10 +53,21 @@ class ApiKeyStrategy:
             if expected_hash is None:
                 continue
             if hmac.compare_digest(input_hash, expected_hash):
+                logger.info(
+                    "API key validated: key_name=%s user_id=apikey:%s",
+                    name, name,
+                    extra={"event": "apikey_validated", "key_name": name, "user_id": f"apikey:{name}"},
+                )
                 return UserContext(
                     user_id=f"apikey:{name}",
                     roles=["service"],
                     provider="apikey",
                     metadata={"key_name": name},
                 )
+        key_prefix = api_key[:8] if len(api_key) >= 8 else api_key[:4] + "..."
+        logger.warning(
+            "Invalid API key: key_prefix=%s",
+            key_prefix,
+            extra={"event": "apikey_invalid", "key_prefix": key_prefix},
+        )
         return None

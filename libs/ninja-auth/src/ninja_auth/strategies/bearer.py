@@ -77,8 +77,17 @@ class BearerStrategy:
 
             sub = payload.get("sub")
             if not isinstance(sub, str) or not sub.strip():
-                logger.warning("JWT 'sub' claim is empty or not a string")
+                logger.warning(
+                    "JWT 'sub' claim is empty or not a string",
+                    extra={"event": "token_validation_failed", "reason": "invalid_sub"},
+                )
                 return None
+
+            logger.debug(
+                "Bearer token validated: user_id=%s",
+                sub,
+                extra={"event": "token_validated", "user_id": sub},
+            )
 
             return UserContext(
                 user_id=sub,
@@ -88,5 +97,24 @@ class BearerStrategy:
                 provider="bearer",
                 metadata={"claims": payload},
             )
-        except jwt.PyJWTError:
+        except jwt.ExpiredSignatureError:
+            # Attempt to extract identifiers from expired token for logging
+            token_sub = None
+            try:
+                unverified = jwt.decode(token, options={"verify_signature": False, "verify_exp": False})
+                token_sub = unverified.get("sub")
+            except Exception:
+                pass
+            logger.warning(
+                "Token validation failed: reason=expired sub=%s",
+                token_sub,
+                extra={"event": "token_validation_failed", "reason": "expired", "sub": token_sub},
+            )
+            return None
+        except jwt.PyJWTError as exc:
+            logger.error(
+                "Token validation failed: reason=%s",
+                type(exc).__name__,
+                extra={"event": "token_validation_failed", "reason": type(exc).__name__},
+            )
             return None
