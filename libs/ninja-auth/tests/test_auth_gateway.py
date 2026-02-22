@@ -164,3 +164,31 @@ def test_get_user_context_returns_anonymous_when_missing():
 
     resp = client.get("/anon")
     assert resp.json()["authenticated"] is False
+
+
+# ---------------------------------------------------------------------------
+# Audit logging tests
+# ---------------------------------------------------------------------------
+
+GATEWAY_LOGGER = "ninja_auth.gateway"
+
+
+def test_gateway_successful_auth_logs_info(caplog) -> None:
+    """Successful authentication emits INFO with user_id, provider, ip, path."""
+    import logging
+
+    config = AuthConfig(bearer=BearerConfig(secret_key=SECRET))
+    app = _build_app(config)
+    client = TestClient(app)
+    token = _make_token({"sub": "user-1"})
+
+    with caplog.at_level(logging.INFO, logger=GATEWAY_LOGGER):
+        resp = client.get("/protected", headers={"Authorization": f"Bearer {token}"})
+
+    assert resp.status_code == 200
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO and "Authentication successful" in r.message]
+    assert len(info_records) == 1
+    record = info_records[0]
+    assert "user-1" in record.message
+    assert "bearer" in record.message
+    assert "/protected" in record.message

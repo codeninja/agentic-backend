@@ -43,18 +43,25 @@ class IdentityStrategy:
             raise ValueError(f"User already exists: {email}")
 
         user_id = secrets.token_hex(16)
+        assigned_roles = roles or []
         self._store.save(email, {
             "user_id": user_id,
             "email": email,
             "password_hash": self.hash_password(password),
-            "roles": roles or [],
+            "roles": assigned_roles,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+
+        logger.info(
+            "User registered: email=%s user_id=%s roles=%s",
+            email, user_id, assigned_roles,
+            extra={"event": "user_registered", "email": email, "user_id": user_id, "roles": assigned_roles},
+        )
 
         return UserContext(
             user_id=user_id,
             email=email,
-            roles=roles or [],
+            roles=assigned_roles,
             provider="identity",
         )
 
@@ -62,14 +69,29 @@ class IdentityStrategy:
         """Authenticate a user by email and password."""
         user = self._store.get(email)
         if not user:
-            logger.warning("Login failed: unknown email=%s", email)
+            logger.warning(
+                "Login failed: unknown email=%s",
+                email,
+                extra={"event": "login_failed", "reason": "unknown_email", "email": email},
+            )
             return None
         if not self.verify_password(password, user["password_hash"]):
-            logger.warning("Login failed: bad password for email=%s", email)
+            logger.warning(
+                "Login failed: bad password for email=%s",
+                email,
+                extra={"event": "login_failed", "reason": "bad_password", "email": email},
+            )
             return None
 
+        user_id = user["user_id"]
+        logger.info(
+            "Login successful: email=%s user_id=%s",
+            email, user_id,
+            extra={"event": "login_success", "email": email, "user_id": user_id},
+        )
+
         return UserContext(
-            user_id=user["user_id"],
+            user_id=user_id,
             email=user["email"],
             roles=user.get("roles", []),
             provider="identity",
@@ -86,7 +108,13 @@ class IdentityStrategy:
             "iat": now,
             "exp": now + timedelta(minutes=self.config.token_expiry_minutes),
         }
-        return jwt.encode(payload, self.config.token_secret, algorithm="HS256")
+        token = jwt.encode(payload, self.config.token_secret, algorithm="HS256")
+        logger.info(
+            "Token issued: user_id=%s",
+            user_ctx.user_id,
+            extra={"event": "token_issued", "user_id": user_ctx.user_id},
+        )
+        return token
 
     def validate_token(self, token: str) -> UserContext | None:
         """Validate a session token and return user context."""

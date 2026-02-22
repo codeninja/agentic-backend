@@ -1,8 +1,10 @@
 """Tests for Bearer (JWT) strategy."""
 
+import logging
 from datetime import datetime, timezone
 
 import jwt
+import pytest
 from ninja_auth.config import BearerConfig
 from ninja_auth.strategies.bearer import BearerStrategy
 from starlette.testclient import TestClient
@@ -143,3 +145,52 @@ def test_bearer_metadata_contains_claims():
     assert ctx is not None
     assert "claims" in ctx.metadata
     assert ctx.metadata["claims"]["custom_field"] == "value"
+
+
+# ---------------------------------------------------------------------------
+# Audit logging tests
+# ---------------------------------------------------------------------------
+
+BEARER_LOGGER = "ninja_auth.strategies.bearer"
+
+
+def test_bearer_expired_token_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Expired token emits WARNING with reason."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+    token = _make_token({"sub": "user1", "exp": datetime(2020, 1, 1, tzinfo=timezone.utc)})
+
+    with caplog.at_level(logging.WARNING, logger=BEARER_LOGGER):
+        ctx = strategy.validate_token(token)
+
+    assert ctx is None
+    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warning_records) >= 1
+    assert "expired" in warning_records[0].message.lower()
+
+
+def test_bearer_invalid_signature_logs_error(caplog: pytest.LogCaptureFixture) -> None:
+    """Invalid signature emits ERROR with reason."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+    token = _make_token({"sub": "user1"}, secret="wrong-secret-key-that-is-32-bytes-long!")
+
+    with caplog.at_level(logging.ERROR, logger=BEARER_LOGGER):
+        ctx = strategy.validate_token(token)
+
+    assert ctx is None
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) >= 1
+
+
+def test_bearer_malformed_token_logs_error(caplog: pytest.LogCaptureFixture) -> None:
+    """Malformed token emits ERROR."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+
+    with caplog.at_level(logging.ERROR, logger=BEARER_LOGGER):
+        ctx = strategy.validate_token("not.a.valid.jwt")
+
+    assert ctx is None
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) >= 1

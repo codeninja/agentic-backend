@@ -1,7 +1,9 @@
 """Tests for API key strategy."""
 
+import logging
 import os
 
+import pytest
 from ninja_auth.config import ApiKeyConfig
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from starlette.applications import Starlette
@@ -244,3 +246,43 @@ async def test_apikey_query_param_logs_warning(caplog):
         client.get("/?api_key=qkey")
 
     assert any("query parameter" in r.message.lower() for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Audit logging tests
+# ---------------------------------------------------------------------------
+
+APIKEY_LOGGER = "ninja_auth.strategies.apikey"
+
+
+def test_apikey_valid_key_logs_info(caplog: pytest.LogCaptureFixture) -> None:
+    """Validated API key emits INFO with key_name but NOT the raw key."""
+    config = ApiKeyConfig(keys={"myservice": "secret-key-123"})
+    strategy = ApiKeyStrategy(config)
+
+    with caplog.at_level(logging.INFO, logger=APIKEY_LOGGER):
+        ctx = strategy.validate_key("secret-key-123")
+
+    assert ctx is not None
+    info_records = [r for r in caplog.records if r.levelno == logging.INFO and "validated" in r.message.lower()]
+    assert len(info_records) == 1
+    assert "myservice" in info_records[0].message
+    # Raw key must NEVER appear in logs
+    full_output = " ".join(r.message for r in caplog.records)
+    assert "secret-key-123" not in full_output
+
+
+def test_apikey_invalid_key_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """Invalid API key emits WARNING with key prefix, NOT the full key."""
+    config = ApiKeyConfig(keys={"svc": "real-secret-key"})
+    strategy = ApiKeyStrategy(config)
+
+    with caplog.at_level(logging.WARNING, logger=APIKEY_LOGGER):
+        ctx = strategy.validate_key("wrong-key-that-is-invalid")
+
+    assert ctx is None
+    warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and "Invalid API key" in r.message]
+    assert len(warning_records) == 1
+    # Should contain a prefix, not the full key
+    assert "wrong-ke" in warning_records[0].message  # first 8 chars
+    assert "wrong-key-that-is-invalid" not in warning_records[0].message
