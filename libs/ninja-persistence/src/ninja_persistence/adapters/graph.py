@@ -2,9 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
+
+from ninja_persistence.exceptions import (
+    ConnectionFailedError,
+    PersistenceError,
+    QueryError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class GraphAdapter:
@@ -51,12 +60,29 @@ class GraphAdapter:
         """
         driver = self._get_driver()
         query = f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id RETURN n"
-        async with driver.session() as session:
-            result = await session.run(query, {"id": id})
-            record = await result.single()
-            if record is None:
-                return None
-            return dict(record["n"])
+        try:
+            async with driver.session() as session:
+                result = await session.run(query, {"id": id})
+                record = await result.single()
+                if record is None:
+                    return None
+                return dict(record["n"])
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph find_by_id connection error for %s: %s", self._entity.name, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="find_by_id",
+                    detail="Neo4j connection failed during read.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph find_by_id failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_by_id",
+                detail="Cypher query execution failed.",
+                cause=exc,
+            ) from exc
 
     async def find_many(
         self, filters: dict[str, Any] | None = None, limit: int = 100
@@ -86,10 +112,27 @@ class GraphAdapter:
         else:
             query = f"MATCH (n:`{self._label}`) RETURN n LIMIT $limit"
 
-        async with driver.session() as session:
-            result = await session.run(query, params)
-            records = await result.data()
-            return [dict(record["n"]) for record in records]
+        try:
+            async with driver.session() as session:
+                result = await session.run(query, params)
+                records = await result.data()
+                return [dict(record["n"]) for record in records]
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph find_many connection error for %s: %s", self._entity.name, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="find_many",
+                    detail="Neo4j connection failed during read.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph find_many failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="find_many",
+                detail="Cypher query execution failed.",
+                cause=exc,
+            ) from exc
 
     async def create(self, data: dict[str, Any]) -> dict[str, Any]:
         """Create a new node with the given properties.
@@ -103,10 +146,27 @@ class GraphAdapter:
         """
         driver = self._get_driver()
         query = f"CREATE (n:`{self._label}` $props) RETURN n"
-        async with driver.session() as session:
-            result = await session.run(query, {"props": data})
-            record = await result.single()
-            return dict(record["n"]) if record else data
+        try:
+            async with driver.session() as session:
+                result = await session.run(query, {"props": data})
+                record = await result.single()
+                return dict(record["n"]) if record else data
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph create connection error for %s: %s", self._entity.name, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="create",
+                    detail="Neo4j connection failed during create.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph create failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="create",
+                detail="Failed to create node in Neo4j.",
+                cause=exc,
+            ) from exc
 
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
         """Apply a partial update to an existing node.
@@ -127,12 +187,29 @@ class GraphAdapter:
             f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
             f"SET n += $patch RETURN n"
         )
-        async with driver.session() as session:
-            result = await session.run(query, {"id": id, "patch": patch})
-            record = await result.single()
-            if record is None:
-                return None
-            return dict(record["n"])
+        try:
+            async with driver.session() as session:
+                result = await session.run(query, {"id": id, "patch": patch})
+                record = await result.single()
+                if record is None:
+                    return None
+                return dict(record["n"])
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="update",
+                    detail="Neo4j connection failed during update.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph update failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="update",
+                detail="Failed to update node in Neo4j.",
+                cause=exc,
+            ) from exc
 
     async def delete(self, id: str) -> bool:
         """Delete a node and its relationships by primary key.
@@ -151,10 +228,27 @@ class GraphAdapter:
             f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
             f"DETACH DELETE n RETURN count(n) AS deleted"
         )
-        async with driver.session() as session:
-            result = await session.run(query, {"id": id})
-            record = await result.single()
-            return record is not None and record["deleted"] > 0
+        try:
+            async with driver.session() as session:
+                result = await session.run(query, {"id": id})
+                record = await result.single()
+                return record is not None and record["deleted"] > 0
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="delete",
+                    detail="Neo4j connection failed during delete.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph delete failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="delete",
+                detail="Failed to delete node from Neo4j.",
+                cause=exc,
+            ) from exc
 
     async def search_semantic(
         self, query: str, limit: int = 10
@@ -216,10 +310,27 @@ class GraphAdapter:
             f"MATCH (n:`{self._label}`) WHERE {or_clauses} "
             f"RETURN n LIMIT $limit"
         )
-        async with driver.session() as session:
-            result = await session.run(fallback_query, {"query": query, "limit": limit})
-            records = await result.data()
-            return [dict(r["n"]) for r in records]
+        try:
+            async with driver.session() as session:
+                result = await session.run(fallback_query, {"query": query, "limit": limit})
+                records = await result.data()
+                return [dict(r["n"]) for r in records]
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph search_semantic connection error for %s: %s", self._entity.name, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="search_semantic",
+                    detail="Neo4j connection failed during semantic search.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph search_semantic failed for %s: %s", self._entity.name, type(exc).__name__)
+            raise QueryError(
+                entity_name=self._entity.name,
+                operation="search_semantic",
+                detail="Semantic search query failed in Neo4j.",
+                cause=exc,
+            ) from exc
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
         """Store an embedding vector as a node property.
@@ -237,5 +348,32 @@ class GraphAdapter:
             f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
             f"SET n.embedding = $embedding"
         )
-        async with driver.session() as session:
-            await session.run(query, {"id": id, "embedding": embedding})
+        try:
+            async with driver.session() as session:
+                await session.run(query, {"id": id, "embedding": embedding})
+        except Exception as exc:
+            if _is_connection_error(exc):
+                logger.error("Graph upsert_embedding connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                raise ConnectionFailedError(
+                    entity_name=self._entity.name,
+                    operation="upsert_embedding",
+                    detail="Neo4j connection failed during embedding upsert.",
+                    cause=exc,
+                ) from exc
+            logger.error("Graph upsert_embedding failed for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+            raise PersistenceError(
+                entity_name=self._entity.name,
+                operation="upsert_embedding",
+                detail="Failed to upsert embedding in Neo4j.",
+                cause=exc,
+            ) from exc
+
+
+def _is_connection_error(exc: Exception) -> bool:
+    """Check whether *exc* indicates a Neo4j connection-level failure.
+
+    Detects ``ServiceUnavailable``, ``SessionExpired``, and similar
+    neo4j-driver network exceptions without requiring the import.
+    """
+    type_names = {cls.__name__ for cls in type(exc).__mro__}
+    return bool(type_names & {"ServiceUnavailable", "SessionExpired", "DriverError"})
