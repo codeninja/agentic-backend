@@ -41,13 +41,9 @@ class OAuth2ProviderConfig(BaseModel):
 
         parsed = urlparse(self.redirect_uri)
         if parsed.scheme not in ("http", "https"):
-            raise ValueError(
-                f"redirect_uri must be an HTTP(S) URL, got: '{self.redirect_uri}'"
-            )
+            raise ValueError(f"redirect_uri must be an HTTP(S) URL, got: '{self.redirect_uri}'")
         if not parsed.hostname:
-            raise ValueError(
-                f"redirect_uri must include a hostname, got: '{self.redirect_uri}'"
-            )
+            raise ValueError(f"redirect_uri must include a hostname, got: '{self.redirect_uri}'")
         return self
 
 
@@ -83,8 +79,7 @@ class BearerConfig(BaseModel):
             )
         if self.algorithm not in _HMAC_ALGORITHMS and not self.public_key:
             raise ValueError(
-                f"BearerConfig.public_key must not be empty when using "
-                f"asymmetric algorithm '{self.algorithm}'."
+                f"BearerConfig.public_key must not be empty when using asymmetric algorithm '{self.algorithm}'."
             )
         return self
 
@@ -115,7 +110,7 @@ class ApiKeyConfig(BaseModel):
         if stored_value.startswith(_HASH_PREFIX):
             return stored_value
         if stored_value.startswith(_ENV_PREFIX):
-            var_name = stored_value[len(_ENV_PREFIX):]
+            var_name = stored_value[len(_ENV_PREFIX) :]
             raw = os.environ.get(var_name)
             if raw is None:
                 return None

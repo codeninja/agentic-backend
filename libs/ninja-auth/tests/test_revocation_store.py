@@ -6,7 +6,6 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from ninja_auth.revocation import InMemoryRevocationStore, TokenRevocationStore
 
 

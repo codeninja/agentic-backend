@@ -12,14 +12,17 @@ NOTE: This example works without an API key — it exercises the agent wiring
 and delegation layer. Actual LLM calls require GOOGLE_API_KEY.
 """
 
+from _bookstore_schema import (
+    BOOK,
+    CATALOG_DOMAIN,
+    COMMERCE_DOMAIN,
+    CUSTOMER,
+    ORDER,
+    REVIEW,
+)
 from ninja_agents.base import CoordinatorAgent, DataAgent, DomainAgent
 from ninja_agents.tracing import TraceContext
 from ninja_core.schema.agent import ReasoningLevel
-
-from _bookstore_schema import (
-    BOOK, CUSTOMER, ORDER, REVIEW,
-    CATALOG_DOMAIN, COMMERCE_DOMAIN,
-)
 
 # ---------------------------------------------------------------------------
 # 1. Build the Agent Hierarchy
@@ -66,18 +69,19 @@ trace = TraceContext()
 
 # Catalog domain: get a book
 result = catalog_agent.delegate("Book", "book_get", trace=trace, id="book-001")
-print(f"\n📖 catalog.delegate('Book', 'book_get'):")
+print("\n📖 catalog.delegate('Book', 'book_get'):")
 print(f"   {result}")
 
 # Catalog domain: search reviews semantically
 result = catalog_agent.delegate("Review", "review_search_semantic", trace=trace, query="mind-bending sci-fi")
-print(f"\n🔍 catalog.delegate('Review', 'review_search_semantic'):")
+print("\n🔍 catalog.delegate('Review', 'review_search_semantic'):")
 print(f"   {result}")
 
 # Commerce domain: create an order
-result = commerce_agent.delegate("Order", "order_create", trace=trace,
-                                  customer_id="cust-001", total=42.50, status="pending")
-print(f"\n🛒 commerce.delegate('Order', 'order_create'):")
+result = commerce_agent.delegate(
+    "Order", "order_create", trace=trace, customer_id="cust-001", total=42.50, status="pending"
+)
+print("\n🛒 commerce.delegate('Order', 'order_create'):")
 print(f"   {result}")
 
 # ---------------------------------------------------------------------------
@@ -93,7 +97,7 @@ results = coordinator.route(
     trace=trace,
 )
 
-print(f"\n🎯 coordinator.route(target_domains=['Catalog', 'Commerce']):")
+print("\n🎯 coordinator.route(target_domains=['Catalog', 'Commerce']):")
 for domain_name, result in results.items():
     print(f"   {domain_name}: {result}")
 

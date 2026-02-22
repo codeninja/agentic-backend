@@ -28,9 +28,7 @@ class AgenticSchema(BaseModel):
     def validate_referential_integrity(self) -> AgenticSchema:
         """Validate all cross-entity references in the schema."""
         entity_names = {e.name for e in self.entities}
-        entity_fields: dict[str, set[str]] = {
-            e.name: {f.name for f in e.fields} for e in self.entities
-        }
+        entity_fields: dict[str, set[str]] = {e.name: {f.name for f in e.fields} for e in self.entities}
 
         # Unique entity names
         if len(entity_names) != len(self.entities):
@@ -58,13 +56,11 @@ class AgenticSchema(BaseModel):
         for rel in self.relationships:
             if rel.source_entity not in entity_names:
                 raise ValueError(
-                    f"Relationship '{rel.name}' references non-existent "
-                    f"source entity '{rel.source_entity}'"
+                    f"Relationship '{rel.name}' references non-existent source entity '{rel.source_entity}'"
                 )
             if rel.target_entity not in entity_names:
                 raise ValueError(
-                    f"Relationship '{rel.name}' references non-existent "
-                    f"target entity '{rel.target_entity}'"
+                    f"Relationship '{rel.name}' references non-existent target entity '{rel.target_entity}'"
                 )
 
             # FK field existence check
@@ -83,10 +79,7 @@ class AgenticSchema(BaseModel):
         for dom in self.domains:
             for ent_name in dom.entities:
                 if ent_name not in entity_names:
-                    raise ValueError(
-                        f"Domain '{dom.name}' references non-existent "
-                        f"entity '{ent_name}'"
-                    )
+                    raise ValueError(f"Domain '{dom.name}' references non-existent entity '{ent_name}'")
 
         # Circular HARD relationship detection
         self._check_hard_relationship_cycles()

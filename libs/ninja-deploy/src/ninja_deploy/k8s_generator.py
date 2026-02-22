@@ -106,7 +106,7 @@ class K8sGenerator:
         warnings: list[str] = []
         for filename, content in files.items():
             for match in _PLACEHOLDER_PATTERN.finditer(content):
-                line_num = content[:match.start()].count("\n") + 1
+                line_num = content[: match.start()].count("\n") + 1
                 warnings.append(f"{filename}:{line_num}")
         if warnings:
             logger.warning(

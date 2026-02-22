@@ -12,7 +12,6 @@ import re
 from ninja_ui.chat.generator import ChatGenerator
 from ninja_ui.crud.generator import CrudGenerator
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -22,7 +21,7 @@ from ninja_ui.crud.generator import CrudGenerator
 # JS variables that hold user data (id, patch, input, query, text) inside
 # a gqlQuery call's first argument.
 _UNSAFE_INTERPOLATION = re.compile(
-    r'gqlQuery\(`[^`]*\$\{(?:id|patch|patchJson|inputJson|query|text|pkVal)[^`]*`\s*\)',
+    r"gqlQuery\(`[^`]*\$\{(?:id|patch|patchJson|inputJson|query|text|pkVal)[^`]*`\s*\)",
 )
 
 # Pattern that matches the old quote-escaping trick:  .replace(/"/g, '\\"')

@@ -194,8 +194,7 @@ class DomainAgent:
             model=model,
             description=f"Domain agent for {safe_domain_name}",
             instruction=(
-                f"You are the {safe_domain_name} domain agent. "
-                "Delegate CRUD operations to your DataAgent sub-agents."
+                f"You are the {safe_domain_name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."
             ),
             tools=[],
             sub_agents=list(data_agents),
@@ -229,9 +228,7 @@ class DomainAgent:
         """
         da = self._data_agents.get(entity_name)
         if da is None:
-            raise KeyError(
-                f"Entity '{entity_name}' not in domain '{self.domain.name}'."
-            )
+            raise KeyError(f"Entity '{entity_name}' not in domain '{self.domain.name}'.")
         validate_tool_name(tool_name)
         if trace:
             trace.start_span(self.name)
@@ -347,10 +344,7 @@ def create_domain_agent(
         name=f"domain_agent_{safe_name.lower()}",
         model=model,
         description=f"Domain agent for {safe_name} — cross-entity reasoning",
-        instruction=(
-            f"You are the {safe_name} domain agent. "
-            "Delegate CRUD operations to your DataAgent sub-agents."
-        ),
+        instruction=(f"You are the {safe_name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."),
         tools=[],
         sub_agents=list(data_agents),
     )

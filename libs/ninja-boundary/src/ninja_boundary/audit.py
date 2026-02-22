@@ -79,12 +79,22 @@ class AuditLog:
         if SENSITIVE_FIELD_PATTERNS.search(field_name):
             logger.debug(
                 "Coercion: %s.%s %s %s -> %s (%s)",
-                entity_name, field_name, action.value, _REDACTED, _REDACTED, reason,
+                entity_name,
+                field_name,
+                action.value,
+                _REDACTED,
+                _REDACTED,
+                reason,
             )
         else:
             logger.debug(
                 "Coercion: %s.%s %s %r -> %r (%s)",
-                entity_name, field_name, action.value, before, after, reason,
+                entity_name,
+                field_name,
+                action.value,
+                before,
+                after,
+                reason,
             )
         return entry
 

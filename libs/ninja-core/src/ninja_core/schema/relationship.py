@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from enum import Enum
-
 import warnings
+from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -49,8 +48,7 @@ class RelationshipSchema(BaseModel):
         if self.relationship_type == RelationshipType.HARD:
             if not self.source_field or not self.target_field:
                 raise ValueError(
-                    f"HARD relationship '{self.name}' requires both "
-                    f"source_field and target_field to be set"
+                    f"HARD relationship '{self.name}' requires both source_field and target_field to be set"
                 )
 
         if self.relationship_type == RelationshipType.GRAPH:

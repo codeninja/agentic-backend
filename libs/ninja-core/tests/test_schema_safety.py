@@ -1,8 +1,6 @@
 """Tests for schema-level safety validators (name and description validation)."""
 
 import pytest
-from pydantic import ValidationError
-
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import (
     MAX_DESCRIPTION_LENGTH,
@@ -11,7 +9,7 @@ from ninja_core.schema.entity import (
     FieldType,
     StorageEngine,
 )
-from ninja_core.schema.agent import AgentConfig, ReasoningLevel
+from pydantic import ValidationError
 
 
 def _id_field() -> FieldSchema:

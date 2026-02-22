@@ -51,8 +51,5 @@ class DomainSchema(BaseModel):
     def validate_domain_description(cls, v: str | None) -> str | None:
         """Enforce maximum length on description."""
         if v is not None and len(v) > MAX_DESCRIPTION_LENGTH:
-            raise ValueError(
-                f"Description too long ({len(v)} chars). "
-                f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
-            )
+            raise ValueError(f"Description too long ({len(v)} chars). Maximum is {MAX_DESCRIPTION_LENGTH} characters.")
         return v
