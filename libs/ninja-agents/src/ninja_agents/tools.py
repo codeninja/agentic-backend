@@ -13,6 +13,19 @@ from ninja_core.schema.entity import EntitySchema
 
 from ninja_agents.tracing import AgentSpan
 
+# Import lazily to avoid circular dependency at module level.
+_sanitize_error: Callable[..., str] | None = None
+
+
+def _get_sanitize_error() -> Callable[..., str]:
+    """Lazy import of sanitize_error to avoid circular imports."""
+    global _sanitize_error
+    if _sanitize_error is None:
+        from ninja_agents.safety import sanitize_error
+
+        _sanitize_error = sanitize_error
+    return _sanitize_error
+
 
 def _make_tool(entity_name: str, operation: str, description: str) -> Callable[..., Any]:
     """Create a plain-function tool for a CRUD operation.
@@ -70,7 +83,7 @@ def invoke_tool(
     try:
         result = tool(**kwargs)
     except Exception as exc:
-        error = str(exc)
+        error = _get_sanitize_error()(exc)
         success = False
         raise
     else:

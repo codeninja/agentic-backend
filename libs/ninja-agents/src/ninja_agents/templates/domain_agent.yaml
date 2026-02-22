@@ -1,5 +1,7 @@
 # ADK Domain Agent Template
 # LLM-powered agent for cross-entity reasoning within a domain
+# SAFETY: All interpolated values (domain_name, entities) MUST be pre-sanitized
+# via ninja_agents.safety.sanitize_identifier() before template rendering.
 name: "domain_agent_{{ domain_name | lower }}"
 description: "Domain agent for {{ domain_name }} — cross-entity reasoning"
 model:
