@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ninja_core.schema.entity import EntitySchema
 
-from .base import build_fields_meta, get_template_env, write_generated_file
+from .base import build_fields_meta, get_template_env, validate_output_path, write_generated_file
 
 
 def _has_field_type(entity: EntitySchema, *type_names: str) -> bool:
@@ -35,6 +35,7 @@ def generate_gql_type(entity: EntitySchema, output_dir: Path) -> Path:
     )
 
     file_path = output_dir / f"{entity.name.lower()}_gql.py"
+    validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
     return file_path
 

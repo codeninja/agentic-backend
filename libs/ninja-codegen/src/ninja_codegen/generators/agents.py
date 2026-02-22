@@ -7,7 +7,7 @@ from pathlib import Path
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
 
-from .base import get_template_env, write_generated_file
+from .base import get_template_env, validate_output_path, write_generated_file
 
 
 def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
@@ -19,12 +19,16 @@ def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
 
     Returns:
         Path to the generated file.
+
+    Raises:
+        ValueError: If the output path escapes the output directory.
     """
     env = get_template_env()
     template = env.get_template("data_agent.py.j2")
     content = template.render(entity=entity)
 
     file_path = output_dir / f"{entity.name.lower()}_agent.py"
+    validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
     return file_path
 
@@ -38,12 +42,16 @@ def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
 
     Returns:
         Path to the generated file.
+
+    Raises:
+        ValueError: If the output path escapes the output directory.
     """
     env = get_template_env()
     template = env.get_template("domain_agent.py.j2")
     content = template.render(domain=domain)
 
     file_path = output_dir / f"{domain.name.lower()}_agent.py"
+    validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
     return file_path
 

@@ -18,6 +18,15 @@ from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
 from pydantic import model_validator
 
+from ninja_agents.safety import (
+    AgentSafetyError,
+    InvalidToolAccess,
+    safe_error_message,
+    sanitize_for_prompt,
+    validate_request_size,
+    validate_tool_kwargs_size,
+    validate_tool_name,
+)
 from ninja_agents.tools import generate_crud_tools, invoke_tool
 from ninja_agents.tracing import TraceContext
 
@@ -81,10 +90,21 @@ class DataAgent(BaseAgent):
         trace: TraceContext | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Execute a tool by name.  Raises ``KeyError`` if not in scope."""
+        """Execute a tool by name.
+
+        Validates the tool name format before lookup and enforces size limits
+        on keyword arguments.
+
+        Raises:
+            InvalidToolAccess: If the tool name is malformed.
+            AgentInputTooLarge: If kwargs exceed size limits.
+            KeyError: If the tool is not in this agent's scope.
+        """
+        validate_tool_name(tool_name)
+        validate_tool_kwargs_size(kwargs)
         tool = self._tool_map.get(tool_name)
         if tool is None:
-            raise KeyError(f"Tool '{tool_name}' not in scope for agent '{self.name}'. Available: {self.tool_names}")
+            raise KeyError(f"Tool '{tool_name}' not in scope for agent '{self.name}'.")
         span = trace.start_span(self.name) if trace else None
         try:
             return invoke_tool(tool, span=span, **kwargs)
@@ -100,16 +120,45 @@ class DataAgent(BaseAgent):
         tool_name: str = ctx.session.state.get("tool_name", "")
         tool_kwargs: dict[str, Any] = ctx.session.state.get("tool_kwargs", {})
 
+        try:
+            validate_tool_name(tool_name)
+        except (InvalidToolAccess, AgentSafetyError):
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                content="Invalid tool name.",
+            )
+            return
+
+        # Enforce tool_permissions if configured
+        if self.config.tool_permissions and tool_name not in self.config.tool_permissions:
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                content=InvalidToolAccess.client_message,
+            )
+            return
+
         tool = self._tool_map.get(tool_name)
         if tool is None:
             yield Event(
                 author=self.name,
                 invocation_id=ctx.invocation_id,
-                content=f"Unknown tool: {tool_name}",
+                content="Requested tool is not available.",
             )
             return
 
-        result = tool(**tool_kwargs)
+        try:
+            validate_tool_kwargs_size(tool_kwargs)
+            result = tool(**tool_kwargs)
+        except Exception as exc:
+            yield Event(
+                author=self.name,
+                invocation_id=ctx.invocation_id,
+                content=safe_error_message(exc),
+            )
+            return
+
         ctx.session.state["result"] = result
         yield Event(
             author=self.name,
@@ -133,18 +182,20 @@ class DomainAgent:
         data_agents: list[DataAgent],
         config: AgentConfig | None = None,
     ) -> None:
+        safe_domain_name = sanitize_for_prompt(domain.name)
         self.domain = domain
         self.config = config or domain.agent_config
-        self.name = f"domain_agent_{domain.name.lower()}"
+        self.name = f"domain_agent_{safe_domain_name.lower()}"
         self._data_agents: dict[str, DataAgent] = {da.entity.name: da for da in data_agents}
 
         model = _REASONING_MODEL.get(self.config.reasoning_level, _DEFAULT_MODEL)
         self.agent = LlmAgent(
             name=self.name,
             model=model,
-            description=f"Domain agent for {domain.name}",
+            description=f"Domain agent for {safe_domain_name}",
             instruction=(
-                f"You are the {domain.name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."
+                f"You are the {safe_domain_name} domain agent. "
+                "Delegate CRUD operations to your DataAgent sub-agents."
             ),
             tools=[],
             sub_agents=list(data_agents),
@@ -168,11 +219,20 @@ class DomainAgent:
         trace: TraceContext | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Delegate a tool call to a DataAgent.  Raises ``KeyError`` if
-        the entity is not in this domain."""
+        """Delegate a tool call to a DataAgent.
+
+        Validates the entity name and tool name before delegation.
+
+        Raises:
+            KeyError: If the entity is not in this domain.
+            InvalidToolAccess: If the tool name is malformed.
+        """
         da = self._data_agents.get(entity_name)
         if da is None:
-            raise KeyError(f"Entity '{entity_name}' not in domain '{self.domain.name}'. Available: {self.entity_names}")
+            raise KeyError(
+                f"Entity '{entity_name}' not in domain '{self.domain.name}'."
+            )
+        validate_tool_name(tool_name)
         if trace:
             trace.start_span(self.name)
         try:
@@ -182,7 +242,14 @@ class DomainAgent:
                 trace.finish_span(self.name)
 
     def execute(self, request: str, trace: TraceContext | None = None) -> dict[str, Any]:
-        """Process a domain-level request (stub — full impl uses LLM)."""
+        """Process a domain-level request (stub — full impl uses LLM).
+
+        Validates request size before processing.
+
+        Raises:
+            AgentInputTooLarge: If the request exceeds the size limit.
+        """
+        validate_request_size(request)
         if trace:
             trace.start_span(self.name)
         try:
@@ -243,13 +310,18 @@ class CoordinatorAgent:
     ) -> dict[str, Any]:
         """Route a request to specific domains and collect results.
 
-        For parallel execution use ``Orchestrator.fan_out()`` instead.
+        Validates request size before routing. For parallel execution use
+        ``Orchestrator.fan_out()`` instead.
+
+        Raises:
+            AgentInputTooLarge: If the request exceeds the size limit.
         """
+        validate_request_size(request)
         results: dict[str, Any] = {}
         for domain_name in target_domains:
             da = self._domain_agents.get(domain_name)
             if da is None:
-                results[domain_name] = {"error": f"Unknown domain: {domain_name}"}
+                results[domain_name] = {"error": "Unknown domain."}
                 continue
             results[domain_name] = da.execute(request, trace=trace)
         return results
@@ -262,13 +334,23 @@ def create_domain_agent(
     domain: DomainSchema,
     data_agents: list[DataAgent],
 ) -> LlmAgent:
-    """Factory: create a bare ADK LlmAgent for a domain."""
+    """Factory: create a bare ADK LlmAgent for a domain.
+
+    Sanitizes the domain name before interpolation into the LLM instruction.
+
+    Raises:
+        UnsafeInputError: If the domain name fails sanitization.
+    """
+    safe_name = sanitize_for_prompt(domain.name)
     model = _REASONING_MODEL.get(domain.agent_config.reasoning_level, _DEFAULT_MODEL)
     return LlmAgent(
-        name=f"domain_agent_{domain.name.lower()}",
+        name=f"domain_agent_{safe_name.lower()}",
         model=model,
-        description=f"Domain agent for {domain.name} — cross-entity reasoning",
-        instruction=(f"You are the {domain.name} domain agent. Delegate CRUD operations to your DataAgent sub-agents."),
+        description=f"Domain agent for {safe_name} — cross-entity reasoning",
+        instruction=(
+            f"You are the {safe_name} domain agent. "
+            "Delegate CRUD operations to your DataAgent sub-agents."
+        ),
         tools=[],
         sub_agents=list(data_agents),
     )

@@ -12,6 +12,7 @@ from typing import Any
 from google.adk.agents import LlmAgent, ParallelAgent
 
 from ninja_agents.base import CoordinatorAgent
+from ninja_agents.safety import sanitize_error, validate_request_size
 from ninja_agents.tracing import TraceContext
 
 
@@ -72,6 +73,9 @@ class Orchestrator:
     ) -> dict[str, Any]:
         """Fan out request to multiple domains concurrently, collect results.
 
+        Validates request size before fan-out. Error messages from failed
+        domains are sanitized to prevent information disclosure.
+
         Args:
             request: The user request to process.
             target_domains: Domains to route to.  Defaults to all domains.
@@ -79,7 +83,11 @@ class Orchestrator:
 
         Returns:
             Dict mapping domain name to its result.
+
+        Raises:
+            ValueError: If the request exceeds the size limit.
         """
+        validate_request_size(request)
         domains = target_domains or self.coordinator.domain_names
         if trace:
             trace.start_span(self.coordinator.name)
@@ -89,7 +97,7 @@ class Orchestrator:
             results: dict[str, Any] = {}
             for item in results_list:
                 if isinstance(item, Exception):
-                    results["_error"] = str(item)
+                    results["_error"] = sanitize_error(item)
                 else:
                     domain_name, result = item
                     results[domain_name] = result
