@@ -6,6 +6,7 @@ from ninja_agents.base import (
     DomainAgent,
     create_coordinator_agent,
     create_domain_agent,
+    sanitize_agent_name,
 )
 from ninja_agents.orchestrator import Orchestrator
 from ninja_agents.tools import generate_crud_tools
@@ -20,4 +21,5 @@ __all__ = [
     "create_coordinator_agent",
     "create_domain_agent",
     "generate_crud_tools",
+    "sanitize_agent_name",
 ]
