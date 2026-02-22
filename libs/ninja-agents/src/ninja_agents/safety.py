@@ -120,7 +120,7 @@ MAX_TOOL_KWARGS_SIZE = 50_000  # approximate serialized size in characters
 
 
 def validate_request_size(request: str, max_length: int = MAX_REQUEST_LENGTH) -> str:
-    """Validate that an agent request does not exceed the size limit.
+    """Validate that an agent request is non-empty and does not exceed the size limit.
 
     Args:
         request: The user request string.
@@ -131,9 +131,12 @@ def validate_request_size(request: str, max_length: int = MAX_REQUEST_LENGTH) ->
 
     Raises:
         AgentInputTooLarge: If the request exceeds the size limit.
+        ValueError: If the request is empty or whitespace-only.
     """
     if not isinstance(request, str):
         raise AgentInputTooLarge(f"Request must be a string, got {type(request).__name__}")
+    if not request.strip():
+        raise ValueError("Request cannot be empty.")
     if len(request) > max_length:
         raise AgentInputTooLarge(
             f"Request too large: {len(request)} characters exceeds "
