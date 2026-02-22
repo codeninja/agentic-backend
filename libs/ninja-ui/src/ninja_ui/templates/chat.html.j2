@@ -81,8 +81,8 @@ async function sendMessage() {
 
   document.getElementById("typing").style.display = "block";
 
-  const query = `query { ask_${activeDomain.toLowerCase()}(query: "${text.replace(/"/g, '\\"')}") }`;
-  const data = await gqlQuery(query);
+  const query = `query($query: String!) { ask_${activeDomain.toLowerCase()}(query: $query) }`;
+  const data = await gqlQuery(query, { query: text });
   document.getElementById("typing").style.display = "none";
 
   const result = data?.data?.[`ask_${activeDomain.toLowerCase()}`];
@@ -97,11 +97,11 @@ async function sendMessage() {
   }
 }
 
-async function gqlQuery(query) {
+async function gqlQuery(query, variables) {
   const res = await fetch(GQL_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query, variables }),
   });
   return res.json();
 }
