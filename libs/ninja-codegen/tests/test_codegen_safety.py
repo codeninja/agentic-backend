@@ -38,6 +38,14 @@ class TestSafeIdentifierFilter:
         with pytest.raises(ValueError, match="Unsafe identifier"):
             _safe_identifier("../../etc/passwd")
 
+    def test_rejects_python_keyword(self) -> None:
+        with pytest.raises(ValueError, match="reserved keyword"):
+            _safe_identifier("class")
+
+    def test_rejects_import_keyword(self) -> None:
+        with pytest.raises(ValueError, match="reserved keyword"):
+            _safe_identifier("import")
+
 
 class TestSandboxedEnvironment:
     def test_env_is_sandboxed(self) -> None:

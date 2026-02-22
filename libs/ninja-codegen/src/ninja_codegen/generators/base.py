@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import keyword
 import re
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,10 @@ def _safe_identifier(value: str) -> str:
             f"Unsafe identifier in template: {s!r}. "
             "Must start with a letter, contain only alphanumeric "
             "characters and underscores, and be at most 64 characters."
+        )
+    if keyword.iskeyword(s):
+        raise ValueError(
+            f"Unsafe identifier in template: {s!r} is a Python reserved keyword."
         )
     return s
 
