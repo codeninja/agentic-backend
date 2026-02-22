@@ -54,8 +54,7 @@ class ConnectionProfile(BaseModel):
         elif scheme in ("mongodb", "mongodb+srv"):
             if not parsed.hostname:
                 raise InvalidConnectionURL(
-                    f"Invalid MongoDB URL '{v}': missing hostname. "
-                    "Expected format: 'mongodb://host:port/dbname'"
+                    f"Invalid MongoDB URL '{v}': missing hostname. Expected format: 'mongodb://host:port/dbname'"
                 )
 
         return v

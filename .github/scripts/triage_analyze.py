@@ -21,14 +21,21 @@ def main():
     is_bug = "bug" in labels.lower()
 
     task = (
-        "This is a BUG report. Identify the likely root cause, affected files, and whether existing tests cover this area."
+        "This is a BUG report. Identify the likely root cause, affected files,"
+        " and whether existing tests cover this area."
         if is_bug
-        else "This is a FEATURE/ENHANCEMENT request. Assess feasibility, identify affected components, and flag any architectural conflicts."
+        else "This is a FEATURE/ENHANCEMENT request. Assess feasibility,"
+        " identify affected components, and flag any architectural conflicts."
     )
 
     rc_or_feasibility = "Root Cause" if is_bug else "Feasibility Assessment"
 
-    prompt = f"""You are a senior software engineer triaging a GitHub issue for the NinjaStack monorepo — a schema-first agentic backend framework.
+    triage_intro = (
+        "You are a senior software engineer triaging a GitHub issue"
+        " for the NinjaStack monorepo"
+        " — a schema-first agentic backend framework."
+    )
+    prompt = f"""{triage_intro}
 
 ## Issue
 **Title:** {issue_title}
@@ -71,12 +78,14 @@ Respond in this exact markdown format:
 (brief implementation direction if recommending `planning`)
 """
 
-    body = json.dumps({
-        "model": "gpt-5.2",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": 2000,
-        "temperature": 0.2,
-    }).encode()
+    body = json.dumps(
+        {
+            "model": "gpt-5.2",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_completion_tokens": 2000,
+            "temperature": 0.2,
+        }
+    ).encode()
 
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",

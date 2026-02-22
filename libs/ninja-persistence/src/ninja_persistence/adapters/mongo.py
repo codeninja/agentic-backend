@@ -134,7 +134,9 @@ class MongoAdapter:
                     cause=exc,
                 ) from exc
             if _is_connection_error(exc):
-                logger.error("Mongo update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Mongo update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="update",
@@ -157,7 +159,9 @@ class MongoAdapter:
             return result.deleted_count > 0
         except Exception as exc:
             if _is_connection_error(exc):
-                logger.error("Mongo delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Mongo delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="delete",

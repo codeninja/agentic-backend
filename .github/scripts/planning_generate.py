@@ -16,7 +16,13 @@ def main():
     with open("/tmp/triage_comment.txt") as f:
         triage_analysis = f.read()
 
-    prompt = f"""You are a principal software engineer creating an implementation plan for a GitHub issue in the NinjaStack monorepo — a schema-first agentic backend framework (Python, Google ADK, Pydantic, pytest).
+    intro = (
+        "You are a principal software engineer creating an implementation plan"
+        " for a GitHub issue in the NinjaStack monorepo"
+        " — a schema-first agentic backend framework"
+        " (Python, Google ADK, Pydantic, pytest)."
+    )
+    prompt = f"""{intro}
 
 ## Issue
 **Title:** {issue_title}
@@ -73,12 +79,14 @@ Respond in this exact markdown format:
 **Migration needed:** Yes / No
 """
 
-    body = json.dumps({
-        "model": "gpt-5.2",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": 3000,
-        "temperature": 0.2,
-    }).encode()
+    body = json.dumps(
+        {
+            "model": "gpt-5.2",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_completion_tokens": 3000,
+            "temperature": 0.2,
+        }
+    ).encode()
 
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",

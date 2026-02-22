@@ -80,10 +80,7 @@ class RateLimiter:
             bucket.consecutive_failures = 0
         else:
             bucket.consecutive_failures += 1
-            if (
-                self.config.lockout_threshold > 0
-                and bucket.consecutive_failures >= self.config.lockout_threshold
-            ):
+            if self.config.lockout_threshold > 0 and bucket.consecutive_failures >= self.config.lockout_threshold:
                 bucket.locked_until = now + self.config.lockout_duration_seconds
                 logger.warning(
                     "Account lockout triggered for key=%s after %d consecutive failures",

@@ -1,14 +1,11 @@
 """Tests for API key strategy."""
 
-import os
-
 from ninja_auth.config import ApiKeyConfig
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Legacy plaintext keys (backward compat)

@@ -1,8 +1,9 @@
 """Tests for Chroma adapter error handling — verifies that raw chromadb exceptions
 are caught and re-raised as domain PersistenceError subclasses."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 from ninja_persistence.adapters.chroma import ChromaVectorAdapter, _is_duplicate_id_error
 from ninja_persistence.exceptions import (
@@ -139,6 +140,7 @@ async def test_error_does_not_leak_details(doc_entity: EntitySchema):
 
 # --- Unit tests for helper function ---
 
+
 def test_is_duplicate_id_error_value_error():
     assert _is_duplicate_id_error(ValueError("ID x already exists")) is True
 
@@ -150,4 +152,5 @@ def test_is_duplicate_id_error_generic():
 def test_is_duplicate_id_error_by_type_name():
     class DuplicateIDError(Exception):
         pass
+
     assert _is_duplicate_id_error(DuplicateIDError("dup")) is True
