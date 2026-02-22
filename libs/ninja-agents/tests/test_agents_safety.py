@@ -137,6 +137,14 @@ class TestValidateRequestSize:
     def test_default_limit_is_50k(self) -> None:
         assert MAX_REQUEST_LENGTH == 50_000
 
+    def test_rejects_empty_string(self) -> None:
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_request_size("")
+
+    def test_rejects_whitespace_only(self) -> None:
+        with pytest.raises(ValueError, match="cannot be empty"):
+            validate_request_size("   \n\t  ")
+
 
 # ---------------------------------------------------------------------------
 # validate_tool_kwargs
@@ -368,6 +376,42 @@ class TestInputSizeValidation:
         orchestrator = Orchestrator(coordinator)
         with pytest.raises(AgentInputTooLarge, match="Request too large"):
             await orchestrator.fan_out("x" * (MAX_REQUEST_LENGTH + 1))
+
+    def test_domain_agent_rejects_empty_request(
+        self, order_entity: EntitySchema, billing_domain: DomainSchema
+    ) -> None:
+        da = DataAgent(entity=order_entity)
+        domain_agent = DomainAgent(billing_domain, data_agents=[da])
+        with pytest.raises(ValueError, match="cannot be empty"):
+            domain_agent.execute("")
+
+    def test_domain_agent_rejects_whitespace_request(
+        self, order_entity: EntitySchema, billing_domain: DomainSchema
+    ) -> None:
+        da = DataAgent(entity=order_entity)
+        domain_agent = DomainAgent(billing_domain, data_agents=[da])
+        with pytest.raises(ValueError, match="cannot be empty"):
+            domain_agent.execute("   \n\t  ")
+
+    def test_coordinator_rejects_empty_request(
+        self, order_entity: EntitySchema, billing_domain: DomainSchema
+    ) -> None:
+        da = DataAgent(entity=order_entity)
+        billing = DomainAgent(billing_domain, data_agents=[da])
+        coordinator = CoordinatorAgent(domain_agents=[billing])
+        with pytest.raises(ValueError, match="cannot be empty"):
+            coordinator.route("", target_domains=["Billing"])
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_rejects_empty_request(
+        self, order_entity: EntitySchema, billing_domain: DomainSchema
+    ) -> None:
+        da = DataAgent(entity=order_entity)
+        billing = DomainAgent(billing_domain, data_agents=[da])
+        coordinator = CoordinatorAgent(domain_agents=[billing])
+        orchestrator = Orchestrator(coordinator)
+        with pytest.raises(ValueError, match="cannot be empty"):
+            await orchestrator.fan_out("")
 
 
 # ---------------------------------------------------------------------------
