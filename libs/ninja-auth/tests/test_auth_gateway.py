@@ -1,5 +1,7 @@
 """Tests for the AuthGateway middleware and context injection."""
 
+from datetime import datetime, timedelta, timezone
+
 import jwt
 from ninja_auth.config import ApiKeyConfig, AuthConfig, BearerConfig
 from ninja_auth.context import UserContext
@@ -29,6 +31,8 @@ def _build_app(config: AuthConfig | None = None) -> Starlette:
 
 
 def _make_token(payload: dict) -> str:
+    if "exp" not in payload:
+        payload = {**payload, "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
     return jwt.encode(payload, SECRET, algorithm="HS256")
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -36,8 +37,32 @@ class IdentityStrategy:
         """Verify a password against its bcrypt hash."""
         return bcrypt.checkpw(plain.encode(), hashed.encode())
 
+    def _validate_password(self, password: str) -> None:
+        """Validate password against the configured policy.
+
+        Raises:
+            ValueError: If the password does not meet policy requirements.
+        """
+        policy = self.config.password_policy
+        errors: list[str] = []
+
+        if len(password) < policy.min_length:
+            errors.append(f"at least {policy.min_length} characters")
+        if policy.require_uppercase and not re.search(r"[A-Z]", password):
+            errors.append("an uppercase letter")
+        if policy.require_lowercase and not re.search(r"[a-z]", password):
+            errors.append("a lowercase letter")
+        if policy.require_digit and not re.search(r"\d", password):
+            errors.append("a digit")
+        if policy.require_special and not re.search(r"[^A-Za-z0-9]", password):
+            errors.append("a special character")
+
+        if errors:
+            raise ValueError(f"Password does not meet policy: must contain {', '.join(errors)}")
+
     def register(self, email: str, password: str, roles: list[str] | None = None) -> UserContext:
         """Register a new user account."""
+        self._validate_password(password)
         if self._store.exists(email):
             raise ValueError(f"User already exists: {email}")
 

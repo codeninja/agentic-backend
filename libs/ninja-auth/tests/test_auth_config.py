@@ -214,3 +214,41 @@ class TestRedirectUriValidation:
                 userinfo_url="https://u.com",
                 redirect_uri="https:///callback",
             )
+
+    def test_http_non_localhost_rejected(self):
+        with pytest.raises(ValueError, match="HTTPS"):
+            OAuth2ProviderConfig(
+                client_id="c",
+                client_secret="s",
+                authorize_url="https://a.com",
+                token_url="https://t.com",
+                userinfo_url="https://u.com",
+                redirect_uri="http://myapp.com/callback",
+            )
+
+    def test_http_localhost_allowed(self):
+        for uri in (
+            "http://localhost:3000/callback",
+            "http://127.0.0.1:3000/callback",
+            "http://[::1]:3000/callback",
+        ):
+            cfg = OAuth2ProviderConfig(
+                client_id="c",
+                client_secret="s",
+                authorize_url="https://a.com",
+                token_url="https://t.com",
+                userinfo_url="https://u.com",
+                redirect_uri=uri,
+            )
+            assert "http://" in cfg.redirect_uri
+
+    def test_https_non_localhost_accepted(self):
+        cfg = OAuth2ProviderConfig(
+            client_id="c",
+            client_secret="s",
+            authorize_url="https://a.com",
+            token_url="https://t.com",
+            userinfo_url="https://u.com",
+            redirect_uri="https://myapp.com/callback",
+        )
+        assert cfg.redirect_uri == "https://myapp.com/callback"

@@ -44,6 +44,10 @@ class OAuth2ProviderConfig(BaseModel):
             raise ValueError(f"redirect_uri must be an HTTP(S) URL, got: '{self.redirect_uri}'")
         if not parsed.hostname:
             raise ValueError(f"redirect_uri must include a hostname, got: '{self.redirect_uri}'")
+        # Enforce HTTPS for non-localhost redirect URIs
+        _localhost = {"localhost", "127.0.0.1", "::1"}
+        if parsed.scheme == "http" and parsed.hostname not in _localhost:
+            raise ValueError(f"redirect_uri must use HTTPS for non-localhost hosts, got: '{self.redirect_uri}'")
         return self
 
 
@@ -122,6 +126,16 @@ class ApiKeyConfig(BaseModel):
 _INSECURE_TOKEN_SECRET = "change-me-in-production"
 
 
+class PasswordPolicy(BaseModel):
+    """Configurable password strength requirements."""
+
+    min_length: int = 8
+    require_uppercase: bool = True
+    require_lowercase: bool = True
+    require_digit: bool = True
+    require_special: bool = False
+
+
 class IdentityConfig(BaseModel):
     """Built-in identity (registration/login) config."""
 
@@ -129,6 +143,7 @@ class IdentityConfig(BaseModel):
     hash_algorithm: str = "bcrypt"
     token_secret: str = _INSECURE_TOKEN_SECRET
     token_expiry_minutes: int = 60
+    password_policy: PasswordPolicy = Field(default_factory=PasswordPolicy)
 
     @model_validator(mode="after")
     def _check_token_secret(self) -> IdentityConfig:

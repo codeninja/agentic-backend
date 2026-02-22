@@ -1,10 +1,11 @@
-"""In-memory sliding-window rate limiter for authentication endpoints."""
+"""Pluggable rate limiter with in-memory default for authentication endpoints."""
 
 from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -21,6 +22,27 @@ class RateLimitConfig(BaseModel):
     lockout_duration_seconds: int = 300
 
 
+@runtime_checkable
+class RateLimiterProtocol(Protocol):
+    """Protocol for pluggable rate limiter implementations.
+
+    Implement this protocol to provide a custom rate limiter (e.g. Redis-backed)
+    and pass it to ``AuthConfig`` or ``AuthGateway``.
+    """
+
+    def is_rate_limited(self, key: str) -> bool:
+        """Return True if *key* should be rejected (429)."""
+        ...
+
+    def record_attempt(self, key: str, *, success: bool) -> None:
+        """Record an authentication attempt for *key*."""
+        ...
+
+    def reset(self, key: str) -> None:
+        """Clear all state for *key*."""
+        ...
+
+
 @dataclass
 class _BucketState:
     """Tracks attempts and lockout state for a single key (e.g. IP)."""
@@ -30,7 +52,7 @@ class _BucketState:
     locked_until: float = 0.0
 
 
-class RateLimiter:
+class InMemoryRateLimiter:
     """Sliding-window rate limiter with optional account lockout.
 
     Keyed by client IP (or any string identifier).  Thread-safe enough for
@@ -91,3 +113,7 @@ class RateLimiter:
     def reset(self, key: str) -> None:
         """Clear all state for *key* (e.g. after a successful password reset)."""
         self._buckets.pop(key, None)
+
+
+# Backward-compatible alias
+RateLimiter = InMemoryRateLimiter

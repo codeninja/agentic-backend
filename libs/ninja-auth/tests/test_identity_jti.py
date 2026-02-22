@@ -17,7 +17,7 @@ def _make_strategy() -> IdentityStrategy:
 def test_issue_token_includes_jti():
     """Every issued token must contain a jti claim."""
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "password123")
+    ctx = strategy.register("user@example.com", "Password1")
     token = strategy.issue_token(ctx)
 
     payload = jwt.decode(token, SECRET, algorithms=["HS256"])
@@ -29,7 +29,7 @@ def test_issue_token_includes_jti():
 def test_issue_token_jti_is_unique():
     """Each issued token must have a distinct jti."""
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "password123")
+    ctx = strategy.register("user@example.com", "Password1")
 
     token1 = strategy.issue_token(ctx)
     token2 = strategy.issue_token(ctx)
@@ -42,7 +42,7 @@ def test_issue_token_jti_is_unique():
 def test_issue_token_still_includes_standard_claims():
     """Adding jti must not break existing claims (sub, email, roles, iat, exp)."""
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "pass", roles=["admin"])
+    ctx = strategy.register("user@example.com", "Password1", roles=["admin"])
     token = strategy.issue_token(ctx)
 
     payload = jwt.decode(token, SECRET, algorithms=["HS256"])
@@ -57,7 +57,7 @@ def test_issue_token_still_includes_standard_claims():
 def test_validate_token_still_works_with_jti():
     """validate_token must continue to work with tokens containing jti."""
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "pass")
+    ctx = strategy.register("user@example.com", "Password1")
     token = strategy.issue_token(ctx)
 
     validated = strategy.validate_token(token)

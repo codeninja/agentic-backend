@@ -3,7 +3,7 @@
 import time
 from unittest.mock import patch
 
-from ninja_auth.rate_limiter import RateLimitConfig, RateLimiter
+from ninja_auth.rate_limiter import InMemoryRateLimiter, RateLimitConfig, RateLimiter, RateLimiterProtocol
 
 
 def _make_limiter(**kwargs) -> RateLimiter:
@@ -93,3 +93,33 @@ def test_reset_clears_state():
     assert limiter.is_rate_limited("1.2.3.4")
     limiter.reset("1.2.3.4")
     assert not limiter.is_rate_limited("1.2.3.4")
+
+
+def test_in_memory_satisfies_protocol():
+    """InMemoryRateLimiter satisfies the RateLimiterProtocol."""
+    limiter = InMemoryRateLimiter(RateLimitConfig())
+    assert isinstance(limiter, RateLimiterProtocol)
+
+
+def test_backward_compat_alias():
+    """RateLimiter is an alias for InMemoryRateLimiter."""
+    assert RateLimiter is InMemoryRateLimiter
+
+
+def test_custom_rate_limiter_protocol():
+    """A custom class satisfying RateLimiterProtocol is recognized."""
+
+    class CustomLimiter:
+        def is_rate_limited(self, key: str) -> bool:
+            return key == "blocked"
+
+        def record_attempt(self, key: str, *, success: bool) -> None:
+            pass
+
+        def reset(self, key: str) -> None:
+            pass
+
+    limiter = CustomLimiter()
+    assert isinstance(limiter, RateLimiterProtocol)
+    assert limiter.is_rate_limited("blocked")
+    assert not limiter.is_rate_limited("allowed")
