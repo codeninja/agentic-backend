@@ -15,7 +15,7 @@ from ninja_auth.agent_context import set_rbac_policy, set_user_context
 from ninja_auth.config import AuthConfig
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_auth.errors import AuthenticationError
-from ninja_auth.rate_limiter import RateLimiter
+from ninja_auth.rate_limiter import InMemoryRateLimiter, RateLimiterProtocol
 from ninja_auth.rbac import RBACPolicy
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from ninja_auth.strategies.bearer import BearerStrategy
@@ -39,13 +39,18 @@ def _client_ip(request: Request) -> str:
 class AuthGateway(BaseHTTPMiddleware):
     """Starlette middleware that authenticates requests and injects UserContext into request state."""
 
-    def __init__(self, app: Any, config: AuthConfig | None = None) -> None:
+    def __init__(
+        self,
+        app: Any,
+        config: AuthConfig | None = None,
+        rate_limiter: RateLimiterProtocol | None = None,
+    ) -> None:
         super().__init__(app)
         self.config = config or AuthConfig()
         self._bearer = BearerStrategy(self.config.bearer)
         self._apikey = ApiKeyStrategy(self.config.api_key)
         self._rbac = RBACPolicy(self.config.rbac)
-        self._rate_limiter = RateLimiter(self.config.rate_limit)
+        self._rate_limiter: RateLimiterProtocol = rate_limiter or InMemoryRateLimiter(self.config.rate_limit)
         self._revocation_store = self.config.revocation_store
 
     def _is_public_path(self, path: str) -> bool:
@@ -83,7 +88,10 @@ class AuthGateway(BaseHTTPMiddleware):
         if user_ctx is not None:
             logger.info(
                 "Authentication successful: user_id=%s provider=%s ip=%s path=%s",
-                user_ctx.user_id, user_ctx.provider, client_ip, request.url.path,
+                user_ctx.user_id,
+                user_ctx.provider,
+                client_ip,
+                request.url.path,
                 extra={
                     "event": "auth_success",
                     "user_id": user_ctx.user_id,

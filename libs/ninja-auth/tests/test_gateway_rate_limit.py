@@ -1,5 +1,7 @@
 """Tests for rate limiting integration in the AuthGateway middleware."""
 
+from datetime import datetime, timedelta, timezone
+
 import jwt
 from ninja_auth.config import AuthConfig, BearerConfig
 from ninja_auth.context import UserContext
@@ -25,6 +27,8 @@ def _build_app(config: AuthConfig) -> Starlette:
 
 
 def _make_token(payload: dict) -> str:
+    if "exp" not in payload:
+        payload = {**payload, "exp": datetime.now(timezone.utc) + timedelta(hours=1)}
     return jwt.encode(payload, SECRET, algorithm="HS256")
 
 
@@ -132,3 +136,32 @@ def test_rate_limited_request_is_logged(caplog):
         client.get("/protected")  # should be rate limited
 
     assert any("Rate limited" in r.message for r in caplog.records)
+
+
+def test_custom_rate_limiter_injection():
+    """AuthGateway accepts a custom rate limiter via constructor."""
+
+    class AlwaysBlockLimiter:
+        def is_rate_limited(self, key: str) -> bool:
+            return True
+
+        def record_attempt(self, key: str, *, success: bool) -> None:
+            pass
+
+        def reset(self, key: str) -> None:
+            pass
+
+    config = AuthConfig(
+        bearer=BearerConfig(secret_key=SECRET),
+        rate_limit=RateLimitConfig(enabled=True, max_attempts=1000),
+    )
+
+    async def protected(request: Request) -> JSONResponse:
+        return JSONResponse({"ok": True})
+
+    app = Starlette(routes=[Route("/protected", protected)])
+    app.add_middleware(AuthGateway, config=config, rate_limiter=AlwaysBlockLimiter())
+    client = TestClient(app)
+
+    resp = client.get("/protected")
+    assert resp.status_code == 429

@@ -13,8 +13,8 @@ from ninja_auth.context import UserContext
 
 logger = logging.getLogger(__name__)
 
-# Claims that must be present and non-empty in every JWT.
-_REQUIRED_CLAIMS = ("sub",)
+# Claims that must be present in every JWT.
+_REQUIRED_CLAIMS = ("sub", "exp")
 
 
 class BearerStrategy:
@@ -41,7 +41,7 @@ class BearerStrategy:
         strategies or treat the request as unauthenticated.
         """
         auth_header = request.headers.get("authorization", "")
-        if not auth_header.startswith("Bearer "):
+        if not auth_header[:7].lower() == "bearer " or len(auth_header) <= 7:
             return None
 
         token = auth_header[7:]
@@ -54,8 +54,8 @@ class BearerStrategy:
         * Signature verification against the configured key/algorithm.
         * Optional ``iss`` (issuer) and ``aud`` (audience) checks when the
           corresponding config fields are set.
-        * ``exp`` is validated by PyJWT automatically when present.
-        * Required claims (``sub``) must be present and non-empty.
+        * ``exp`` is required and validated by PyJWT.
+        * Required claims (``sub``, ``exp``) must be present.
 
         Returns ``None`` for any invalid, expired, or incomplete token.
         """

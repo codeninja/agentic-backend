@@ -12,11 +12,11 @@ from ninja_auth.agent_context import (
     set_rbac_policy,
     set_user_context,
 )
-from ninja_auth.config import AuthConfig
+from ninja_auth.config import AuthConfig, PasswordPolicy
 from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_auth.errors import AuthenticationError
 from ninja_auth.gateway import AuthGateway, get_user_context
-from ninja_auth.rate_limiter import RateLimitConfig, RateLimiter
+from ninja_auth.rate_limiter import InMemoryRateLimiter, RateLimitConfig, RateLimiter, RateLimiterProtocol
 from ninja_auth.rbac import (
     BUILTIN_ROLES,
     Action,
@@ -26,13 +26,13 @@ from ninja_auth.rbac import (
     permission_matches,
     require_domain_permission,
 )
+from ninja_auth.revocation import InMemoryRevocationStore, TokenRevocationStore
+from ninja_auth.router import create_auth_router
+from ninja_auth.state_store import InMemoryOAuthStateStore, OAuthStateStore
 from ninja_auth.strategies.apikey import ApiKeyStrategy
 from ninja_auth.strategies.bearer import BearerStrategy
 from ninja_auth.strategies.identity import IdentityStrategy
 from ninja_auth.strategies.oauth2 import OAuth2Strategy
-from ninja_auth.revocation import InMemoryRevocationStore, TokenRevocationStore
-from ninja_auth.router import create_auth_router
-from ninja_auth.state_store import InMemoryOAuthStateStore, OAuthStateStore
 from ninja_auth.user_store import InMemoryUserStore, UserStore
 
 __all__ = [
@@ -46,12 +46,15 @@ __all__ = [
     "BUILTIN_ROLES",
     "IdentityStrategy",
     "InMemoryOAuthStateStore",
+    "InMemoryRateLimiter",
     "InMemoryRevocationStore",
     "InMemoryUserStore",
     "OAuth2Strategy",
     "OAuthStateStore",
+    "PasswordPolicy",
     "RateLimitConfig",
     "RateLimiter",
+    "RateLimiterProtocol",
     "RBACConfig",
     "RBACPolicy",
     "RoleDefinition",

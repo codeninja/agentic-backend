@@ -7,9 +7,12 @@ from typing import Any
 
 import jwt
 import pytest
-from ninja_auth.config import IdentityConfig
+from ninja_auth.config import IdentityConfig, PasswordPolicy
 from ninja_auth.strategies.identity import IdentityStrategy
 from ninja_auth.user_store import InMemoryUserStore, UserStore
+
+# Valid password that satisfies the default policy (8+ chars, upper, lower, digit)
+VALID_PASSWORD = "Password1"
 
 
 def _make_strategy(user_store: UserStore | None = None, **kwargs: Any) -> IdentityStrategy:
@@ -19,7 +22,7 @@ def _make_strategy(user_store: UserStore | None = None, **kwargs: Any) -> Identi
 
 def test_identity_register():
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "password123")
+    ctx = strategy.register("user@example.com", VALID_PASSWORD)
     assert ctx.email == "user@example.com"
     assert ctx.provider == "identity"
     assert ctx.is_authenticated
@@ -27,9 +30,9 @@ def test_identity_register():
 
 def test_identity_register_duplicate():
     strategy = _make_strategy()
-    strategy.register("a@b.com", "pass")
+    strategy.register("a@b.com", VALID_PASSWORD)
     try:
-        strategy.register("a@b.com", "pass2")
+        strategy.register("a@b.com", "OtherPass2")
         assert False, "Should have raised ValueError"
     except ValueError as e:
         assert "already exists" in str(e)
@@ -37,22 +40,22 @@ def test_identity_register_duplicate():
 
 def test_identity_login_success():
     strategy = _make_strategy()
-    strategy.register("user@example.com", "mypassword")
-    ctx = strategy.login("user@example.com", "mypassword")
+    strategy.register("user@example.com", VALID_PASSWORD)
+    ctx = strategy.login("user@example.com", VALID_PASSWORD)
     assert ctx is not None
     assert ctx.email == "user@example.com"
 
 
 def test_identity_login_wrong_password():
     strategy = _make_strategy()
-    strategy.register("user@example.com", "correct")
-    ctx = strategy.login("user@example.com", "wrong")
+    strategy.register("user@example.com", VALID_PASSWORD)
+    ctx = strategy.login("user@example.com", "WrongPass9")
     assert ctx is None
 
 
 def test_identity_login_unknown_user():
     strategy = _make_strategy()
-    ctx = strategy.login("noone@example.com", "pass")
+    ctx = strategy.login("noone@example.com", VALID_PASSWORD)
     assert ctx is None
 
 
@@ -66,7 +69,7 @@ def test_identity_password_hashing():
 
 def test_identity_issue_token():
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "pass")
+    ctx = strategy.register("user@example.com", VALID_PASSWORD)
     token = strategy.issue_token(ctx)
     assert isinstance(token, str)
 
@@ -77,7 +80,7 @@ def test_identity_issue_token():
 
 def test_identity_validate_token():
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "pass")
+    ctx = strategy.register("user@example.com", VALID_PASSWORD)
     token = strategy.issue_token(ctx)
     validated = strategy.validate_token(token)
     assert validated is not None
@@ -94,8 +97,58 @@ def test_identity_validate_invalid_token():
 
 def test_identity_register_with_roles():
     strategy = _make_strategy()
-    ctx = strategy.register("admin@example.com", "pass", roles=["admin", "editor"])
+    ctx = strategy.register("admin@example.com", VALID_PASSWORD, roles=["admin", "editor"])
     assert ctx.roles == ["admin", "editor"]
+
+
+# --- Password validation tests ---
+
+
+def test_password_too_short():
+    strategy = _make_strategy()
+    with pytest.raises(ValueError, match="at least 8 characters"):
+        strategy.register("user@example.com", "Ab1")
+
+
+def test_password_missing_uppercase():
+    strategy = _make_strategy()
+    with pytest.raises(ValueError, match="uppercase"):
+        strategy.register("user@example.com", "password1")
+
+
+def test_password_missing_lowercase():
+    strategy = _make_strategy()
+    with pytest.raises(ValueError, match="lowercase"):
+        strategy.register("user@example.com", "PASSWORD1")
+
+
+def test_password_missing_digit():
+    strategy = _make_strategy()
+    with pytest.raises(ValueError, match="digit"):
+        strategy.register("user@example.com", "Passwords")
+
+
+def test_password_custom_policy_special_char():
+    policy = PasswordPolicy(require_special=True)
+    strategy = _make_strategy(password_policy=policy)
+    with pytest.raises(ValueError, match="special character"):
+        strategy.register("user@example.com", "Password1")
+
+    ctx = strategy.register("user@example.com", "Password1!")
+    assert ctx is not None
+
+
+def test_password_relaxed_policy():
+    """A relaxed policy allows simple passwords."""
+    policy = PasswordPolicy(
+        min_length=4,
+        require_uppercase=False,
+        require_lowercase=False,
+        require_digit=False,
+    )
+    strategy = _make_strategy(password_policy=policy)
+    ctx = strategy.register("user@example.com", "pass")
+    assert ctx is not None
 
 
 # --- UserStore protocol tests ---
@@ -126,7 +179,7 @@ def test_custom_user_store_injection():
     store = FakeUserStore()
     strategy = _make_strategy(user_store=store)
 
-    ctx = strategy.register("test@example.com", "pass123")
+    ctx = strategy.register("test@example.com", VALID_PASSWORD)
     assert ctx.email == "test@example.com"
 
     # Verify data went through the custom store
@@ -136,7 +189,7 @@ def test_custom_user_store_injection():
     assert record["email"] == "test@example.com"
 
     # Login works through the custom store
-    logged_in = strategy.login("test@example.com", "pass123")
+    logged_in = strategy.login("test@example.com", VALID_PASSWORD)
     assert logged_in is not None
     assert logged_in.email == "test@example.com"
 
@@ -166,18 +219,18 @@ IDENTITY_LOGGER = "ninja_auth.strategies.identity"
 def test_login_failure_logs_warning_without_password(caplog: pytest.LogCaptureFixture) -> None:
     """Failed login emits WARNING and does NOT contain the password."""
     strategy = _make_strategy()
-    strategy.register("user@example.com", "correct-password")
+    strategy.register("user@example.com", VALID_PASSWORD)
 
     with caplog.at_level(logging.WARNING, logger=IDENTITY_LOGGER):
-        strategy.login("user@example.com", "wrong-password-secret")
+        strategy.login("user@example.com", "WrongPass9secret")
 
     warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and r.name == IDENTITY_LOGGER]
     assert len(warning_records) >= 1
     assert "user@example.com" in warning_records[0].message
     # Password must NEVER appear in the log
     full_output = " ".join(r.message for r in caplog.records)
-    assert "wrong-password-secret" not in full_output
-    assert "correct-password" not in full_output
+    assert "WrongPass9secret" not in full_output
+    assert VALID_PASSWORD not in full_output
 
 
 def test_login_failure_unknown_email_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
@@ -185,7 +238,7 @@ def test_login_failure_unknown_email_logs_warning(caplog: pytest.LogCaptureFixtu
     strategy = _make_strategy()
 
     with caplog.at_level(logging.WARNING, logger=IDENTITY_LOGGER):
-        strategy.login("nobody@example.com", "some-pass")
+        strategy.login("nobody@example.com", VALID_PASSWORD)
 
     warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and r.name == IDENTITY_LOGGER]
     assert len(warning_records) >= 1
@@ -195,10 +248,10 @@ def test_login_failure_unknown_email_logs_warning(caplog: pytest.LogCaptureFixtu
 def test_successful_login_logs_info(caplog: pytest.LogCaptureFixture) -> None:
     """Successful login emits INFO with email."""
     strategy = _make_strategy()
-    strategy.register("user@example.com", "password123")
+    strategy.register("user@example.com", VALID_PASSWORD)
 
     with caplog.at_level(logging.INFO, logger=IDENTITY_LOGGER):
-        ctx = strategy.login("user@example.com", "password123")
+        ctx = strategy.login("user@example.com", VALID_PASSWORD)
 
     assert ctx is not None
     info_records = [r for r in caplog.records if r.levelno == logging.INFO and "Login successful" in r.message]
@@ -211,7 +264,7 @@ def test_register_logs_info(caplog: pytest.LogCaptureFixture) -> None:
     strategy = _make_strategy()
 
     with caplog.at_level(logging.INFO, logger=IDENTITY_LOGGER):
-        ctx = strategy.register("newuser@example.com", "pass123", roles=["editor"])
+        ctx = strategy.register("newuser@example.com", VALID_PASSWORD, roles=["editor"])
 
     info_records = [r for r in caplog.records if r.levelno == logging.INFO and "registered" in r.message]
     assert len(info_records) == 1
@@ -222,7 +275,7 @@ def test_register_logs_info(caplog: pytest.LogCaptureFixture) -> None:
 def test_issue_token_logs_info(caplog: pytest.LogCaptureFixture) -> None:
     """Token issuance emits INFO with user_id."""
     strategy = _make_strategy()
-    ctx = strategy.register("user@example.com", "pass")
+    ctx = strategy.register("user@example.com", VALID_PASSWORD)
 
     with caplog.at_level(logging.INFO, logger=IDENTITY_LOGGER):
         strategy.issue_token(ctx)

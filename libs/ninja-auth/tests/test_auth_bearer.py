@@ -1,7 +1,7 @@
 """Tests for Bearer (JWT) strategy."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import jwt
 import pytest
@@ -11,8 +11,14 @@ from starlette.testclient import TestClient
 
 SECRET = "test-secret-key-that-is-at-least-32-bytes-long"
 
+# Future expiry for valid tokens
+_FUTURE_EXP = datetime.now(timezone.utc) + timedelta(hours=1)
+
 
 def _make_token(payload: dict, secret: str = SECRET, algorithm: str = "HS256") -> str:
+    # Auto-add a future exp if not explicitly set
+    if "exp" not in payload:
+        payload = {**payload, "exp": _FUTURE_EXP}
     return jwt.encode(payload, secret, algorithm=algorithm)
 
 
@@ -37,6 +43,16 @@ def test_bearer_expired_token():
             "exp": datetime(2020, 1, 1, tzinfo=timezone.utc),
         }
     )
+    ctx = strategy.validate_token(token)
+    assert ctx is None
+
+
+def test_bearer_rejects_token_missing_exp():
+    """JWT without an 'exp' claim must be rejected."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+    # Explicitly create token without exp
+    token = jwt.encode({"sub": "user1"}, SECRET, algorithm="HS256")
     ctx = strategy.validate_token(token)
     assert ctx is None
 
@@ -108,6 +124,31 @@ async def test_bearer_authenticate_from_header():
     # No header
     resp = client.get("/")
     assert resp.json()["user_id"] is None
+
+
+async def test_bearer_case_insensitive_prefix():
+    """The 'Bearer' prefix in the Authorization header should be case-insensitive."""
+    config = BearerConfig(secret_key=SECRET, algorithm="HS256")
+    strategy = BearerStrategy(config)
+
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    async def homepage(request):
+        ctx = await strategy.authenticate(request)
+        if ctx:
+            return JSONResponse({"user_id": ctx.user_id})
+        return JSONResponse({"user_id": None})
+
+    app = Starlette(routes=[Route("/", homepage)])
+    client = TestClient(app)
+
+    token = _make_token({"sub": "user1"})
+
+    for prefix in ("Bearer", "bearer", "BEARER", "bEaReR"):
+        resp = client.get("/", headers={"Authorization": f"{prefix} {token}"})
+        assert resp.json()["user_id"] == "user1", f"Failed for prefix: {prefix}"
 
 
 def test_bearer_rejects_token_missing_sub():
