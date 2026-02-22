@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -42,21 +43,72 @@ def init(
 
 
 @app.command()
-def sync() -> None:
-    """Sync ASD schema to generated code. (Not yet implemented)"""
-    typer.echo("Not yet implemented")
+def sync(
+    root: Path = typer.Option(Path("."), "--root", "-r", help="Project root directory."),
+    force: bool = typer.Option(False, "--force", "-f", help="Force full regeneration, skip change detection."),
+) -> None:
+    """Sync ASD schema to generated code."""
+    if not is_initialized(root):
+        typer.echo("Project not initialized. Run 'ninjastack init' first.", err=True)
+        raise typer.Exit(code=1)
+
+    from ninja_codegen.engine import sync as codegen_sync
+
+    result = codegen_sync(root=root, force=force)
+    if result.skipped:
+        typer.echo("No changes detected — nothing to generate.")
+        return
+    for fpath in result.generated_files:
+        typer.echo(f"  {fpath}")
+    typer.echo(f"Synced {result.file_count} file(s).")
 
 
 @app.command()
-def serve() -> None:
-    """Start the Ninja Stack dev server. (Not yet implemented)"""
-    typer.echo("Not yet implemented")
+def serve(
+    root: Path = typer.Option(Path("."), "--root", "-r", help="Project root directory."),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Bind host."),
+    port: int = typer.Option(8000, "--port", "-p", help="Bind port."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload."),
+) -> None:
+    """Start the Ninja Stack dev server."""
+    if not is_initialized(root):
+        typer.echo("Project not initialized. Run 'ninjastack init' first.", err=True)
+        raise typer.Exit(code=1)
+
+    app_main = root / "_generated" / "app" / "main.py"
+    if not app_main.exists():
+        typer.echo("Generated app not found — running sync first...")
+        from ninja_codegen.engine import sync as codegen_sync
+
+        codegen_sync(root=root)
+
+    import uvicorn
+
+    typer.echo(f"Starting Ninja Stack dev server at {host}:{port}")
+    os.chdir(root)
+    uvicorn.run("_generated.app.main:app", host=host, port=port, reload=reload)
 
 
 @app.command()
-def deploy() -> None:
-    """Deploy the Ninja Stack project. (Not yet implemented)"""
-    typer.echo("Not yet implemented")
+def deploy(
+    root: Path = typer.Option(Path("."), "--root", "-r", help="Project root directory."),
+    output_dir: Path | None = typer.Option(None, "--output-dir", "-o", help="Output directory for K8s manifests."),
+) -> None:
+    """Generate Kubernetes deployment manifests from the ASD."""
+    if not is_initialized(root):
+        typer.echo("Project not initialized. Run 'ninjastack init' first.", err=True)
+        raise typer.Exit(code=1)
+
+    from ninja_core.serialization.io import load_schema
+    from ninja_deploy.k8s_generator import K8sGenerator
+
+    schema = load_schema(root / ".ninjastack" / "schema.json")
+    generator = K8sGenerator(schema)
+    dest = output_dir or root / "k8s"
+    written = generator.write_manifests(dest)
+    for fpath in written:
+        typer.echo(f"  {fpath}")
+    typer.echo(f"Wrote {len(written)} manifest(s) to {dest}.")
 
 
 _VALID_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
