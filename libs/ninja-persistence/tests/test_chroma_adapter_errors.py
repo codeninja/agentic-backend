@@ -1,8 +1,10 @@
 """Tests for Chroma adapter error handling — verifies that raw chromadb exceptions
 are caught and re-raised as domain PersistenceError subclasses."""
 
+import asyncio
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 from ninja_persistence.adapters.chroma import ChromaVectorAdapter, _is_duplicate_id_error
 from ninja_persistence.exceptions import (
@@ -151,3 +153,71 @@ def test_is_duplicate_id_error_by_type_name():
     class DuplicateIDError(Exception):
         pass
     assert _is_duplicate_id_error(DuplicateIDError("dup")) is True
+
+
+# --- Tests verifying asyncio.to_thread is used for non-blocking I/O ---
+
+async def test_find_by_id_uses_to_thread(doc_entity: EntitySchema):
+    """Verify find_by_id offloads the synchronous coll.get call to a thread."""
+    coll = MagicMock()
+    coll.get.return_value = {"ids": ["d1"], "metadatas": [{"title": "t"}], "documents": ["doc"]}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    with patch("ninja_persistence.adapters.chroma.asyncio.to_thread", wraps=asyncio.to_thread) as mock_to_thread:
+        result = await adapter.find_by_id("d1")
+
+    assert result == {"id": "d1", "title": "t", "document": "doc"}
+    # to_thread should be called for _get_collection and coll.get
+    assert mock_to_thread.call_count == 2
+
+
+async def test_create_uses_to_thread(doc_entity: EntitySchema):
+    """Verify create offloads coll.add to a thread."""
+    coll = MagicMock()
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    with patch("ninja_persistence.adapters.chroma.asyncio.to_thread", wraps=asyncio.to_thread) as mock_to_thread:
+        result = await adapter.create({"id": "d1", "document": "hello"})
+
+    assert result == {"id": "d1", "document": "hello"}
+    assert mock_to_thread.call_count == 2  # _get_collection + coll.add
+
+
+async def test_delete_uses_to_thread(doc_entity: EntitySchema):
+    """Verify delete offloads coll.delete to a thread."""
+    coll = MagicMock()
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    with patch("ninja_persistence.adapters.chroma.asyncio.to_thread", wraps=asyncio.to_thread) as mock_to_thread:
+        result = await adapter.delete("d1")
+
+    assert result is True
+    assert mock_to_thread.call_count == 2  # _get_collection + coll.delete
+
+
+async def test_search_semantic_uses_to_thread(doc_entity: EntitySchema):
+    """Verify search_semantic offloads coll.query to a thread."""
+    coll = MagicMock()
+    coll.query.return_value = {
+        "ids": [["d1"]],
+        "metadatas": [[{"title": "t"}]],
+        "documents": [["doc"]],
+        "distances": [[0.1]],
+    }
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    with patch("ninja_persistence.adapters.chroma.asyncio.to_thread", wraps=asyncio.to_thread) as mock_to_thread:
+        results = await adapter.search_semantic("query")
+
+    assert len(results) == 1
+    assert results[0]["_distance"] == 0.1
+    assert mock_to_thread.call_count == 2  # _get_collection + coll.query
+
+
+async def test_no_client_raises_runtime_error(doc_entity: EntitySchema):
+    """Adapter with no client raises RuntimeError from _get_collection."""
+    adapter = ChromaVectorAdapter(entity=doc_entity, client=None)
+
+    # The RuntimeError propagates through find_by_id's handler as a QueryError
+    with pytest.raises(QueryError):
+        await adapter.find_by_id("d1")
