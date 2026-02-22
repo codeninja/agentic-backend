@@ -3,11 +3,23 @@ name = "ninja-api"
 version = "0.1.0"
 description = "Ninja API — FastAPI/GraphQL composition shell"
 requires-python = ">=3.12"
-dependencies = ["ninja-core", "ninja-auth"]
+dependencies = [
+    "ninja-core",
+    "ninja-auth",
+    "ninja-gql",
+    "ninja-persistence",
+    "ninja-agents",
+    "fastapi",
+    "uvicorn[standard]",
+    "strawberry-graphql[fastapi]",
+]
 
 [tool.uv.sources]
 ninja-core = { workspace = true }
 ninja-auth = { workspace = true }
+ninja-gql = { workspace = true }
+ninja-persistence = { workspace = true }
+ninja-agents = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
