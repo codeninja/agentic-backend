@@ -7,7 +7,7 @@ from pathlib import Path
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
 
-from .base import _safe_identifier, get_template_env, validate_output_path, write_generated_file
+from .base import get_template_env, sanitize_name, validate_output_path, write_generated_file
 
 
 def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
@@ -23,11 +23,11 @@ def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
     Raises:
         ValueError: If the output path escapes the output directory.
     """
+    safe_name = sanitize_name(entity.name, "entity name")
     env = get_template_env()
     template = env.get_template("data_agent.py.j2")
     content = template.render(entity=entity)
 
-    safe_name = _safe_identifier(entity.name)
     file_path = output_dir / f"{safe_name.lower()}_agent.py"
     validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
@@ -47,11 +47,11 @@ def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
     Raises:
         ValueError: If the output path escapes the output directory.
     """
+    safe_name = sanitize_name(domain.name, "domain name")
     env = get_template_env()
     template = env.get_template("domain_agent.py.j2")
     content = template.render(domain=domain)
 
-    safe_name = _safe_identifier(domain.name)
     file_path = output_dir / f"{safe_name.lower()}_agent.py"
     validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
@@ -105,19 +105,19 @@ def generate_agents(
     for entity in entities:
         path = generate_data_agent(entity, agents_dir)
         paths.append(path)
-        safe_name = _safe_identifier(entity.name)
+        safe = sanitize_name(entity.name, "entity name")
         init_lines.append(
-            f"from .{safe_name.lower()}_agent import {safe_name.upper()}_ENTITY, {safe_name.lower()}_data_agent"
+            f"from .{safe.lower()}_agent import {safe.upper()}_ENTITY, {safe.lower()}_data_agent"
         )
 
     # Generate domain agents
     for domain in domains:
         path = generate_domain_agent(domain, agents_dir)
         paths.append(path)
-        safe_name = _safe_identifier(domain.name)
+        safe = sanitize_name(domain.name, "domain name")
         init_lines.append(
-            f"from .{safe_name.lower()}_agent import {safe_name.upper()}_DOMAIN"
-            f", create_{safe_name.lower()}_domain_agent"
+            f"from .{safe.lower()}_agent import {safe.upper()}_DOMAIN"
+            f", create_{safe.lower()}_domain_agent"
         )
 
     # Generate coordinator agent

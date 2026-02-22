@@ -6,7 +6,7 @@ from pathlib import Path
 
 from ninja_core.schema.entity import EntitySchema
 
-from .base import _safe_identifier, build_fields_meta, get_template_env, validate_output_path, write_generated_file
+from .base import build_fields_meta, get_template_env, sanitize_name, validate_output_path, write_generated_file
 
 
 def _has_field_type(entity: EntitySchema, *type_names: str) -> bool:
@@ -24,6 +24,7 @@ def generate_model(entity: EntitySchema, output_dir: Path) -> Path:
     Returns:
         Path to the generated file.
     """
+    safe_name = sanitize_name(entity.name, "entity name")
     env = get_template_env()
     template = env.get_template("model.py.j2")
 
@@ -36,7 +37,6 @@ def generate_model(entity: EntitySchema, output_dir: Path) -> Path:
         has_constraints=any(f.constraints for f in entity.fields),
     )
 
-    safe_name = _safe_identifier(entity.name)
     file_path = output_dir / f"{safe_name.lower()}.py"
     validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
@@ -64,12 +64,12 @@ def generate_models(entities: list[EntitySchema], output_dir: Path) -> list[Path
     for entity in entities:
         path = generate_model(entity, models_dir)
         paths.append(path)
-        safe_name = _safe_identifier(entity.name)
-        init_lines.append(f"from .{safe_name.lower()} import {safe_name}")
+        safe = sanitize_name(entity.name, "entity name")
+        init_lines.append(f"from .{safe.lower()} import {safe}")
 
     if entities:
         init_lines.append("")
-        all_names = ", ".join(repr(_safe_identifier(e.name)) for e in entities)
+        all_names = ", ".join(repr(sanitize_name(e.name, "entity name")) for e in entities)
         init_lines.append(f"__all__ = [{all_names}]")
         init_lines.append("")
 
