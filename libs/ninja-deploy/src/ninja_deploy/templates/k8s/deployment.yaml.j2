@@ -16,9 +16,14 @@ spec:
         app: {{ app_name }}
         project: {{ project_name }}
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: {{ app_name }}
-          image: {{ project_name }}/{{ app_name }}:latest
+          image: {{ project_name }}/{{ app_name }}:{{ image_tag }}
           ports:
             - containerPort: {{ port }}
           envFrom:
@@ -26,6 +31,12 @@ spec:
                 name: {{ project_name }}-config
             - secretRef:
                 name: {{ project_name }}-secret
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           livenessProbe:
             httpGet:
               path: /healthz

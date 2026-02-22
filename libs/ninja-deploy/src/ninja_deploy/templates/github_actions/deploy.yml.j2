@@ -13,15 +13,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v4.2.0
 
       - name: Install dependencies
         run: uv sync
@@ -45,10 +45,10 @@ jobs:
           - {{ app }}
 {% endfor %}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Log in to registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: {% raw %}${{ env.REGISTRY }}{% endraw %}
 
@@ -57,7 +57,7 @@ jobs:
           password: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198571cfb76f00 # v6.18.0
         with:
           context: .
           file: infrastructure/docker/{% raw %}${{ matrix.app }}{% endraw %}/Dockerfile
@@ -69,13 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112 # v4.3.0
 
       - name: Set up kubeconfig
-        uses: azure/k8s-set-context@v4
+        uses: azure/k8s-set-context@270995f7f5cf3dbe7c74b5c64ef3e10a03af3d3e # v4.0.1
         with:
           kubeconfig: {% raw %}${{ secrets.KUBECONFIG }}{% endraw %}
 

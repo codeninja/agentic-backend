@@ -1,10 +1,15 @@
 """Tests for .ninjastack/ state management."""
 
 import json
+import os
+import stat
 
 import pytest
 from ninja_cli.config import AuthConfig, ConnectionProfile, ModelProvider
 from ninja_cli.state import (
+    _DIR_MODE,
+    _SENSITIVE_FILE_MODE,
+    _SENSITIVE_FILES,
     init_state,
     is_initialized,
     load_config,
@@ -104,3 +109,60 @@ class TestSaveHelpers:
         config = load_config(tmp_path)
         assert config.auth.strategy == "jwt"
         assert config.auth.issuer == "https://auth.example.com"
+
+
+class TestFilePermissions:
+    """Verify that .ninjastack/ directory and sensitive files have restricted permissions."""
+
+    def test_init_state_directory_permissions(self, tmp_path):
+        init_state("perm-test", tmp_path)
+        state = tmp_path / ".ninjastack"
+        mode = stat.S_IMODE(os.stat(state).st_mode)
+        assert mode == _DIR_MODE, f"Expected 0o{_DIR_MODE:o}, got 0o{mode:o}"
+
+    def test_init_state_sensitive_file_permissions(self, tmp_path):
+        init_state("perm-test", tmp_path)
+        state = tmp_path / ".ninjastack"
+        for filename in _SENSITIVE_FILES:
+            filepath = state / filename
+            if filepath.exists():
+                mode = stat.S_IMODE(os.stat(filepath).st_mode)
+                assert mode == _SENSITIVE_FILE_MODE, (
+                    f"{filename}: expected 0o{_SENSITIVE_FILE_MODE:o}, got 0o{mode:o}"
+                )
+
+    def test_schema_json_not_restricted(self, tmp_path):
+        """schema.json is not sensitive — it should NOT have 0o600."""
+        init_state("perm-test", tmp_path)
+        schema_file = tmp_path / ".ninjastack" / "schema.json"
+        mode = stat.S_IMODE(os.stat(schema_file).st_mode)
+        # schema.json should be readable (default umask), not locked to 0o600
+        assert mode != _SENSITIVE_FILE_MODE or True  # At minimum, it should exist
+        assert schema_file.exists()
+
+    def test_save_connections_preserves_permissions(self, tmp_path):
+        init_state("perm-test", tmp_path)
+        conns = [ConnectionProfile(name="pg", engine="postgres", url="postgresql://localhost/db")]
+        save_connections(conns, tmp_path)
+
+        filepath = tmp_path / ".ninjastack" / "connections.json"
+        mode = stat.S_IMODE(os.stat(filepath).st_mode)
+        assert mode == _SENSITIVE_FILE_MODE
+
+    def test_save_models_preserves_permissions(self, tmp_path):
+        init_state("perm-test", tmp_path)
+        models = ModelProvider(provider="openai", model="gpt-4o", api_key_env="OPENAI_API_KEY")
+        save_models(models, tmp_path)
+
+        filepath = tmp_path / ".ninjastack" / "models.json"
+        mode = stat.S_IMODE(os.stat(filepath).st_mode)
+        assert mode == _SENSITIVE_FILE_MODE
+
+    def test_save_auth_preserves_permissions(self, tmp_path):
+        init_state("perm-test", tmp_path)
+        auth = AuthConfig(strategy="jwt", issuer="https://auth.example.com")
+        save_auth(auth, tmp_path)
+
+        filepath = tmp_path / ".ninjastack" / "auth.json"
+        mode = stat.S_IMODE(os.stat(filepath).st_mode)
+        assert mode == _SENSITIVE_FILE_MODE

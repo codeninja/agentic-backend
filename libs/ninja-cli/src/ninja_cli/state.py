@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from ninja_core import AgenticSchema
@@ -15,14 +16,41 @@ CONNECTIONS_FILE = "connections.json"
 MODELS_FILE = "models.json"
 AUTH_FILE = "auth.json"
 
+# Files that may contain credentials and must be owner-only readable.
+_SENSITIVE_FILES = frozenset({CONNECTIONS_FILE, MODELS_FILE, AUTH_FILE})
+
+# Directory permission: rwx------ (owner only)
+_DIR_MODE = 0o700
+# Sensitive file permission: rw------- (owner only)
+_SENSITIVE_FILE_MODE = 0o600
+
 
 def _state_dir(root: Path) -> Path:
     return root / NINJASTACK_DIR
 
 
 def _write_json(path: Path, data: object) -> None:
+    """Write JSON data to *path*, creating parent directories as needed.
+
+    Files whose name is in ``_SENSITIVE_FILES`` are written with restrictive
+    permissions (``0o600``) so that credentials are not world-readable.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    # Ensure the .ninjastack directory itself has restricted permissions
+    state_dir = path.parent
+    if state_dir.name == NINJASTACK_DIR:
+        os.chmod(state_dir, _DIR_MODE)
+
+    content = json.dumps(data, indent=2) + "\n"
+    if path.name in _SENSITIVE_FILES:
+        # Write with a restrictive umask to avoid race conditions
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _SENSITIVE_FILE_MODE)
+        try:
+            os.write(fd, content.encode("utf-8"))
+        finally:
+            os.close(fd)
+    else:
+        path.write_text(content, encoding="utf-8")
 
 
 def _read_json(path: Path) -> dict:
@@ -41,6 +69,7 @@ def init_state(project_name: str, root: Path = Path(".")) -> NinjaStackConfig:
     """
     state = _state_dir(root)
     state.mkdir(parents=True, exist_ok=True)
+    os.chmod(state, _DIR_MODE)
 
     # Default ASD schema
     schema = AgenticSchema(project_name=project_name)
