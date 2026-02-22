@@ -1,6 +1,8 @@
 """Tests for the ninjastack CLI commands."""
 
 import json
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
@@ -9,6 +11,18 @@ from ninja_cli.cli import _validate_name, app
 from typer.testing import CliRunner
 
 runner = CliRunner()
+
+
+def _init_project(root: Path) -> None:
+    """Create a minimal .ninjastack/ directory for testing."""
+    ns = root / ".ninjastack"
+    ns.mkdir()
+    ns.joinpath("schema.json").write_text(json.dumps({
+        "project_name": "test-project",
+        "version": "1.0.0",
+        "entities": [],
+        "domains": [],
+    }))
 
 
 class TestInitCommand:
@@ -31,21 +45,118 @@ class TestInitCommand:
         assert "already exists" in result.output
 
 
-class TestStubCommands:
-    def test_sync_stub(self):
-        result = runner.invoke(app, ["sync"])
-        assert result.exit_code == 0
-        assert "Not yet implemented" in result.output
+class TestSyncCommand:
+    def test_sync_not_initialized(self, tmp_path):
+        result = runner.invoke(app, ["sync", "--root", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "not initialized" in result.output.lower()
 
-    def test_serve_stub(self):
-        result = runner.invoke(app, ["serve"])
-        assert result.exit_code == 0
-        assert "Not yet implemented" in result.output
+    @patch("ninja_codegen.engine.sync")
+    def test_sync_generates_files(self, mock_sync, tmp_path):
+        _init_project(tmp_path)
+        mock_result = MagicMock()
+        mock_result.skipped = False
+        mock_result.generated_files = [Path("models.py"), Path("schema.py")]
+        mock_result.file_count = 2
+        mock_sync.return_value = mock_result
 
-    def test_deploy_stub(self):
-        result = runner.invoke(app, ["deploy"])
+        result = runner.invoke(app, ["sync", "--root", str(tmp_path)])
         assert result.exit_code == 0
-        assert "Not yet implemented" in result.output
+        assert "Synced 2 file(s)" in result.output
+        mock_sync.assert_called_once_with(root=tmp_path, force=False)
+
+    @patch("ninja_codegen.engine.sync")
+    def test_sync_skipped(self, mock_sync, tmp_path):
+        _init_project(tmp_path)
+        mock_result = MagicMock()
+        mock_result.skipped = True
+        mock_sync.return_value = mock_result
+
+        result = runner.invoke(app, ["sync", "--root", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "No changes" in result.output
+
+    @patch("ninja_codegen.engine.sync")
+    def test_sync_force(self, mock_sync, tmp_path):
+        _init_project(tmp_path)
+        mock_result = MagicMock()
+        mock_result.skipped = False
+        mock_result.generated_files = []
+        mock_result.file_count = 0
+        mock_sync.return_value = mock_result
+
+        result = runner.invoke(app, ["sync", "--root", str(tmp_path), "--force"])
+        assert result.exit_code == 0
+        mock_sync.assert_called_once_with(root=tmp_path, force=True)
+
+
+class TestServeCommand:
+    def test_serve_not_initialized(self, tmp_path):
+        result = runner.invoke(app, ["serve", "--root", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "not initialized" in result.output.lower()
+
+    @patch("uvicorn.run")
+    def test_serve_with_generated_app(self, mock_uvicorn_run, tmp_path):
+        _init_project(tmp_path)
+        gen_app = tmp_path / "_generated" / "app"
+        gen_app.mkdir(parents=True)
+        (gen_app / "main.py").write_text("app = None")
+
+        result = runner.invoke(app, ["serve", "--root", str(tmp_path), "--host", "0.0.0.0", "--port", "9000"])
+        assert result.exit_code == 0
+        assert "0.0.0.0:9000" in result.output
+        mock_uvicorn_run.assert_called_once_with(
+            "_generated.app.main:app", host="0.0.0.0", port=9000, reload=False,
+        )
+
+    @patch("uvicorn.run")
+    @patch("ninja_codegen.engine.sync")
+    def test_serve_auto_syncs(self, mock_sync, mock_uvicorn_run, tmp_path):
+        _init_project(tmp_path)
+        # No _generated dir — should trigger sync
+        result = runner.invoke(app, ["serve", "--root", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "running sync" in result.output.lower()
+        mock_sync.assert_called_once_with(root=tmp_path)
+
+
+class TestDeployCommand:
+    def test_deploy_not_initialized(self, tmp_path):
+        result = runner.invoke(app, ["deploy", "--root", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "not initialized" in result.output.lower()
+
+    @patch("ninja_deploy.k8s_generator.K8sGenerator")
+    @patch("ninja_core.serialization.io.load_schema")
+    def test_deploy_writes_manifests(self, mock_load, mock_gen_cls, tmp_path):
+        _init_project(tmp_path)
+        mock_schema = MagicMock()
+        mock_load.return_value = mock_schema
+        mock_gen = MagicMock()
+        mock_gen.write_manifests.return_value = [Path("deployment.yaml"), Path("service.yaml")]
+        mock_gen_cls.return_value = mock_gen
+
+        result = runner.invoke(app, ["deploy", "--root", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "Wrote 2 manifest(s)" in result.output
+        mock_load.assert_called_once_with(tmp_path / ".ninjastack" / "schema.json")
+        mock_gen_cls.assert_called_once_with(mock_schema)
+        mock_gen.write_manifests.assert_called_once_with(tmp_path / "k8s")
+
+    @patch("ninja_deploy.k8s_generator.K8sGenerator")
+    @patch("ninja_core.serialization.io.load_schema")
+    def test_deploy_custom_output_dir(self, mock_load, mock_gen_cls, tmp_path):
+        _init_project(tmp_path)
+        mock_load.return_value = MagicMock()
+        mock_gen = MagicMock()
+        mock_gen.write_manifests.return_value = []
+        mock_gen_cls.return_value = mock_gen
+        out = tmp_path / "custom-k8s"
+
+        result = runner.invoke(app, ["deploy", "--root", str(tmp_path), "--output-dir", str(out)])
+        assert result.exit_code == 0
+        mock_gen.write_manifests.assert_called_once_with(out)
 
 
 class TestValidateName:
