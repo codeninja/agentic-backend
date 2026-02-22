@@ -81,6 +81,29 @@ class FieldConstraint(BaseModel):
         return self
 
 
+# Pydantic BaseModel attributes that must not be used as field names.
+# Using these as field names generates syntactically valid Python but causes
+# runtime bugs (shadowing Pydantic internals).
+_PYDANTIC_RESERVED_ATTRS: frozenset[str] = frozenset({
+    "model_config",
+    "model_fields",
+    "model_computed_fields",
+    "model_extra",
+    "model_fields_set",
+    "model_construct",
+    "model_copy",
+    "model_dump",
+    "model_dump_json",
+    "model_json_schema",
+    "model_parametrized_name",
+    "model_post_init",
+    "model_rebuild",
+    "model_validate",
+    "model_validate_json",
+    "model_validate_strings",
+})
+
+
 _FIELD_TYPE_COMPATIBLE_PYTHON_TYPES: dict[FieldType, tuple[type, ...]] = {
     FieldType.STRING: (str,),
     FieldType.TEXT: (str,),
@@ -122,6 +145,11 @@ class FieldSchema(BaseModel):
             )
         if keyword.iskeyword(v):
             raise ValueError(f"Field name {v!r} is a Python reserved keyword.")
+        if v in _PYDANTIC_RESERVED_ATTRS:
+            raise ValueError(
+                f"Field name {v!r} is a Pydantic reserved attribute and would "
+                "shadow BaseModel internals in generated code."
+            )
         return v
 
     @field_validator("description")

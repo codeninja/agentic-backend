@@ -7,7 +7,7 @@ from pathlib import Path
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
 
-from .base import get_template_env, validate_output_path, write_generated_file
+from .base import _safe_identifier, get_template_env, validate_output_path, write_generated_file
 
 
 def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
@@ -27,7 +27,8 @@ def generate_data_agent(entity: EntitySchema, output_dir: Path) -> Path:
     template = env.get_template("data_agent.py.j2")
     content = template.render(entity=entity)
 
-    file_path = output_dir / f"{entity.name.lower()}_agent.py"
+    safe_name = _safe_identifier(entity.name)
+    file_path = output_dir / f"{safe_name.lower()}_agent.py"
     validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
     return file_path
@@ -50,7 +51,8 @@ def generate_domain_agent(domain: DomainSchema, output_dir: Path) -> Path:
     template = env.get_template("domain_agent.py.j2")
     content = template.render(domain=domain)
 
-    file_path = output_dir / f"{domain.name.lower()}_agent.py"
+    safe_name = _safe_identifier(domain.name)
+    file_path = output_dir / f"{safe_name.lower()}_agent.py"
     validate_output_path(output_dir, file_path)
     write_generated_file(file_path, content)
     return file_path
@@ -103,17 +105,19 @@ def generate_agents(
     for entity in entities:
         path = generate_data_agent(entity, agents_dir)
         paths.append(path)
+        safe_name = _safe_identifier(entity.name)
         init_lines.append(
-            f"from .{entity.name.lower()}_agent import {entity.name.upper()}_ENTITY, {entity.name.lower()}_data_agent"
+            f"from .{safe_name.lower()}_agent import {safe_name.upper()}_ENTITY, {safe_name.lower()}_data_agent"
         )
 
     # Generate domain agents
     for domain in domains:
         path = generate_domain_agent(domain, agents_dir)
         paths.append(path)
+        safe_name = _safe_identifier(domain.name)
         init_lines.append(
-            f"from .{domain.name.lower()}_agent import {domain.name.upper()}_DOMAIN"
-            f", create_{domain.name.lower()}_domain_agent"
+            f"from .{safe_name.lower()}_agent import {safe_name.upper()}_DOMAIN"
+            f", create_{safe_name.lower()}_domain_agent"
         )
 
     # Generate coordinator agent

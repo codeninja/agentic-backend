@@ -143,6 +143,31 @@ class TestFieldNameValidation:
         with pytest.raises(ValidationError, match="not a valid identifier"):
             FieldSchema(name="field;evil", field_type=FieldType.STRING)
 
+    def test_rejects_pydantic_model_config(self) -> None:
+        with pytest.raises(ValidationError, match="Pydantic reserved attribute"):
+            FieldSchema(name="model_config", field_type=FieldType.STRING)
+
+    def test_rejects_pydantic_model_fields(self) -> None:
+        with pytest.raises(ValidationError, match="Pydantic reserved attribute"):
+            FieldSchema(name="model_fields", field_type=FieldType.STRING)
+
+    def test_rejects_pydantic_model_validate(self) -> None:
+        with pytest.raises(ValidationError, match="Pydantic reserved attribute"):
+            FieldSchema(name="model_validate", field_type=FieldType.STRING)
+
+    def test_rejects_pydantic_model_dump(self) -> None:
+        with pytest.raises(ValidationError, match="Pydantic reserved attribute"):
+            FieldSchema(name="model_dump", field_type=FieldType.STRING)
+
+    def test_rejects_pydantic_model_dump_json(self) -> None:
+        with pytest.raises(ValidationError, match="Pydantic reserved attribute"):
+            FieldSchema(name="model_dump_json", field_type=FieldType.STRING)
+
+    def test_allows_model_prefix_non_reserved(self) -> None:
+        """Field names starting with 'model_' that are not reserved are valid."""
+        f = FieldSchema(name="model_name", field_type=FieldType.STRING)
+        assert f.name == "model_name"
+
 
 # ---------------------------------------------------------------------------
 # DomainSchema.name validation
