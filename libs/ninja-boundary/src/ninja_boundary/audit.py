@@ -115,7 +115,7 @@ class AuditLog:
         return len(self._entries)
 
     def __bool__(self) -> bool:
-        return True
+        return len(self._entries) > 0
 
     def summary(self) -> dict[str, int]:
         """Return counts by action type."""
