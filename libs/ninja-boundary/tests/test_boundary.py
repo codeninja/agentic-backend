@@ -246,6 +246,23 @@ class TestConstraintValidation:
         with pytest.raises(ValidationError):
             processor.process(data, schema)
 
+    def test_pattern_rejects_oversized_input(self):
+        """Input exceeding _MAX_REGEX_INPUT_LENGTH is rejected before regex evaluation."""
+        from ninja_boundary.boundary import _MAX_REGEX_INPUT_LENGTH
+
+        processor = BoundaryProcessor()
+        schema = _constrained_schema()
+        oversized = "A" * (_MAX_REGEX_INPUT_LENGTH + 1)
+        data = {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "sku": oversized,
+            "name": "Widget",
+            "price": 9.99,
+            "category": "electronics",
+        }
+        with pytest.raises(ValidationError, match="exceeds maximum allowed"):
+            processor.process(data, schema)
+
     def test_min_length_rejected(self):
         """String shorter than min_length is rejected."""
         processor = BoundaryProcessor()

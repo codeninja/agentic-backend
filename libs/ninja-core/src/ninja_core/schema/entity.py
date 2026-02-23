@@ -57,6 +57,10 @@ class EmbeddingConfig(BaseModel):
 # ReDoS safety — detect nested quantifiers prone to catastrophic backtracking
 # ---------------------------------------------------------------------------
 
+# Maximum allowed length for regex patterns. Guards against extremely long
+# patterns that could be expensive to parse/compile.
+MAX_PATTERN_LENGTH = 500
+
 _QUANTIFIER_OPS = {
     sre_parse.MAX_REPEAT,
     sre_parse.MIN_REPEAT,
@@ -173,23 +177,27 @@ class FieldConstraint(BaseModel):
     The ``pattern`` field accepts a subset of regular expressions suitable for
     field-level string validation.  At model construction time the pattern is:
 
-    1. Compiled with :func:`re.compile` — invalid syntax is rejected.
-    2. Checked for *ReDoS-prone* constructs (nested quantifiers such as
+    1. Checked against a maximum length limit (``MAX_PATTERN_LENGTH`` chars).
+    2. Compiled with :func:`re.compile` — invalid syntax is rejected.
+    3. Checked for *ReDoS-prone* constructs (nested quantifiers such as
        ``(a+)+``, ``(a*)*``, ``(a|a)*``, ``(a+)*``, etc.) that can cause
        catastrophic backtracking.
 
     Supported patterns include any valid Python regex that does **not** contain
     nested quantifiers (a quantifier applied to a group that itself contains a
-    quantifier on a non-fixed-width sub-expression).
+    quantifier on a non-fixed-width sub-expression) and does not exceed the
+    maximum length limit.
     """
 
     min_length: int | None = Field(default=None, ge=0)
     max_length: int | None = Field(default=None, ge=1)
     pattern: str | None = Field(
         default=None,
+        max_length=MAX_PATTERN_LENGTH,
         description=(
             "Regex pattern for string validation. Must be valid Python regex "
-            "syntax and free of ReDoS-prone constructs (nested quantifiers)."
+            "syntax, at most MAX_PATTERN_LENGTH characters, and free of "
+            "ReDoS-prone constructs (nested quantifiers)."
         ),
     )
     ge: float | None = Field(default=None, description="Greater than or equal.")
@@ -201,9 +209,10 @@ class FieldConstraint(BaseModel):
     @field_validator("pattern")
     @classmethod
     def validate_pattern(cls, v: str | None) -> str | None:
-        """Validate the regex pattern for syntax correctness and ReDoS safety.
+        """Validate the regex pattern for length, syntax, and ReDoS safety.
 
         Rejects:
+        - Patterns exceeding ``MAX_PATTERN_LENGTH`` characters.
         - Patterns that are not valid Python regular expressions.
         - Patterns containing nested quantifiers that can cause catastrophic
           backtracking (ReDoS).  Detected constructs include ``(a+)+``,
@@ -211,12 +220,17 @@ class FieldConstraint(BaseModel):
         """
         if v is None:
             return v
-        # 1. Compile to verify syntax
+        # 1. Enforce maximum pattern length
+        if len(v) > MAX_PATTERN_LENGTH:
+            raise ValueError(
+                f"Regex pattern too long ({len(v)} chars). Maximum allowed length is {MAX_PATTERN_LENGTH} characters."
+            )
+        # 2. Compile to verify syntax
         try:
             re.compile(v)
         except re.error as exc:
             raise ValueError(f"Invalid regex pattern: {exc}") from exc
-        # 2. Check for ReDoS-prone nested quantifiers
+        # 3. Check for ReDoS-prone nested quantifiers
         _check_redos_safety(v)
         return v
 

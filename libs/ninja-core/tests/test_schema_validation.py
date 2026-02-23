@@ -166,6 +166,26 @@ class TestFieldConstraintValidation:
         c = FieldConstraint(pattern=None)
         assert c.pattern is None
 
+    # -------------------------------------------------------------------
+    # Pattern validation — length limit
+    # -------------------------------------------------------------------
+
+    def test_pattern_at_max_length_accepted(self):
+        """Pattern exactly at MAX_PATTERN_LENGTH is accepted."""
+        from ninja_core.schema.entity import MAX_PATTERN_LENGTH
+
+        pattern = "a" * MAX_PATTERN_LENGTH
+        c = FieldConstraint(pattern=pattern)
+        assert c.pattern == pattern
+
+    def test_pattern_exceeding_max_length_rejected(self):
+        """Pattern exceeding MAX_PATTERN_LENGTH is rejected."""
+        from ninja_core.schema.entity import MAX_PATTERN_LENGTH
+
+        pattern = "a" * (MAX_PATTERN_LENGTH + 1)
+        with pytest.raises(ValidationError, match="at most 500 characters"):
+            FieldConstraint(pattern=pattern)
+
 
 # ===========================================================================
 # FieldSchema validation
