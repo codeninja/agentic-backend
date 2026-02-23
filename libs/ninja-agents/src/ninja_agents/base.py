@@ -125,11 +125,16 @@ class DataAgent(BaseAgent):
         on keyword arguments.
 
         Raises:
-            InvalidToolAccess: If the tool name is malformed.
+            InvalidToolAccess: If the tool name is malformed or denied
+                by ``tool_permissions``.
             AgentInputTooLarge: If kwargs exceed size limits.
             KeyError: If the tool is not in this agent's scope.
         """
         validate_tool_name(tool_name)
+        if self.config.tool_permissions and tool_name not in self.config.tool_permissions:
+            raise InvalidToolAccess(
+                f"Tool '{tool_name}' is not permitted for agent '{self.name}'."
+            )
         validate_tool_kwargs_size(kwargs)
         tool = self._tool_map.get(tool_name)
         if tool is None:

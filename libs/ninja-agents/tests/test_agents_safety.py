@@ -454,3 +454,86 @@ class TestErrorSanitizationIntegration:
         coordinator = CoordinatorAgent(domain_agents=[billing])
         results = coordinator.route("query", target_domains=["NonExistent"])
         assert results["NonExistent"]["error"] == "Unknown domain."
+
+
+# ---------------------------------------------------------------------------
+# Tool permissions enforcement (issue #115)
+# ---------------------------------------------------------------------------
+
+
+class TestToolPermissionsEnforcement:
+    """tool_permissions on AgentConfig must be enforced by DataAgent.execute()."""
+
+    def test_permitted_tool_executes(self, order_entity: EntitySchema) -> None:
+        """A tool listed in tool_permissions can be called normally."""
+        config = AgentConfig(
+            reasoning_level=ReasoningLevel.NONE,
+            tool_permissions=["order_get"],
+        )
+        agent = DataAgent(entity=order_entity, config=config)
+        # order_get exists and is permitted — should not raise InvalidToolAccess
+        try:
+            agent.execute("order_get", id="abc")
+        except InvalidToolAccess:
+            pytest.fail("order_get should be permitted but was denied")
+        except Exception:
+            pass  # other errors (e.g. no real DB) are fine
+
+    def test_denied_tool_raises(self, order_entity: EntitySchema) -> None:
+        """A tool NOT in tool_permissions is rejected with InvalidToolAccess."""
+        config = AgentConfig(
+            reasoning_level=ReasoningLevel.NONE,
+            tool_permissions=["order_get"],
+        )
+        agent = DataAgent(entity=order_entity, config=config)
+        with pytest.raises(InvalidToolAccess):
+            agent.execute("order_create", customer_id="x", total=1.0, status="new")
+
+    def test_empty_permissions_allows_all(self, order_entity: EntitySchema) -> None:
+        """An empty tool_permissions list means no restrictions (allow all)."""
+        config = AgentConfig(
+            reasoning_level=ReasoningLevel.NONE,
+            tool_permissions=[],
+        )
+        agent = DataAgent(entity=order_entity, config=config)
+        # Should not raise InvalidToolAccess for any tool
+        try:
+            agent.execute("order_get", id="abc")
+        except InvalidToolAccess:
+            pytest.fail("Empty tool_permissions should allow all tools")
+        except Exception:
+            pass
+
+    def test_denied_tool_error_message(self, order_entity: EntitySchema) -> None:
+        """The error message identifies which tool was denied."""
+        config = AgentConfig(
+            reasoning_level=ReasoningLevel.NONE,
+            tool_permissions=["order_get"],
+        )
+        agent = DataAgent(entity=order_entity, config=config)
+        with pytest.raises(InvalidToolAccess, match="order_delete"):
+            agent.execute("order_delete", id="abc")
+
+    def test_denied_tool_uses_generic_client_message(self, order_entity: EntitySchema) -> None:
+        """InvalidToolAccess.client_message is safe to show to end users."""
+        config = AgentConfig(
+            reasoning_level=ReasoningLevel.NONE,
+            tool_permissions=["order_get"],
+        )
+        agent = DataAgent(entity=order_entity, config=config)
+        with pytest.raises(InvalidToolAccess) as exc_info:
+            agent.execute("order_list")
+        assert exc_info.type.client_message == "Tool access denied."
+
+    def test_permissions_enforced_via_domain_delegate(
+        self, order_entity: EntitySchema, billing_domain: DomainSchema
+    ) -> None:
+        """tool_permissions are enforced even when called through DomainAgent.delegate()."""
+        config = AgentConfig(
+            reasoning_level=ReasoningLevel.NONE,
+            tool_permissions=["order_get"],
+        )
+        da = DataAgent(entity=order_entity, config=config)
+        domain = DomainAgent(billing_domain, data_agents=[da])
+        with pytest.raises(InvalidToolAccess):
+            domain.delegate("Order", "order_create", customer_id="x", total=1.0, status="new")
