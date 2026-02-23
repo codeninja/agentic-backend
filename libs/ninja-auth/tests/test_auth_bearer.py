@@ -178,14 +178,21 @@ def test_bearer_rejects_token_with_whitespace_sub():
     assert ctx is None
 
 
-def test_bearer_metadata_contains_claims():
+def test_bearer_metadata_excludes_raw_payload():
+    """Metadata must only contain safe standard claims, not the full JWT payload."""
     config = BearerConfig(secret_key=SECRET, algorithm="HS256")
     strategy = BearerStrategy(config)
-    token = _make_token({"sub": "user1", "custom_field": "value"})
+    token = _make_token({"sub": "user1", "custom_field": "value", "iss": "https://auth.example.com"})
     ctx = strategy.validate_token(token)
     assert ctx is not None
-    assert "claims" in ctx.metadata
-    assert ctx.metadata["claims"]["custom_field"] == "value"
+    # Raw payload must NOT be exposed
+    assert "claims" not in ctx.metadata
+    assert "custom_field" not in ctx.metadata
+    assert "sub" not in ctx.metadata
+    # Safe standard claims ARE forwarded
+    assert "iss" in ctx.metadata
+    assert ctx.metadata["iss"] == "https://auth.example.com"
+    assert "exp" in ctx.metadata
 
 
 # ---------------------------------------------------------------------------
@@ -235,3 +242,156 @@ def test_bearer_malformed_token_logs_error(caplog: pytest.LogCaptureFixture) -> 
     assert ctx is None
     error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(error_records) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Claims validation tests (issue #148)
+# ---------------------------------------------------------------------------
+
+
+class TestEmailValidation:
+    """Validate that the email claim is checked for format."""
+
+    def _strategy(self) -> BearerStrategy:
+        return BearerStrategy(BearerConfig(secret_key=SECRET, algorithm="HS256"))
+
+    def test_valid_email(self):
+        token = _make_token({"sub": "u1", "email": "user@example.com"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.email == "user@example.com"
+
+    def test_email_none_when_absent(self):
+        token = _make_token({"sub": "u1"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.email is None
+
+    @pytest.mark.parametrize("bad_email", [
+        "not-an-email",
+        "missing@tld",
+        "@no-local.com",
+        "spaces in@email.com",
+        "",
+        123,
+        True,
+    ])
+    def test_invalid_email_becomes_none(self, bad_email):
+        token = _make_token({"sub": "u1", "email": bad_email})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.email is None
+
+
+class TestRolesValidation:
+    """Validate that the roles claim is a list of non-empty strings."""
+
+    def _strategy(self) -> BearerStrategy:
+        return BearerStrategy(BearerConfig(secret_key=SECRET, algorithm="HS256"))
+
+    def test_valid_roles(self):
+        token = _make_token({"sub": "u1", "roles": ["admin", "editor"]})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.roles == ["admin", "editor"]
+
+    def test_empty_roles_list(self):
+        token = _make_token({"sub": "u1", "roles": []})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.roles == []
+
+    def test_roles_absent_defaults_to_empty(self):
+        token = _make_token({"sub": "u1"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.roles == []
+
+    def test_non_list_roles_ignored(self):
+        token = _make_token({"sub": "u1", "roles": "admin"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.roles == []
+
+    def test_non_string_entries_dropped(self):
+        token = _make_token({"sub": "u1", "roles": ["admin", 42, None, "viewer"]})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.roles == ["admin", "viewer"]
+
+    def test_empty_string_entries_dropped(self):
+        token = _make_token({"sub": "u1", "roles": ["admin", "", "  "]})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.roles == ["admin"]
+
+
+class TestPermissionsValidation:
+    """Validate that permissions follow the action:scope format."""
+
+    def _strategy(self) -> BearerStrategy:
+        return BearerStrategy(BearerConfig(secret_key=SECRET, algorithm="HS256"))
+
+    def test_valid_permissions(self):
+        token = _make_token({"sub": "u1", "permissions": ["read:Orders", "write:Billing.Invoice", "*:*"]})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.permissions == ["read:Orders", "write:Billing.Invoice", "*:*"]
+
+    def test_permissions_absent_defaults_to_empty(self):
+        token = _make_token({"sub": "u1"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.permissions == []
+
+    def test_non_list_permissions_ignored(self):
+        token = _make_token({"sub": "u1", "permissions": "read:Orders"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.permissions == []
+
+    @pytest.mark.parametrize("bad_perm", [
+        "no-colon",
+        "read:",
+        ":scope",
+        "",
+        "read:scope with spaces",
+        123,
+        None,
+    ])
+    def test_invalid_permission_entries_dropped(self, bad_perm):
+        token = _make_token({"sub": "u1", "permissions": ["read:Orders", bad_perm]})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.permissions == ["read:Orders"]
+
+
+class TestMetadataSafety:
+    """Ensure raw JWT payload is not leaked through metadata."""
+
+    def _strategy(self) -> BearerStrategy:
+        return BearerStrategy(BearerConfig(secret_key=SECRET, algorithm="HS256"))
+
+    def test_sensitive_claims_excluded(self):
+        token = _make_token({
+            "sub": "u1",
+            "email": "a@b.com",
+            "roles": ["admin"],
+            "permissions": ["read:*"],
+            "secret_data": "s3cret",
+        })
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert "secret_data" not in ctx.metadata
+        assert "sub" not in ctx.metadata
+        assert "email" not in ctx.metadata
+        assert "roles" not in ctx.metadata
+        assert "permissions" not in ctx.metadata
+
+    def test_safe_standard_claims_forwarded(self):
+        token = _make_token({"sub": "u1", "iss": "https://auth.test", "jti": "abc-123"})
+        ctx = self._strategy().validate_token(token)
+        assert ctx is not None
+        assert ctx.metadata.get("iss") == "https://auth.test"
+        assert ctx.metadata.get("jti") == "abc-123"
+        assert "exp" in ctx.metadata
