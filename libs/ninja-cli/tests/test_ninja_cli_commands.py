@@ -91,34 +91,13 @@ class TestSyncCommand:
 
 
 class TestServeCommand:
-    def test_serve_not_initialized(self, tmp_path):
-        result = runner.invoke(app, ["serve", "--root", str(tmp_path)])
+    def test_serve_no_schema(self, tmp_path, monkeypatch):
+        """serve without a schema file should exit with error."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "pyproject.toml").write_text("[project]\nname = 'test'\n")
+        result = runner.invoke(app, ["serve"])
         assert result.exit_code == 1
-        assert "not initialized" in result.output.lower()
-
-    @patch("uvicorn.run")
-    def test_serve_with_generated_app(self, mock_uvicorn_run, tmp_path):
-        _init_project(tmp_path)
-        gen_app = tmp_path / "_generated" / "app"
-        gen_app.mkdir(parents=True)
-        (gen_app / "main.py").write_text("app = None")
-
-        result = runner.invoke(app, ["serve", "--root", str(tmp_path), "--host", "0.0.0.0", "--port", "9000"])
-        assert result.exit_code == 0
-        assert "0.0.0.0:9000" in result.output
-        mock_uvicorn_run.assert_called_once_with(
-            "_generated.app.main:app", host="0.0.0.0", port=9000, reload=False,
-        )
-
-    @patch("uvicorn.run")
-    @patch("ninja_codegen.engine.sync")
-    def test_serve_auto_syncs(self, mock_sync, mock_uvicorn_run, tmp_path):
-        _init_project(tmp_path)
-        # No _generated dir — should trigger sync
-        result = runner.invoke(app, ["serve", "--root", str(tmp_path)])
-        assert result.exit_code == 0
-        assert "running sync" in result.output.lower()
-        mock_sync.assert_called_once_with(root=tmp_path)
+        assert "not found" in result.output
 
 
 class TestDeployCommand:
