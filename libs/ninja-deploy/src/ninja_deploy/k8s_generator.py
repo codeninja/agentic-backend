@@ -230,6 +230,34 @@ class K8sGenerator:
             StorageEngine=StorageEngine,
         )
 
+    def generate_network_policy(self, app_name: str = "ninja-api", port: str = "8000") -> str:
+        """Generate a NetworkPolicy for the app deployment.
+
+        Allows ingress on the app port and egress only to DNS and infra services.
+        """
+        template = self.env.get_template("networkpolicy.yaml.j2")
+        return template.render(
+            project_name=self.schema.project_name,
+            app_name=app_name,
+            port=port,
+            infra_services=self._infra_services(),
+        )
+
+    def generate_infra_network_policies(self, app_name: str = "ninja-api") -> dict[str, str]:
+        """Generate a NetworkPolicy per infra service.
+
+        Each policy restricts ingress to only the app pods and egress to DNS only.
+        """
+        template = self.env.get_template("infra-networkpolicy.yaml.j2")
+        manifests: dict[str, str] = {}
+        for svc in self._infra_services():
+            manifests[f"{svc['name']}-networkpolicy.yaml"] = template.render(
+                project_name=self.schema.project_name,
+                svc=svc,
+                app_name=app_name,
+            )
+        return manifests
+
     def generate_infra_deployments(self) -> dict[str, str]:
         """Generate Deployment + Service manifests for each infra dependency."""
         template = self.env.get_template("infra.yaml.j2")
@@ -290,11 +318,15 @@ class K8sGenerator:
         files["configmap.yaml"] = self.generate_configmap()
         files["secret.yaml"] = self.generate_secret()
         files["rbac.yaml"] = self.generate_rbac(app_name)
+        files["networkpolicy.yaml"] = self.generate_network_policy(app_name, port)
 
         for name, content in self.generate_infra_deployments().items():
             files[f"infra/{name}"] = content
 
         for name, content in self.generate_infra_rbac().items():
+            files[f"infra/{name}"] = content
+
+        for name, content in self.generate_infra_network_policies(app_name).items():
             files[f"infra/{name}"] = content
 
         # Validate: placeholder credentials
