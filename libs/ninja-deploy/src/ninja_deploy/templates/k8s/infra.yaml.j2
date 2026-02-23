@@ -16,6 +16,8 @@ spec:
         app: {{ svc.name }}
         project: {{ project_name }}
     spec:
+      serviceAccountName: {{ project_name }}-{{ svc.name }}-sa
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: {{ svc.run_as_user }}
