@@ -98,16 +98,15 @@ def sanitize_for_prompt(value: str) -> str:
 
     for pattern in _INJECTION_PATTERNS:
         if pattern.search(cleaned):
-            raise UnsafeInputError(
-                f"Identifier {cleaned!r} contains a prompt-injection pattern and was rejected."
-            )
+            raise UnsafeInputError(f"Identifier {cleaned!r} contains a prompt-injection pattern and was rejected.")
 
     return cleaned
 
 
 # Keep backward-compatible aliases
 sanitize_identifier = sanitize_for_prompt
-sanitize_identifiers = lambda values: [sanitize_for_prompt(v) for v in values]
+def sanitize_identifiers(values):
+    return [sanitize_for_prompt(v) for v in values]
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +138,7 @@ def validate_request_size(request: str, max_length: int = MAX_REQUEST_LENGTH) ->
         raise ValueError("Request cannot be empty.")
     if len(request) > max_length:
         raise AgentInputTooLarge(
-            f"Request too large: {len(request)} characters exceeds "
-            f"maximum of {max_length} characters."
+            f"Request too large: {len(request)} characters exceeds maximum of {max_length} characters."
         )
     return request
 
@@ -190,8 +188,7 @@ def validate_tool_kwargs_size(
     approx_size = len(str(kwargs))
     if approx_size > max_size:
         raise AgentInputTooLarge(
-            f"Tool arguments too large: ~{approx_size} characters exceeds "
-            f"maximum of {max_size} characters."
+            f"Tool arguments too large: ~{approx_size} characters exceeds maximum of {max_size} characters."
         )
     return kwargs
 

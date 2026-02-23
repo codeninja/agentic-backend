@@ -81,7 +81,10 @@ class BoundaryProcessor:
         for fs in schema.fields:
             if fs.name in result and result[fs.name] is not None:
                 _validate_field_constraints(
-                    result[fs.name], fs, schema.name, audit,
+                    result[fs.name],
+                    fs,
+                    schema.name,
+                    audit,
                 )
 
         # 4. Run custom validators
@@ -132,24 +135,32 @@ def _validate_field_constraints(
     if constraints.min_length is not None and isinstance(value, str):
         if len(value) < constraints.min_length:
             audit.record(
-                entity_name, field_name, CoercionAction.VALIDATION_ERROR,
-                value, None,
+                entity_name,
+                field_name,
+                CoercionAction.VALIDATION_ERROR,
+                value,
+                None,
                 f"length {len(value)} < min_length {constraints.min_length}",
             )
             raise ValidationError(
-                entity_name, field_name,
+                entity_name,
+                field_name,
                 f"Value length {len(value)} is less than min_length {constraints.min_length}",
             )
 
     if constraints.max_length is not None and isinstance(value, str):
         if len(value) > constraints.max_length:
             audit.record(
-                entity_name, field_name, CoercionAction.VALIDATION_ERROR,
-                value, None,
+                entity_name,
+                field_name,
+                CoercionAction.VALIDATION_ERROR,
+                value,
+                None,
                 f"length {len(value)} > max_length {constraints.max_length}",
             )
             raise ValidationError(
-                entity_name, field_name,
+                entity_name,
+                field_name,
                 f"Value length {len(value)} exceeds max_length {constraints.max_length}",
             )
 
@@ -157,22 +168,32 @@ def _validate_field_constraints(
     if constraints.ge is not None and isinstance(value, (int, float)):
         if value < constraints.ge:
             audit.record(
-                entity_name, field_name, CoercionAction.VALIDATION_ERROR,
-                value, None, f"value {value} < ge {constraints.ge}",
+                entity_name,
+                field_name,
+                CoercionAction.VALIDATION_ERROR,
+                value,
+                None,
+                f"value {value} < ge {constraints.ge}",
             )
             raise ValidationError(
-                entity_name, field_name,
+                entity_name,
+                field_name,
                 f"Value {value} is less than minimum {constraints.ge}",
             )
 
     if constraints.le is not None and isinstance(value, (int, float)):
         if value > constraints.le:
             audit.record(
-                entity_name, field_name, CoercionAction.VALIDATION_ERROR,
-                value, None, f"value {value} > le {constraints.le}",
+                entity_name,
+                field_name,
+                CoercionAction.VALIDATION_ERROR,
+                value,
+                None,
+                f"value {value} > le {constraints.le}",
             )
             raise ValidationError(
-                entity_name, field_name,
+                entity_name,
+                field_name,
                 f"Value {value} exceeds maximum {constraints.le}",
             )
 
@@ -180,11 +201,15 @@ def _validate_field_constraints(
     if constraints.enum_values is not None:
         if value not in constraints.enum_values:
             audit.record(
-                entity_name, field_name, CoercionAction.VALIDATION_ERROR,
-                value, None,
+                entity_name,
+                field_name,
+                CoercionAction.VALIDATION_ERROR,
+                value,
+                None,
                 f"value {value!r} not in enum_values {constraints.enum_values}",
             )
             raise ValidationError(
-                entity_name, field_name,
+                entity_name,
+                field_name,
                 f"Value {value!r} is not one of the allowed values: {constraints.enum_values}",
             )

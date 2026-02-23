@@ -141,6 +141,7 @@ async def test_error_does_not_leak_details(doc_entity: EntitySchema):
 
 # --- Unit tests for helper function ---
 
+
 def test_is_duplicate_id_error_value_error():
     assert _is_duplicate_id_error(ValueError("ID x already exists")) is True
 
@@ -152,10 +153,12 @@ def test_is_duplicate_id_error_generic():
 def test_is_duplicate_id_error_by_type_name():
     class DuplicateIDError(Exception):
         pass
+
     assert _is_duplicate_id_error(DuplicateIDError("dup")) is True
 
 
 # --- Tests verifying asyncio.to_thread is used for non-blocking I/O ---
+
 
 async def test_find_by_id_uses_to_thread(doc_entity: EntitySchema):
     """Verify find_by_id offloads the synchronous coll.get call to a thread."""

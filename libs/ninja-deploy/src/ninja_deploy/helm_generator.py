@@ -19,6 +19,7 @@ _LATEST_TAG_PATTERN = re.compile(r":\s*[\"']?latest[\"']?\s*$", re.MULTILINE)
 class PlaceholderCredentialError(ValueError):
     """Raised when generated manifests still contain placeholder credentials."""
 
+
 # Maps ASD storage engines to Helm dependency charts
 INFRA_CHART_MAP: dict[StorageEngine, dict[str, str]] = {
     StorageEngine.SQL: {
@@ -143,7 +144,7 @@ class HelmGenerator:
         locations: list[str] = []
         for filename, content in files.items():
             for match in _PLACEHOLDER_PATTERN.finditer(content):
-                line_num = content[:match.start()].count("\n") + 1
+                line_num = content[: match.start()].count("\n") + 1
                 locations.append(f"{filename}:{line_num}")
         return locations
 
@@ -153,7 +154,7 @@ class HelmGenerator:
         locations: list[str] = []
         for filename, content in files.items():
             for match in _LATEST_TAG_PATTERN.finditer(content):
-                line_num = content[:match.start()].count("\n") + 1
+                line_num = content[: match.start()].count("\n") + 1
                 locations.append(f"{filename}:{line_num}")
         return locations
 
@@ -205,7 +206,10 @@ class HelmGenerator:
         return files
 
     def write_chart(
-        self, output_dir: Path, *, allow_placeholder_creds: bool = False,
+        self,
+        output_dir: Path,
+        *,
+        allow_placeholder_creds: bool = False,
     ) -> list[Path]:
         """Write the full Helm chart to disk, return list of written paths."""
         written: list[Path] = []

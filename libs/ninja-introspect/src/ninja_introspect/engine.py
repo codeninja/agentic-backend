@@ -36,7 +36,9 @@ _SCHEME_PROVIDER_MAP["mongodb+srv"] = MongoProvider  # type: ignore[assignment]
 
 
 def _detect_provider(
-    connection_string: str, *, allow_private_hosts: bool = False,
+    connection_string: str,
+    *,
+    allow_private_hosts: bool = False,
 ) -> IntrospectionProvider:
     """Detect the correct provider based on the connection string scheme.
 
@@ -115,7 +117,8 @@ class IntrospectionEngine:
                 provider = providers[conn_str]
             else:
                 provider = _detect_provider(
-                    conn_str, allow_private_hosts=self.allow_private_hosts,
+                    conn_str,
+                    allow_private_hosts=self.allow_private_hosts,
                 )
 
             result: IntrospectionResult = await provider.introspect(conn_str)

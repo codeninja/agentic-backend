@@ -27,13 +27,24 @@ from ninja_core.security import check_ssrf
 from ninja_introspect.engine import IntrospectionEngine
 
 _ALLOWED_DB_SCHEMES = {
-    "postgresql", "postgresql+asyncpg", "postgresql+aiosqlite",
-    "postgres", "postgres+asyncpg",
-    "mysql", "mysql+aiomysql", "mysql+asyncmy",
-    "sqlite", "sqlite+aiosqlite",
-    "mongodb", "mongodb+srv",
-    "neo4j", "neo4j+s", "neo4j+ssc",
-    "bolt", "bolt+s", "bolt+ssc",
+    "postgresql",
+    "postgresql+asyncpg",
+    "postgresql+aiosqlite",
+    "postgres",
+    "postgres+asyncpg",
+    "mysql",
+    "mysql+aiomysql",
+    "mysql+asyncmy",
+    "sqlite",
+    "sqlite+aiosqlite",
+    "mongodb",
+    "mongodb+srv",
+    "neo4j",
+    "neo4j+s",
+    "neo4j+ssc",
+    "bolt",
+    "bolt+s",
+    "bolt+ssc",
 }
 
 # Same regex used in ninja-core schema validators.
@@ -62,10 +73,7 @@ def _validate_identifier(value: str, label: str) -> str | None:
 def _validate_description(value: str | None, label: str) -> str | None:
     """Validate description length. Returns error message or None."""
     if value is not None and len(value) > MAX_DESCRIPTION_LENGTH:
-        return (
-            f"{label} description too long ({len(value)} chars). "
-            f"Maximum is {MAX_DESCRIPTION_LENGTH} characters."
-        )
+        return f"{label} description too long ({len(value)} chars). Maximum is {MAX_DESCRIPTION_LENGTH} characters."
     return None
 
 
@@ -109,8 +117,7 @@ def add_entity(
     # Validate storage engine.
     if storage_engine not in _ALLOWED_STORAGE_ENGINES:
         return (
-            f"Invalid storage engine '{storage_engine}'. "
-            f"Allowed values: {', '.join(sorted(_ALLOWED_STORAGE_ENGINES))}."
+            f"Invalid storage engine '{storage_engine}'. Allowed values: {', '.join(sorted(_ALLOWED_STORAGE_ENGINES))}."
         )
 
     # Validate description length.
@@ -275,7 +282,9 @@ def confirm_schema(workspace: SchemaWorkspace) -> str:
 
 
 def _validate_connection_string(
-    connection_string: str, *, allow_private_hosts: bool = False,
+    connection_string: str,
+    *,
+    allow_private_hosts: bool = False,
 ) -> str | None:
     """Validate a connection string format. Returns an error message or None.
 
@@ -289,10 +298,7 @@ def _validate_connection_string(
     if not scheme:
         return f"Invalid connection string: missing scheme. Got '{connection_string}'."
     if scheme not in _ALLOWED_DB_SCHEMES:
-        return (
-            f"Unsupported database scheme '{scheme}'. "
-            f"Allowed schemes: {', '.join(sorted(_ALLOWED_DB_SCHEMES))}."
-        )
+        return f"Unsupported database scheme '{scheme}'. Allowed schemes: {', '.join(sorted(_ALLOWED_DB_SCHEMES))}."
     base_scheme = scheme.split("+")[0]
     if base_scheme == "sqlite":
         db_path = parsed.path

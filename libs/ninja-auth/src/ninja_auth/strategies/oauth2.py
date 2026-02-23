@@ -87,8 +87,13 @@ class OAuth2Strategy:
         except httpx.HTTPStatusError as exc:
             logger.error(
                 "OAuth2 code exchange failed: provider=%s status_code=%s",
-                self.provider_name, exc.response.status_code,
-                extra={"event": "oauth2_exchange_failed", "provider": self.provider_name, "status_code": exc.response.status_code},
+                self.provider_name,
+                exc.response.status_code,
+                extra={
+                    "event": "oauth2_exchange_failed",
+                    "provider": self.provider_name,
+                    "status_code": exc.response.status_code,
+                },
             )
             raise
 
@@ -105,14 +110,17 @@ class OAuth2Strategy:
         except httpx.HTTPStatusError as exc:
             logger.error(
                 "OAuth2 userinfo fetch failed: provider=%s status_code=%s",
-                self.provider_name, exc.response.status_code,
-                extra={"event": "oauth2_userinfo_failed", "provider": self.provider_name, "status_code": exc.response.status_code},
+                self.provider_name,
+                exc.response.status_code,
+                extra={
+                    "event": "oauth2_userinfo_failed",
+                    "provider": self.provider_name,
+                    "status_code": exc.response.status_code,
+                },
             )
             raise
 
-    async def authenticate_with_code(
-        self, code: str, *, expected_state: str, received_state: str
-    ) -> UserContext:
+    async def authenticate_with_code(self, code: str, *, expected_state: str, received_state: str) -> UserContext:
         """Full OAuth2 flow: exchange code -> fetch userinfo -> return context.
 
         Both ``expected_state`` and ``received_state`` are **required** to
@@ -148,9 +156,7 @@ class OAuth2Strategy:
                 self.provider_name,
                 extra={"event": "oauth2_csrf_failure", "provider": self.provider_name, "reason": "state_mismatch"},
             )
-            raise AuthenticationError(
-                "OAuth2 state mismatch — possible CSRF attack."
-            )
+            raise AuthenticationError("OAuth2 state mismatch — possible CSRF attack.")
 
         tokens = await self.exchange_code(code)
         access_token = tokens.get("access_token", "")
@@ -162,7 +168,9 @@ class OAuth2Strategy:
 
         logger.info(
             "OAuth2 login successful: provider=%s user_id=%s email=%s",
-            self.provider_name, user_id, email,
+            self.provider_name,
+            user_id,
+            email,
             extra={"event": "oauth2_login_success", "provider": self.provider_name, "user_id": user_id, "email": email},
         )
 

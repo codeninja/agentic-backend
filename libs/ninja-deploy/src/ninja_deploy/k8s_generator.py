@@ -19,6 +19,7 @@ _LATEST_TAG_PATTERN = re.compile(r"image:\s*\S+:latest", re.MULTILINE)
 class PlaceholderCredentialError(ValueError):
     """Raised when generated manifests still contain placeholder credentials."""
 
+
 # Maps storage engines to infra container images used in raw K8s manifests.
 # run_as_user / run_as_group follow upstream image conventions:
 #   - PostgreSQL: UID 70 (official postgres alpine)
@@ -106,7 +107,10 @@ class K8sGenerator:
         return services
 
     def generate_deployment(
-        self, app_name: str = "ninja-api", port: str = "8000", image_tag: str = "SET_IMAGE_TAG",
+        self,
+        app_name: str = "ninja-api",
+        port: str = "8000",
+        image_tag: str = "SET_IMAGE_TAG",
     ) -> str:
         """Generate a Deployment manifest for the app.
 
@@ -173,7 +177,7 @@ class K8sGenerator:
         locations: list[str] = []
         for filename, content in files.items():
             for match in _PLACEHOLDER_PATTERN.finditer(content):
-                line_num = content[:match.start()].count("\n") + 1
+                line_num = content[: match.start()].count("\n") + 1
                 locations.append(f"{filename}:{line_num}")
         return locations
 
@@ -183,7 +187,7 @@ class K8sGenerator:
         locations: list[str] = []
         for filename, content in files.items():
             for match in _LATEST_TAG_PATTERN.finditer(content):
-                line_num = content[:match.start()].count("\n") + 1
+                line_num = content[: match.start()].count("\n") + 1
                 locations.append(f"{filename}:{line_num}")
         return locations
 
@@ -240,7 +244,10 @@ class K8sGenerator:
         return files
 
     def write_manifests(
-        self, output_dir: Path, *, allow_placeholder_creds: bool = False,
+        self,
+        output_dir: Path,
+        *,
+        allow_placeholder_creds: bool = False,
     ) -> list[Path]:
         """Write all K8s manifests to disk, return list of written paths."""
         written: list[Path] = []

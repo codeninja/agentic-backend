@@ -121,9 +121,7 @@ class TestRBACPolicyPropagation:
         cv_token = set_rbac_policy(cv_policy)
 
         # Explicit policy: custom role with delete:*
-        explicit_config = RBACConfig(
-            roles={"deleter": RoleDefinition(permissions=["delete:*"])}
-        )
+        explicit_config = RBACConfig(roles={"deleter": RoleDefinition(permissions=["delete:*"])})
         explicit_policy = RBACPolicy(explicit_config)
         perms = explicit_policy.permissions_for_roles(["deleter"])
         ctx = UserContext(user_id="u1", roles=["deleter"], permissions=perms)
@@ -149,9 +147,7 @@ class TestRBACPolicyPropagation:
         The fix is that the gateway enriches permissions AND propagates the policy.
         """
         # A custom role "support" that grants read:Support
-        config = RBACConfig(
-            roles={"support": RoleDefinition(permissions=["read:Support"])}
-        )
+        config = RBACConfig(roles={"support": RoleDefinition(permissions=["read:Support"])})
         policy = RBACPolicy(config)
         # Simulate enriched permissions (as the gateway would do)
         enriched = policy.permissions_for_roles(["support"])

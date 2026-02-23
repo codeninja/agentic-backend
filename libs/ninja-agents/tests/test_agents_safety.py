@@ -1,20 +1,6 @@
 """Tests for agent & LLM safety — prompt injection, input validation, error sanitization."""
 
 import pytest
-from ninja_agents.safety import (
-    AgentInputTooLarge,
-    AgentSafetyError,
-    InvalidToolAccess,
-    UnsafeInputError,
-    MAX_REQUEST_LENGTH,
-    MAX_TOOL_KWARGS_SIZE,
-    safe_error_message,
-    sanitize_for_prompt,
-    validate_request_size,
-    validate_tool_kwargs,
-    validate_tool_kwargs_size,
-    validate_tool_name,
-)
 from ninja_agents.base import (
     CoordinatorAgent,
     DataAgent,
@@ -22,11 +8,23 @@ from ninja_agents.base import (
     create_domain_agent,
 )
 from ninja_agents.orchestrator import Orchestrator
-from ninja_agents.tracing import TraceContext
+from ninja_agents.safety import (
+    MAX_REQUEST_LENGTH,
+    MAX_TOOL_KWARGS_SIZE,
+    AgentInputTooLarge,
+    AgentSafetyError,
+    InvalidToolAccess,
+    UnsafeInputError,
+    safe_error_message,
+    sanitize_for_prompt,
+    validate_request_size,
+    validate_tool_kwargs,
+    validate_tool_kwargs_size,
+    validate_tool_name,
+)
 from ninja_core.schema.agent import AgentConfig, ReasoningLevel
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema
-
 
 # ---------------------------------------------------------------------------
 # Error hierarchy
@@ -299,6 +297,7 @@ class TestPromptInjectionBlocked:
 
     def test_entity_schema_rejects_invalid_name(self) -> None:
         from ninja_core.schema.entity import FieldSchema, FieldType
+
         with pytest.raises(ValueError, match="not a valid identifier"):
             EntitySchema(
                 name="Evil\nEntity",
@@ -318,6 +317,7 @@ class TestPromptInjectionBlocked:
 
     def test_entity_schema_rejects_reserved_keyword(self) -> None:
         from ninja_core.schema.entity import FieldSchema, FieldType
+
         with pytest.raises(ValueError, match="reserved keyword"):
             EntitySchema(
                 name="class",
@@ -327,17 +327,13 @@ class TestPromptInjectionBlocked:
                 ],
             )
 
-    def test_domain_agent_accepts_valid_name(
-        self, order_entity: EntitySchema, billing_domain: DomainSchema
-    ) -> None:
+    def test_domain_agent_accepts_valid_name(self, order_entity: EntitySchema, billing_domain: DomainSchema) -> None:
         """Valid domain names pass through cleanly."""
         da = DataAgent(entity=order_entity)
         domain_agent = DomainAgent(billing_domain, data_agents=[da])
         assert domain_agent.name == "domain_agent_billing"
 
-    def test_factory_accepts_valid_name(
-        self, order_entity: EntitySchema, billing_domain: DomainSchema
-    ) -> None:
+    def test_factory_accepts_valid_name(self, order_entity: EntitySchema, billing_domain: DomainSchema) -> None:
         da = DataAgent(entity=order_entity)
         llm_agent = create_domain_agent(billing_domain, data_agents=[da])
         assert llm_agent.name == "domain_agent_billing"
@@ -377,9 +373,7 @@ class TestInputSizeValidation:
         with pytest.raises(AgentInputTooLarge, match="Request too large"):
             await orchestrator.fan_out("x" * (MAX_REQUEST_LENGTH + 1))
 
-    def test_domain_agent_rejects_empty_request(
-        self, order_entity: EntitySchema, billing_domain: DomainSchema
-    ) -> None:
+    def test_domain_agent_rejects_empty_request(self, order_entity: EntitySchema, billing_domain: DomainSchema) -> None:
         da = DataAgent(entity=order_entity)
         domain_agent = DomainAgent(billing_domain, data_agents=[da])
         with pytest.raises(ValueError, match="cannot be empty"):
@@ -393,9 +387,7 @@ class TestInputSizeValidation:
         with pytest.raises(ValueError, match="cannot be empty"):
             domain_agent.execute("   \n\t  ")
 
-    def test_coordinator_rejects_empty_request(
-        self, order_entity: EntitySchema, billing_domain: DomainSchema
-    ) -> None:
+    def test_coordinator_rejects_empty_request(self, order_entity: EntitySchema, billing_domain: DomainSchema) -> None:
         da = DataAgent(entity=order_entity)
         billing = DomainAgent(billing_domain, data_agents=[da])
         coordinator = CoordinatorAgent(domain_agents=[billing])
@@ -420,16 +412,12 @@ class TestInputSizeValidation:
 
 
 class TestToolNameValidation:
-    def test_data_agent_rejects_malformed_tool_name(
-        self, order_entity: EntitySchema
-    ) -> None:
+    def test_data_agent_rejects_malformed_tool_name(self, order_entity: EntitySchema) -> None:
         agent = DataAgent(entity=order_entity)
         with pytest.raises(InvalidToolAccess, match="Invalid tool name"):
             agent.execute("../../etc/passwd")
 
-    def test_data_agent_rejects_uppercase_tool_name(
-        self, order_entity: EntitySchema
-    ) -> None:
+    def test_data_agent_rejects_uppercase_tool_name(self, order_entity: EntitySchema) -> None:
         agent = DataAgent(entity=order_entity)
         with pytest.raises(InvalidToolAccess, match="Invalid tool name"):
             agent.execute("Order_Get")
@@ -449,9 +437,7 @@ class TestToolNameValidation:
 
 
 class TestErrorSanitizationIntegration:
-    def test_data_agent_error_does_not_leak_tool_list(
-        self, order_entity: EntitySchema
-    ) -> None:
+    def test_data_agent_error_does_not_leak_tool_list(self, order_entity: EntitySchema) -> None:
         """When a valid-format but nonexistent tool is called, the error
         should not enumerate available tools."""
         agent = DataAgent(entity=order_entity)

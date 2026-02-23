@@ -5,8 +5,8 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
+from ninja_persistence.connections import ConnectionManager, ConnectionProfile
 from pydantic import ValidationError
-from ninja_persistence.connections import ConnectionManager, ConnectionProfile, InvalidConnectionURL
 
 
 # Helper to create profiles with localhost URLs (which require allow_private_hosts).

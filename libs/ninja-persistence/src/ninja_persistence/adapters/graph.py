@@ -44,8 +44,7 @@ class GraphAdapter:
         """Return the Neo4j async driver, raising if not configured."""
         if self._driver is None:
             raise RuntimeError(
-                "GraphAdapter requires a neo4j AsyncDriver instance. "
-                "Pass it via the `driver` constructor parameter."
+                "GraphAdapter requires a neo4j AsyncDriver instance. Pass it via the `driver` constructor parameter."
             )
         return self._driver
 
@@ -84,9 +83,7 @@ class GraphAdapter:
                 cause=exc,
             ) from exc
 
-    async def find_many(
-        self, filters: dict[str, Any] | None = None, limit: int = 100
-    ) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
         """Retrieve multiple nodes matching optional property filters.
 
         Args:
@@ -183,10 +180,7 @@ class GraphAdapter:
             no node matched the given id.
         """
         driver = self._get_driver()
-        query = (
-            f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
-            f"SET n += $patch RETURN n"
-        )
+        query = f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id SET n += $patch RETURN n"
         try:
             async with driver.session() as session:
                 result = await session.run(query, {"id": id, "patch": patch})
@@ -196,7 +190,9 @@ class GraphAdapter:
                 return dict(record["n"])
         except Exception as exc:
             if _is_connection_error(exc):
-                logger.error("Graph update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Graph update connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="update",
@@ -224,10 +220,7 @@ class GraphAdapter:
             ``True`` if a node was deleted, ``False`` if no node matched.
         """
         driver = self._get_driver()
-        query = (
-            f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
-            f"DETACH DELETE n RETURN count(n) AS deleted"
-        )
+        query = f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id DETACH DELETE n RETURN count(n) AS deleted"
         try:
             async with driver.session() as session:
                 result = await session.run(query, {"id": id})
@@ -235,7 +228,9 @@ class GraphAdapter:
                 return record is not None and record["deleted"] > 0
         except Exception as exc:
             if _is_connection_error(exc):
-                logger.error("Graph delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Graph delete connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="delete",
@@ -250,9 +245,7 @@ class GraphAdapter:
                 cause=exc,
             ) from exc
 
-    async def search_semantic(
-        self, query: str, limit: int = 10
-    ) -> list[dict[str, Any]]:
+    async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
         """Perform semantic search using a Neo4j full-text index.
 
         Falls back to a case-insensitive ``CONTAINS`` search across all
@@ -274,42 +267,24 @@ class GraphAdapter:
         index_name = f"{self._label}_fulltext"
 
         # Try full-text index search first.
-        ft_query = (
-            "CALL db.index.fulltext.queryNodes($index, $query) "
-            "YIELD node, score "
-            "RETURN node, score LIMIT $limit"
-        )
+        ft_query = "CALL db.index.fulltext.queryNodes($index, $query) YIELD node, score RETURN node, score LIMIT $limit"
         try:
             async with driver.session() as session:
-                result = await session.run(
-                    ft_query, {"index": index_name, "query": query, "limit": limit}
-                )
+                result = await session.run(ft_query, {"index": index_name, "query": query, "limit": limit})
                 records = await result.data()
                 if records:
-                    return [
-                        {**dict(r["node"]), "_score": r["score"]} for r in records
-                    ]
+                    return [{**dict(r["node"]), "_score": r["score"]} for r in records]
         except Exception:
             # Full-text index not available; fall through to CONTAINS fallback.
             pass
 
         # Fallback: case-insensitive CONTAINS across string fields.
-        string_fields = [
-            f.name
-            for f in self._entity.fields
-            if f.field_type.value in ("string", "text")
-        ]
+        string_fields = [f.name for f in self._entity.fields if f.field_type.value in ("string", "text")]
         if not string_fields:
             return []
 
-        or_clauses = " OR ".join(
-            f"toLower(toString(n.`{fname}`)) CONTAINS toLower($query)"
-            for fname in string_fields
-        )
-        fallback_query = (
-            f"MATCH (n:`{self._label}`) WHERE {or_clauses} "
-            f"RETURN n LIMIT $limit"
-        )
+        or_clauses = " OR ".join(f"toLower(toString(n.`{fname}`)) CONTAINS toLower($query)" for fname in string_fields)
+        fallback_query = f"MATCH (n:`{self._label}`) WHERE {or_clauses} RETURN n LIMIT $limit"
         try:
             async with driver.session() as session:
                 result = await session.run(fallback_query, {"query": query, "limit": limit})
@@ -344,16 +319,18 @@ class GraphAdapter:
             embedding: The embedding vector as a list of floats.
         """
         driver = self._get_driver()
-        query = (
-            f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id "
-            f"SET n.embedding = $embedding"
-        )
+        query = f"MATCH (n:`{self._label}`) WHERE n.`{self._pk_field}` = $id SET n.embedding = $embedding"
         try:
             async with driver.session() as session:
                 await session.run(query, {"id": id, "embedding": embedding})
         except Exception as exc:
             if _is_connection_error(exc):
-                logger.error("Graph upsert_embedding connection error for %s (id=%s): %s", self._entity.name, id, type(exc).__name__)
+                logger.error(
+                    "Graph upsert_embedding connection error for %s (id=%s): %s",
+                    self._entity.name,
+                    id,
+                    type(exc).__name__,
+                )
                 raise ConnectionFailedError(
                     entity_name=self._entity.name,
                     operation="upsert_embedding",

@@ -45,9 +45,7 @@ class ChromaVectorAdapter:
                 "ChromaVectorAdapter requires a Chroma client instance. Pass it via the `client` constructor parameter."
             )
         try:
-            return await asyncio.to_thread(
-                self._client.get_or_create_collection, name=self._collection_name
-            )
+            return await asyncio.to_thread(self._client.get_or_create_collection, name=self._collection_name)
         except Exception as exc:
             logger.error("Chroma collection access failed for %s: %s", self._entity.name, type(exc).__name__)
             raise ConnectionFailedError(

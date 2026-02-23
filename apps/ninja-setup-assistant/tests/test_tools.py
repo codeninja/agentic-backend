@@ -332,19 +332,31 @@ class TestCreateAdkTools:
 
 class TestConnectionStringValidation:
     def test_valid_postgresql_url(self):
-        assert _validate_connection_string(
-            "postgresql://user:pass@localhost/mydb", allow_private_hosts=True,
-        ) is None
+        assert (
+            _validate_connection_string(
+                "postgresql://user:pass@localhost/mydb",
+                allow_private_hosts=True,
+            )
+            is None
+        )
 
     def test_valid_postgresql_asyncpg_url(self):
-        assert _validate_connection_string(
-            "postgresql+asyncpg://user:pass@localhost/mydb", allow_private_hosts=True,
-        ) is None
+        assert (
+            _validate_connection_string(
+                "postgresql+asyncpg://user:pass@localhost/mydb",
+                allow_private_hosts=True,
+            )
+            is None
+        )
 
     def test_valid_mysql_url(self):
-        assert _validate_connection_string(
-            "mysql+aiomysql://user:pass@localhost/mydb", allow_private_hosts=True,
-        ) is None
+        assert (
+            _validate_connection_string(
+                "mysql+aiomysql://user:pass@localhost/mydb",
+                allow_private_hosts=True,
+            )
+            is None
+        )
 
     def test_valid_sqlite_memory(self):
         assert _validate_connection_string("sqlite:///:memory:") is None
@@ -353,9 +365,13 @@ class TestConnectionStringValidation:
         assert _validate_connection_string("sqlite:///mydb.sqlite") is None
 
     def test_valid_mongodb_url(self):
-        assert _validate_connection_string(
-            "mongodb://localhost:27017/mydb", allow_private_hosts=True,
-        ) is None
+        assert (
+            _validate_connection_string(
+                "mongodb://localhost:27017/mydb",
+                allow_private_hosts=True,
+            )
+            is None
+        )
 
     def test_rejects_missing_scheme(self):
         error = _validate_connection_string("localhost/mydb")
@@ -403,13 +419,15 @@ class TestConnectionStringSSRF:
 
     def test_allows_private_with_flag(self):
         error = _validate_connection_string(
-            "postgresql://10.0.0.1:5432/db", allow_private_hosts=True,
+            "postgresql://10.0.0.1:5432/db",
+            allow_private_hosts=True,
         )
         assert error is None
 
     def test_allows_localhost_with_flag(self):
         error = _validate_connection_string(
-            "postgresql://127.0.0.1:5432/db", allow_private_hosts=True,
+            "postgresql://127.0.0.1:5432/db",
+            allow_private_hosts=True,
         )
         assert error is None
 
@@ -430,9 +448,7 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_value_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with self._SSRF_PATCH, patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
             mock_engine.run = AsyncMock(side_effect=ValueError("bad scheme 'foobar'"))
 
@@ -446,13 +462,9 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_connection_refused_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with self._SSRF_PATCH, patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
-            mock_engine.run = AsyncMock(
-                side_effect=ConnectionRefusedError("Connection refused")
-            )
+            mock_engine.run = AsyncMock(side_effect=ConnectionRefusedError("Connection refused"))
 
             result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
 
@@ -462,9 +474,7 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_timeout_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with self._SSRF_PATCH, patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
             mock_engine.run = AsyncMock(side_effect=TimeoutError("timed out"))
 
@@ -475,13 +485,9 @@ class TestIntrospectDatabaseErrorHandling:
 
     @pytest.mark.asyncio
     async def test_runtime_error_returns_friendly_message(self, workspace: SchemaWorkspace) -> None:
-        with self._SSRF_PATCH, patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
-            mock_engine.run = AsyncMock(
-                side_effect=RuntimeError("driver not installed")
-            )
+            mock_engine.run = AsyncMock(side_effect=RuntimeError("driver not installed"))
 
             result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
 
@@ -492,9 +498,12 @@ class TestIntrospectDatabaseErrorHandling:
     @pytest.mark.asyncio
     async def test_engine_constructor_error_caught(self, workspace: SchemaWorkspace) -> None:
         """Error during IntrospectionEngine() construction is also caught."""
-        with self._SSRF_PATCH, patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine",
-            side_effect=ValueError("invalid project name"),
+        with (
+            self._SSRF_PATCH,
+            patch(
+                "ninja_setup_assistant.tools.IntrospectionEngine",
+                side_effect=ValueError("invalid project name"),
+            ),
         ):
             result = await introspect_database(workspace, "postgresql://user:pass@localhost/db")
 
@@ -507,9 +516,7 @@ class TestIntrospectDatabaseErrorHandling:
         add_entity(workspace, name="Existing", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         assert len(workspace.schema.entities) == 1
 
-        with self._SSRF_PATCH, patch(
-            "ninja_setup_assistant.tools.IntrospectionEngine"
-        ) as mock_cls:
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
             mock_engine.run = AsyncMock(side_effect=Exception("unexpected"))
 

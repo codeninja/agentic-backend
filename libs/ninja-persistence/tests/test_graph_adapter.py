@@ -119,10 +119,13 @@ async def test_find_by_id_not_found(user_entity: EntitySchema):
 
 async def test_find_many(user_entity: EntitySchema):
     driver = _make_mock_driver()
-    _configure_result(driver, data=[
-        {"n": {"id": "1", "name": "Alice", "email": "a@test.com", "age": 30}},
-        {"n": {"id": "2", "name": "Bob", "email": "b@test.com", "age": 25}},
-    ])
+    _configure_result(
+        driver,
+        data=[
+            {"n": {"id": "1", "name": "Alice", "email": "a@test.com", "age": 30}},
+            {"n": {"id": "2", "name": "Bob", "email": "b@test.com", "age": 25}},
+        ],
+    )
 
     adapter = GraphAdapter(entity=user_entity, driver=driver)
     results = await adapter.find_many()
@@ -134,9 +137,12 @@ async def test_find_many(user_entity: EntitySchema):
 
 async def test_find_many_with_filters(user_entity: EntitySchema):
     driver = _make_mock_driver()
-    _configure_result(driver, data=[
-        {"n": {"id": "1", "name": "Alice", "email": "a@test.com", "age": 30}},
-    ])
+    _configure_result(
+        driver,
+        data=[
+            {"n": {"id": "1", "name": "Alice", "email": "a@test.com", "age": 30}},
+        ],
+    )
 
     adapter = GraphAdapter(entity=user_entity, driver=driver)
     results = await adapter.find_many(filters={"age": 30})
@@ -162,9 +168,12 @@ async def test_find_many_empty(user_entity: EntitySchema):
 
 async def test_find_many_with_limit(user_entity: EntitySchema):
     driver = _make_mock_driver()
-    _configure_result(driver, data=[
-        {"n": {"id": "1", "name": "Alice", "email": "a@test.com", "age": 30}},
-    ])
+    _configure_result(
+        driver,
+        data=[
+            {"n": {"id": "1", "name": "Alice", "email": "a@test.com", "age": 30}},
+        ],
+    )
 
     adapter = GraphAdapter(entity=user_entity, driver=driver)
     await adapter.find_many(limit=1)
@@ -260,10 +269,13 @@ async def test_delete_not_found(user_entity: EntitySchema):
 async def test_search_semantic_fulltext(user_entity: EntitySchema):
     """Full-text index search returns nodes with scores."""
     driver = _make_mock_driver()
-    _configure_result(driver, data=[
-        {"node": {"id": "1", "name": "Alice", "email": "a@test.com"}, "score": 0.95},
-        {"node": {"id": "2", "name": "Alicia", "email": "al@test.com"}, "score": 0.80},
-    ])
+    _configure_result(
+        driver,
+        data=[
+            {"node": {"id": "1", "name": "Alice", "email": "a@test.com"}, "score": 0.95},
+            {"node": {"id": "2", "name": "Alicia", "email": "al@test.com"}, "score": 0.80},
+        ],
+    )
 
     adapter = GraphAdapter(entity=user_entity, driver=driver)
     results = await adapter.search_semantic("Ali", limit=5)
@@ -288,9 +300,11 @@ async def test_search_semantic_fallback_contains(user_entity: EntitySchema):
     fulltext_result.data = AsyncMock(side_effect=Exception("No such index"))
 
     fallback_result = AsyncMock()
-    fallback_result.data = AsyncMock(return_value=[
-        {"n": {"id": "1", "name": "Alice", "email": "a@test.com"}},
-    ])
+    fallback_result.data = AsyncMock(
+        return_value=[
+            {"n": {"id": "1", "name": "Alice", "email": "a@test.com"}},
+        ]
+    )
 
     session.run = AsyncMock(side_effect=[fulltext_result, fallback_result])
 
@@ -324,7 +338,7 @@ async def test_search_semantic_no_string_fields():
     fulltext_result.data = AsyncMock(side_effect=Exception("No such index"))
     session.run = AsyncMock(return_value=fulltext_result)
 
-    adapter = GraphAdapter(entity=entity, driver=driver)
+    GraphAdapter(entity=entity, driver=driver)
     # The only string field is "id" which has field_type STRING but we
     # include string/text fields, so id IS included. Let's use only INTEGER.
     entity_no_strings = EntitySchema(
@@ -365,6 +379,7 @@ async def test_upsert_embedding(user_entity: EntitySchema):
 def test_graph_adapter_satisfies_repository_protocol(user_entity: EntitySchema):
     """GraphAdapter is recognized as a Repository at runtime."""
     from ninja_persistence.protocols import Repository
+
     adapter = GraphAdapter(entity=user_entity)
     assert isinstance(adapter, Repository)
 

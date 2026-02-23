@@ -111,18 +111,12 @@ class InMemoryRevocationStore:
         self._last_cleanup = now_mono
 
         now_utc = datetime.now(timezone.utc)
-        expired_jtis = [
-            jti
-            for jti, exp in self._revoked_tokens.items()
-            if exp is not None and exp <= now_utc
-        ]
+        expired_jtis = [jti for jti, exp in self._revoked_tokens.items() if exp is not None and exp <= now_utc]
         for jti in expired_jtis:
             del self._revoked_tokens[jti]
 
         if expired_jtis:
-            logger.debug(
-                "Revocation store cleanup: evicted %d expired entries", len(expired_jtis)
-            )
+            logger.debug("Revocation store cleanup: evicted %d expired entries", len(expired_jtis))
 
     async def revoke_token(self, jti: str, expires_at: datetime | None = None) -> None:
         """Mark a single token as revoked.

@@ -9,8 +9,6 @@ import pytest
 from ninja_core.schema.domain import DomainSchema
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 from ninja_core.schema.project import AgenticSchema
-from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
-
 from ninja_ui.chat.generator import ChatGenerator
 from ninja_ui.crud.generator import CrudGenerator
 from ninja_ui.server import DEFAULT_CSP, UIServer
@@ -20,7 +18,6 @@ from ninja_ui.shared.sanitize import (
     safe_slug,
     sanitize_for_js_string,
 )
-
 
 # ---------------------------------------------------------------------------
 # Sanitize module tests
@@ -208,7 +205,7 @@ class TestCrudSecurityEscaping:
         path = gen.generate_entity_page(_xss_entity(), tmp_path)
         content = path.read_text()
         # The raw img/onerror XSS should not appear unescaped
-        assert '<img src=x' not in content
+        assert "<img src=x" not in content
 
     def test_index_page_escapes_names(self, tmp_path):
         schema = _xss_schema()
@@ -277,7 +274,7 @@ class TestChatSecurityEscaping:
         content = paths[0].read_text()
         # The raw onerror handler should not appear as an executable attribute
         # With autoescape, it becomes: &lt;img src=x onerror=alert(...)&gt;
-        assert '<img src=x' not in content
+        assert "<img src=x" not in content
 
     def test_chat_graphql_uses_variables(self, tmp_path):
         """Verify chat JS uses parameterized GraphQL queries."""
