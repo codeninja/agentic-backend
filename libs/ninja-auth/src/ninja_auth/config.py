@@ -65,6 +65,12 @@ class BearerConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_keys(self) -> BearerConfig:
+        if self.algorithm.lower() == "none":
+            raise ValueError(
+                "BearerConfig.algorithm must not be 'none'. "
+                "The 'none' algorithm disables JWT signature verification "
+                "and allows forged tokens."
+            )
         if self.algorithm in _HMAC_ALGORITHMS and not self.secret_key:
             env = os.environ.get("NINJASTACK_ENV", "").lower()
             if env in ("dev", "development", "test"):

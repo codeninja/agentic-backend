@@ -155,6 +155,15 @@ class TestBearerConfigValidation:
         assert cfg.secret_key != ""
         assert len(cfg.secret_key) > 16
 
+    def test_algorithm_none_rejected(self):
+        with pytest.raises(ValueError, match="must not be 'none'"):
+            BearerConfig(algorithm="none")
+
+    def test_algorithm_none_case_insensitive(self):
+        for variant in ("None", "NONE", "nOnE"):
+            with pytest.raises(ValueError, match="must not be 'none'"):
+                BearerConfig(algorithm=variant)
+
 
 # --- Tests for OAuth2ProviderConfig.redirect_uri validation (issue #56) ---
 
