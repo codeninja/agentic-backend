@@ -22,6 +22,7 @@ from ninja_gql.resolvers.crud import (
     make_update_resolver,
 )
 from ninja_gql.resolvers.semantic import make_search_resolver
+from ninja_gql.resolvers.subscription import make_subscription_resolver
 from ninja_gql.security import GraphQLSecurityConfig, build_security_extensions
 
 
@@ -111,10 +112,27 @@ def build_schema(
     mutation_cls = type("Mutation", (), mutation_ns)
     Mutation = strawberry.type(mutation_cls, description="Auto-generated root Mutation")
 
+    # -- build Subscription fields -------------------------------------------
+    sub_annotations: dict[str, Any] = {}
+    sub_ns: dict[str, Any] = {"__annotations__": sub_annotations}
+
+    for entity in asd.entities:
+        snake = _snake(entity.name)
+        sub_fn = make_subscription_resolver(entity)
+        sub_ns[f"on_{snake}_changed"] = strawberry.subscription(resolver=sub_fn)
+
+    sub_cls = type("Subscription", (), sub_ns)
+    Subscription = strawberry.type(sub_cls, description="Auto-generated root Subscription")
+
     # -- build security extensions -------------------------------------------
     extensions = build_security_extensions(security_config)
 
-    return strawberry.Schema(query=Query, mutation=Mutation, extensions=extensions)
+    return strawberry.Schema(
+        query=Query,
+        mutation=Mutation,
+        subscription=Subscription,
+        extensions=extensions,
+    )
 
 
 def build_schema_sdl(asd: AgenticSchema) -> str:
