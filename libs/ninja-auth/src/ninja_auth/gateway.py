@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from fnmatch import fnmatch
 from typing import Any
+from urllib.parse import urlparse
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -48,9 +48,36 @@ class AuthGateway(BaseHTTPMiddleware):
         self._rate_limiter = RateLimiter(self.config.rate_limit)
         self._revocation_store = self.config.revocation_store
 
+    @staticmethod
+    def _normalize_path(path: str) -> str:
+        """Normalize a URL path for comparison.
+
+        Strips query strings and fragments, removes trailing slashes (preserving
+        the root ``/``), and collapses consecutive slashes.
+        """
+        # Strip query string and fragment
+        path = urlparse(path).path
+        # Collapse consecutive slashes (e.g. "//health" -> "/health")
+        while "//" in path:
+            path = path.replace("//", "/")
+        # Strip trailing slash, but keep root "/"
+        if path != "/":
+            path = path.rstrip("/")
+        return path
+
     def _is_public_path(self, path: str) -> bool:
-        """Check if the request path matches any configured public path pattern."""
-        return any(fnmatch(path, pattern) for pattern in self.config.public_paths)
+        """Check if the request path matches any configured public path.
+
+        Matching uses **exact equality** after normalizing both the request path
+        and each configured public path (trailing-slash removal, query-string
+        stripping).  Wildcard / glob characters are **not** interpreted — this
+        avoids accidental over-matching that could lead to auth bypass.
+        """
+        normalized = self._normalize_path(path)
+        return any(
+            normalized == self._normalize_path(pattern)
+            for pattern in self.config.public_paths
+        )
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Authenticate the request and inject user context."""
