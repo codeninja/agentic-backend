@@ -297,6 +297,16 @@ class TestValidateUpdateInput:
 class TestResolverValidationIntegration:
     """Tests that validation errors surface as GraphQL errors."""
 
+    @pytest.fixture(autouse=True)
+    def _auth_context(self):
+        from ninja_auth.agent_context import clear_user_context, set_user_context
+        from ninja_auth.context import UserContext
+
+        ctx = UserContext(user_id="test", permissions=["write:*", "delete:*"], provider="test")
+        token = set_user_context(ctx)
+        yield
+        clear_user_context(token)
+
     async def test_create_unknown_field_returns_graphql_error(
         self, sample_asd: AgenticSchema
     ):

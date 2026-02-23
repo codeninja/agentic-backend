@@ -4,6 +4,10 @@ Each resolver delegates to a ``ninja_persistence.Repository`` instance looked up
 from a registry function supplied at schema-build time.  Create and update
 mutations validate their JSON input against the ASD entity schema before
 passing data to the repository.
+
+Mutation resolvers enforce authorization via the ``ninja_auth`` context-var
+bridge: the caller must have ``write:<domain>.<entity>`` (create/update) or
+``delete:<domain>.<entity>`` permission for the target entity.
 """
 
 from typing import Any, Callable, Optional
@@ -17,6 +21,23 @@ from ninja_gql.validation import (
     validate_create_input,
     validate_update_input,
 )
+
+
+def _check_mutation_auth(action: str, domain: str | None, entity_name: str) -> None:
+    """Verify the current user has permission to mutate *entity_name*.
+
+    When a *domain* is provided the check uses RBAC domain access
+    (``action:domain.entity``).  When no domain mapping exists the check
+    falls back to requiring ``action:entity_name`` as a direct permission.
+
+    Raises ``PermissionError`` propagated by ``ninja_auth``.
+    """
+    from ninja_auth.agent_context import require_domain_access, require_permission
+
+    if domain is not None:
+        require_domain_access(action, domain, entity=entity_name)
+    else:
+        require_permission(f"{action}:{entity_name}")
 
 
 def make_get_resolver(
@@ -57,15 +78,19 @@ def make_create_resolver(
     entity: EntitySchema,
     gql_type: type,
     repo_getter: Callable[[str], Repository[Any]],
+    domain: str | None = None,
 ) -> Callable:
     """Return an async resolver: ``create_{entity}(input) -> GqlType``.
 
     Validates the JSON input against the ASD entity field definitions
     before delegating to the repository.  Unknown fields are rejected
     (mass-assignment protection) and type/constraint checks are enforced.
+
+    Authorization: requires ``write:<domain>.<entity>`` permission.
     """
 
     async def resolver(input: strawberry.scalars.JSON) -> gql_type:  # type: ignore[valid-type]
+        _check_mutation_auth("write", domain, entity.name)
         try:
             validated = validate_create_input(entity, input)
         except InputValidationError as exc:
@@ -82,15 +107,19 @@ def make_update_resolver(
     entity: EntitySchema,
     gql_type: type,
     repo_getter: Callable[[str], Repository[Any]],
+    domain: str | None = None,
 ) -> Callable:
     """Return an async resolver: ``update_{entity}(id, patch) -> GqlType | None``.
 
     Validates the JSON patch against the ASD entity field definitions
     before delegating to the repository.  Unknown fields and primary-key
     modifications are rejected.
+
+    Authorization: requires ``write:<domain>.<entity>`` permission.
     """
 
     async def resolver(id: str, patch: strawberry.scalars.JSON) -> Optional[gql_type]:  # type: ignore[valid-type]
+        _check_mutation_auth("write", domain, entity.name)
         try:
             validated = validate_update_input(entity, patch)
         except InputValidationError as exc:
@@ -108,10 +137,15 @@ def make_update_resolver(
 def make_delete_resolver(
     entity: EntitySchema,
     repo_getter: Callable[[str], Repository[Any]],
+    domain: str | None = None,
 ) -> Callable:
-    """Return an async resolver: ``delete_{entity}(id) -> bool``."""
+    """Return an async resolver: ``delete_{entity}(id) -> bool``.
+
+    Authorization: requires ``delete:<domain>.<entity>`` permission.
+    """
 
     async def resolver(id: str) -> bool:
+        _check_mutation_auth("delete", domain, entity.name)
         repo = repo_getter(entity.name)
         return await repo.delete(id)
 

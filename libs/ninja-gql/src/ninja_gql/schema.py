@@ -92,6 +92,12 @@ def build_schema(
     query_cls = type("Query", (), query_ns)
     Query = strawberry.type(query_cls, description="Auto-generated root Query")
 
+    # -- build entity→domain lookup for authorization -------------------------
+    entity_domain: dict[str, str] = {}
+    for domain in asd.domains:
+        for ent_name in domain.entities:
+            entity_domain[ent_name] = domain.name
+
     # -- build Mutation fields -----------------------------------------------
     mutation_annotations: dict[str, Any] = {}
     mutation_ns: dict[str, Any] = {"__annotations__": mutation_annotations}
@@ -99,14 +105,15 @@ def build_schema(
     for entity in asd.entities:
         gql_type = types[entity.name]
         snake = _snake(entity.name)
+        domain = entity_domain.get(entity.name)
 
-        create_fn = make_create_resolver(entity, gql_type, repo_getter)
+        create_fn = make_create_resolver(entity, gql_type, repo_getter, domain=domain)
         mutation_ns[f"create_{snake}"] = strawberry.mutation(resolver=create_fn)
 
-        update_fn = make_update_resolver(entity, gql_type, repo_getter)
+        update_fn = make_update_resolver(entity, gql_type, repo_getter, domain=domain)
         mutation_ns[f"update_{snake}"] = strawberry.mutation(resolver=update_fn)
 
-        delete_fn = make_delete_resolver(entity, repo_getter)
+        delete_fn = make_delete_resolver(entity, repo_getter, domain=domain)
         mutation_ns[f"delete_{snake}"] = strawberry.mutation(resolver=delete_fn)
 
     mutation_cls = type("Mutation", (), mutation_ns)

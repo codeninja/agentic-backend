@@ -4,9 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 import strawberry
+from ninja_auth.agent_context import clear_user_context, set_user_context
+from ninja_auth.context import UserContext
 from ninja_core.schema.project import AgenticSchema
 from ninja_gql.schema import build_schema, build_schema_sdl
+
+
+@pytest.fixture(autouse=True)
+def _auth_context_for_mutations():
+    """Provide a permissive user context so existing mutation tests keep passing."""
+    ctx = UserContext(user_id="test-user", permissions=["write:*", "delete:*"], provider="test")
+    token = set_user_context(ctx)
+    yield
+    clear_user_context(token)
 
 
 class TestBuildSchema:
