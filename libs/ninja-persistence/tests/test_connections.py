@@ -1,11 +1,17 @@
 """Tests for connection management."""
 
 import json
+import logging
 import tempfile
 from unittest.mock import patch
 
 import pytest
-from ninja_persistence.connections import ConnectionManager, ConnectionProfile
+from ninja_persistence.connections import (
+    ConnectionManager,
+    ConnectionProfile,
+    _CredentialRedactFilter,
+    redact_url,
+)
 from pydantic import ValidationError
 
 
@@ -194,3 +200,106 @@ async def test_close_all():
     # After close, getting engine again should create a new one
     engine2 = mgr.get_sql_engine("default")
     assert engine2 is not None
+
+
+class TestCredentialRedaction:
+    """Tests for credential redaction from connection URLs (issue #122)."""
+
+    def test_redact_url_with_user_and_password(self):
+        url = "postgresql+asyncpg://admin:s3cret@db.host:5432/mydb"
+        assert redact_url(url) == "postgresql+asyncpg://***:***@db.host:5432/mydb"
+
+    def test_redact_url_with_user_only(self):
+        url = "postgresql+asyncpg://admin@db.host:5432/mydb"
+        assert redact_url(url) == "postgresql+asyncpg://***:***@db.host:5432/mydb"
+
+    def test_redact_url_no_credentials(self):
+        url = "sqlite+aiosqlite:///:memory:"
+        assert redact_url(url) == "sqlite+aiosqlite:///:memory:"
+
+    def test_redact_url_special_chars_in_password(self):
+        url = "postgresql://user:p%40ss%3Dw0rd@host/db"
+        assert redact_url(url) == "postgresql://***:***@host/db"
+
+    def test_redact_url_mongodb(self):
+        url = "mongodb://root:topsecret@mongo.internal:27017/app"
+        assert redact_url(url) == "mongodb://***:***@mongo.internal:27017/app"
+
+    def test_filter_scrubs_log_message(self):
+        filt = _CredentialRedactFilter()
+        record = logging.LogRecord(
+            name="sqlalchemy.engine",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="Connecting to postgresql://admin:secret@db:5432/mydb",
+            args=None,
+            exc_info=None,
+        )
+        filt.filter(record)
+        assert "secret" not in record.msg
+        assert "***:***@db:5432" in record.msg
+
+    def test_filter_scrubs_tuple_args(self):
+        filt = _CredentialRedactFilter()
+        record = logging.LogRecord(
+            name="sqlalchemy.pool",
+            level=logging.DEBUG,
+            pathname="",
+            lineno=0,
+            msg="Pool %s",
+            args=("postgresql://user:pass@host/db",),
+            exc_info=None,
+        )
+        filt.filter(record)
+        assert "pass" not in record.args[0]
+        assert "***:***@host" in record.args[0]
+
+    def test_filter_scrubs_dict_args(self):
+        filt = _CredentialRedactFilter()
+        record = logging.LogRecord(
+            name="sqlalchemy.engine",
+            level=logging.DEBUG,
+            pathname="",
+            lineno=0,
+            msg="%(url)s",
+            args=None,
+            exc_info=None,
+        )
+        # Set dict args after construction to avoid LogRecord __init__ issue
+        record.args = {"url": "mysql://root:secret@db/app"}
+        filt.filter(record)
+        assert "secret" not in record.args["url"]
+        assert "***:***@db" in record.args["url"]
+
+    def test_echo_engine_installs_filter(self):
+        """When echo=True, the credential filter is installed on SQLAlchemy loggers."""
+        profiles = {
+            "default": _profile_local(
+                engine="sql",
+                url="sqlite+aiosqlite:///:memory:",
+                options={"echo": True},
+            ),
+        }
+        mgr = ConnectionManager(profiles=profiles)
+        mgr.get_sql_engine("default")
+
+        sa_logger = logging.getLogger("sqlalchemy.engine")
+        filter_types = [type(f) for f in sa_logger.filters]
+        assert _CredentialRedactFilter in filter_types
+
+    def test_no_filter_when_echo_disabled(self):
+        """When echo is not set, no filter should be installed."""
+        profiles = {
+            "default": ConnectionProfile(engine="sql", url="sqlite+aiosqlite:///:memory:"),
+        }
+        mgr = ConnectionManager(profiles=profiles)
+
+        # Clear any existing filters first
+        sa_logger = logging.getLogger("sqlalchemy.engine")
+        original_filters = sa_logger.filters[:]
+
+        mgr.get_sql_engine("default")
+
+        new_filters = [f for f in sa_logger.filters if f not in original_filters]
+        assert not any(isinstance(f, _CredentialRedactFilter) for f in new_filters)
