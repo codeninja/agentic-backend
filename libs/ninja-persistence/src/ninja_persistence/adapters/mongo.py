@@ -8,6 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ninja_core.schema.entity import EntitySchema
 
+from ninja_persistence.adapters import _validate_limit
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -106,7 +107,14 @@ class MongoAdapter:
             ) from exc
 
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        """Retrieve multiple documents matching the given filters."""
+        """Retrieve multiple documents matching the given filters.
+
+        Args:
+            filters: MongoDB query filters.
+            limit: Max documents to return (1–1000). Values above 1000 are
+                   capped; values below 1 raise ``ValueError``.
+        """
+        limit = _validate_limit(limit)
         coll = self._get_collection()
         try:
             cursor = coll.find(filters or {}).limit(limit)
@@ -227,7 +235,13 @@ class MongoAdapter:
         Uses Atlas Vector Search ``$vectorSearch`` aggregation when
         ``vector_mode='native'``, otherwise delegates to the configured
         ``vector_sidecar``.
+
+        Args:
+            query: The search query or embedding vector.
+            limit: Max results to return (1–1000). Values above 1000 are capped;
+                   values below 1 raise ``ValueError``.
         """
+        limit = _validate_limit(limit)
         if self._vector_mode == "native":
             return await self._atlas_vector_search(query, limit)
         if self._vector_sidecar is not None:

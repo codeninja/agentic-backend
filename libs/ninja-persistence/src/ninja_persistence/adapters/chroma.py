@@ -8,6 +8,7 @@ from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
 
+from ninja_persistence.adapters import _validate_limit
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -82,7 +83,14 @@ class ChromaVectorAdapter:
         return doc
 
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        """Retrieve multiple records matching the given filters."""
+        """Retrieve multiple records matching the given filters.
+
+        Args:
+            filters: Chroma ``where`` filters.
+            limit: Max records to return (1–1000). Values above 1000 are capped;
+                   values below 1 raise ``ValueError``.
+        """
+        limit = _validate_limit(limit)
         try:
             coll = await self._get_collection()
             kwargs: dict[str, Any] = {"limit": limit}
@@ -189,7 +197,14 @@ class ChromaVectorAdapter:
             ) from exc
 
     async def search_semantic(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        """Perform semantic (vector similarity) search."""
+        """Perform semantic (vector similarity) search.
+
+        Args:
+            query: The text query for similarity search.
+            limit: Max results to return (1–1000). Values above 1000 are capped;
+                   values below 1 raise ``ValueError``.
+        """
+        limit = _validate_limit(limit)
         try:
             coll = await self._get_collection()
             result = await asyncio.to_thread(coll.query, query_texts=[query], n_results=limit)
