@@ -23,7 +23,7 @@ from ninja_core.schema.entity import (
 )
 from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
-from ninja_core.security import check_ssrf
+from ninja_core.security import check_ssrf, redact_url
 from ninja_introspect.engine import IntrospectionEngine
 
 _ALLOWED_DB_SCHEMES = {
@@ -293,20 +293,21 @@ def _validate_connection_string(
         allow_private_hosts: If ``True``, skip SSRF checks for private/internal
             network addresses.  Intended for legitimate local development only.
     """
+    safe_url = redact_url(connection_string)
     parsed = urlparse(connection_string)
     scheme = parsed.scheme
     if not scheme:
-        return f"Invalid connection string: missing scheme. Got '{connection_string}'."
+        return f"Invalid connection string: missing scheme. Got '{safe_url}'."
     if scheme not in _ALLOWED_DB_SCHEMES:
         return f"Unsupported database scheme '{scheme}'. Allowed schemes: {', '.join(sorted(_ALLOWED_DB_SCHEMES))}."
     base_scheme = scheme.split("+")[0]
     if base_scheme == "sqlite":
         db_path = parsed.path
         if not db_path or db_path == "/":
-            return f"Invalid SQLite URL '{connection_string}': missing database path."
+            return f"Invalid SQLite URL '{safe_url}': missing database path."
         if db_path.startswith("//") and not db_path.startswith("///:memory:"):
             return (
-                f"Rejected SQLite URL '{connection_string}': "
+                f"Rejected SQLite URL '{safe_url}': "
                 "absolute paths via sqlite:////... are not allowed in this context."
             )
     # SSRF protection — block private/reserved IP ranges
@@ -333,13 +334,16 @@ async def introspect_database(
     if error:
         return f"Connection rejected: {error}"
 
+    safe_url = redact_url(connection_string)
     try:
         engine = IntrospectionEngine(project_name=workspace.schema.project_name)
         result = await engine.run([connection_string])
     except ValueError as exc:
-        return f"Invalid connection string: {exc}"
+        sanitized_msg = redact_url(str(exc))
+        return f"Invalid connection string: {sanitized_msg}"
     except Exception as exc:
-        return f"Introspection failed: {type(exc).__name__}: {exc}"
+        sanitized_msg = redact_url(str(exc))
+        return f"Introspection failed ({safe_url}): {type(exc).__name__}: {sanitized_msg}"
 
     new_entities = 0
     existing_names = {e.name for e in workspace.schema.entities}

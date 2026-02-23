@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
+from ninja_core.security import redact_url
 from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ninja_introspect.providers.base import IntrospectionProvider, IntrospectionResult
+
+# Default connection timeout in seconds to prevent indefinite hangs on
+# unreachable hosts.
+_CONNECT_TIMEOUT_SECONDS = 30
 
 # Map SQLAlchemy type names to FieldType
 _SQL_TYPE_MAP: dict[str, FieldType] = {
@@ -55,10 +62,41 @@ def _table_to_pascal(name: str) -> str:
 class SQLProvider(IntrospectionProvider):
     """Introspects SQL databases (Postgres, MySQL, SQLite) via SQLAlchemy."""
 
-    async def introspect(self, connection_string: str) -> IntrospectionResult:
-        engine = create_async_engine(connection_string)
+    async def introspect(
+        self,
+        connection_string: str,
+        *,
+        timeout: float = _CONNECT_TIMEOUT_SECONDS,
+    ) -> IntrospectionResult:
+        """Introspect a SQL database and return discovered entities and relationships.
+
+        Args:
+            connection_string: Database connection URI.
+            timeout: Maximum seconds to wait for the introspection to complete.
+                Defaults to 30 s to prevent indefinite hangs on unreachable
+                hosts.
+
+        Raises:
+            TimeoutError: If the operation exceeds *timeout* seconds.
+        """
+        engine = create_async_engine(connection_string, pool_pre_ping=True)
         try:
-            return await self._run_introspection(engine)
+            return await asyncio.wait_for(
+                self._run_introspection(engine),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            safe_url = redact_url(connection_string)
+            raise TimeoutError(
+                f"Introspection of {safe_url} timed out after {timeout}s. "
+                "The host may be unreachable."
+            ) from None
+        except Exception as exc:
+            # Re-raise with credentials redacted from the message.
+            sanitized_msg = redact_url(str(exc))
+            if sanitized_msg != str(exc):
+                raise type(exc)(sanitized_msg) from None
+            raise
         finally:
             await engine.dispose()
 

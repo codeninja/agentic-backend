@@ -1,14 +1,35 @@
-"""Shared network security utilities for SSRF protection."""
+"""Shared network security utilities for SSRF protection and credential redaction."""
 
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 from urllib.parse import urlparse
 
 
 class SSRFError(ValueError):
     """Raised when a connection string targets a blocked network address."""
+
+
+# Pattern matches user:password@ in connection URLs.
+_CREDENTIAL_RE = re.compile(r"://([^@/]+)@")
+
+
+def redact_url(url: str) -> str:
+    """Replace credentials in a connection URL with ``***:***``.
+
+    Any ``scheme://user:password@host`` segment is replaced so that
+    credentials never leak into logs or error messages.
+
+    >>> redact_url("postgresql+asyncpg://admin:s3cret@db.host:5432/mydb")
+    'postgresql+asyncpg://***:***@db.host:5432/mydb'
+    >>> redact_url("sqlite+aiosqlite:///:memory:")
+    'sqlite+aiosqlite:///:memory:'
+    >>> redact_url("mongodb://root:hunter2@mongo.internal:27017/app")
+    'mongodb://***:***@mongo.internal:27017/app'
+    """
+    return _CREDENTIAL_RE.sub("://***:***@", url)
 
 
 # RFC 1918 private ranges, loopback, link-local, and cloud metadata endpoints.

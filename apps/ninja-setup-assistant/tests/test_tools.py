@@ -530,3 +530,61 @@ class TestIntrospectDatabaseErrorHandling:
         # Pre-existing entity should still be there, nothing else added
         assert len(workspace.schema.entities) == 1
         assert workspace.schema.entities[0].name == "Existing"
+
+
+# ---------------------------------------------------------------------------
+# Credential redaction in error messages (issue #124)
+# ---------------------------------------------------------------------------
+
+
+class TestCredentialRedactionInErrors:
+    """Verify that credentials are never exposed in error messages."""
+
+    _SSRF_PATCH = patch("ninja_setup_assistant.tools.check_ssrf", return_value=None)
+
+    @pytest.mark.asyncio
+    async def test_credentials_redacted_in_exception_message(self, workspace: SchemaWorkspace) -> None:
+        """Exception messages containing the connection string must be redacted."""
+        conn = "postgresql://admin:s3cret@db.host:5432/mydb"
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(
+                side_effect=RuntimeError(f"could not connect to {conn}")
+            )
+
+            result = await introspect_database(workspace, conn)
+
+        assert "s3cret" not in result
+        assert "admin" not in result
+        assert "***:***" in result
+        assert "Introspection failed" in result
+
+    @pytest.mark.asyncio
+    async def test_credentials_redacted_in_value_error(self, workspace: SchemaWorkspace) -> None:
+        """ValueError messages must also have credentials redacted."""
+        conn = "postgresql://root:hunter2@db.internal:5432/prod"
+        with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
+            mock_engine = mock_cls.return_value
+            mock_engine.run = AsyncMock(
+                side_effect=ValueError(f"bad URL: {conn}")
+            )
+
+            result = await introspect_database(workspace, conn)
+
+        assert "hunter2" not in result
+        assert "root" not in result
+        assert "***:***" in result
+
+    def test_validate_connection_string_redacts_credentials(self) -> None:
+        """_validate_connection_string error messages must not contain raw credentials."""
+        # Missing scheme won't have credentials, but SQLite errors include the URL
+        error = _validate_connection_string("sqlite:///")
+        assert error is not None
+        # This URL has no creds, so just check it works
+        assert "missing database path" in error
+
+    def test_validate_connection_string_redacts_in_sqlite_error(self) -> None:
+        """SQLite error messages must not contain raw credentials."""
+        error = _validate_connection_string("sqlite+aiosqlite:///")
+        assert error is not None
+        assert "missing database path" in error

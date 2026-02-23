@@ -15,7 +15,7 @@ from ninja_core.schema import (
     RelationshipType,
     StorageEngine,
 )
-from ninja_core.security import SSRFError, check_ssrf
+from ninja_core.security import SSRFError, check_ssrf, redact_url
 from ninja_core.serialization import load_schema, save_schema
 
 __all__ = [
@@ -34,6 +34,7 @@ __all__ = [
     "SSRFError",
     "StorageEngine",
     "check_ssrf",
+    "redact_url",
     "load_schema",
     "save_schema",
 ]
