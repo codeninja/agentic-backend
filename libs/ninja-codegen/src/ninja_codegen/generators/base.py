@@ -100,6 +100,13 @@ def sanitize_name(name: str, label: str = "name") -> str:
             "characters and underscores, and be at most 64 characters."
         )
 
+    # Reject Python keywords (e.g. "class", "import", "return") which would
+    # produce syntactically invalid generated code.
+    if keyword.iskeyword(basename):
+        raise ValueError(
+            f"Unsafe {label}: {name!r} is a Python reserved keyword."
+        )
+
     return basename
 
 
@@ -177,14 +184,19 @@ def build_fields_meta(entity: EntitySchema) -> list[dict[str, Any]]:
     """Build pre-processed field metadata for templates.
 
     Resolves enum values to Python/GQL type strings so templates
-    don't need to do dict lookups on enum objects.
+    don't need to do dict lookups on enum objects.  Validates each
+    field name as a safe Python identifier before it reaches templates.
+
+    Raises:
+        ValueError: If any field name is not a safe identifier.
     """
     fields: list[dict[str, Any]] = []
     for f in entity.fields:
+        safe_field = sanitize_name(f.name, f"field name in entity {entity.name!r}")
         ft_value = f.field_type.value
         fields.append(
             {
-                "name": f.name,
+                "name": safe_field,
                 "python_type": FIELD_TYPE_MAP.get(ft_value, "Any"),
                 "gql_type": GQL_TYPE_MAP.get(ft_value, "str"),
                 "field_type_value": ft_value,

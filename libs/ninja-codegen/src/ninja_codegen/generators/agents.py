@@ -67,7 +67,14 @@ def generate_coordinator(domains: list[DomainSchema], output_dir: Path) -> Path:
 
     Returns:
         Path to the generated file.
+
+    Raises:
+        ValueError: If any domain name is not a safe identifier.
     """
+    # Validate all domain names before template rendering (defense-in-depth).
+    for d in domains:
+        sanitize_name(d.name, "domain name")
+
     env = get_template_env()
     template = env.get_template("coordinator_agent.py.j2")
     domain_names = [d.name for d in domains]
