@@ -70,13 +70,15 @@ class ChromaVectorAdapter:
                 detail="Failed to retrieve document from Chroma.",
                 cause=exc,
             ) from exc
-        if not result["ids"]:
+        if not result.get("ids"):
             return None
         doc: dict[str, Any] = {"id": id}
-        if result.get("metadatas"):
-            doc.update(result["metadatas"][0])
-        if result.get("documents"):
-            doc["document"] = result["documents"][0]
+        metadatas = result.get("metadatas")
+        if metadatas and len(metadatas) > 0 and metadatas[0] is not None:
+            doc.update(metadatas[0])
+        documents = result.get("documents")
+        if documents and len(documents) > 0 and documents[0] is not None:
+            doc["document"] = documents[0]
         return doc
 
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
@@ -202,16 +204,21 @@ class ChromaVectorAdapter:
                 cause=exc,
             ) from exc
         docs: list[dict[str, Any]] = []
-        if result["ids"] and result["ids"][0]:
-            for i, doc_id in enumerate(result["ids"][0]):
-                doc: dict[str, Any] = {"id": doc_id}
-                if result.get("metadatas") and result["metadatas"][0] and i < len(result["metadatas"][0]):
-                    doc.update(result["metadatas"][0][i])
-                if result.get("documents") and result["documents"][0] and i < len(result["documents"][0]):
-                    doc["document"] = result["documents"][0][i]
-                if result.get("distances") and result["distances"][0] and i < len(result["distances"][0]):
-                    doc["_distance"] = result["distances"][0][i]
-                docs.append(doc)
+        ids = result.get("ids")
+        if not ids or not ids[0]:
+            return docs
+        for i, doc_id in enumerate(ids[0]):
+            doc: dict[str, Any] = {"id": doc_id}
+            metadatas = result.get("metadatas")
+            if metadatas and len(metadatas) > 0 and metadatas[0] and i < len(metadatas[0]) and metadatas[0][i] is not None:
+                doc.update(metadatas[0][i])
+            documents = result.get("documents")
+            if documents and len(documents) > 0 and documents[0] and i < len(documents[0]) and documents[0][i] is not None:
+                doc["document"] = documents[0][i]
+            distances = result.get("distances")
+            if distances and len(distances) > 0 and distances[0] and i < len(distances[0]) and distances[0][i] is not None:
+                doc["_distance"] = distances[0][i]
+            docs.append(doc)
         return docs
 
     async def upsert_embedding(self, id: str, embedding: list[float]) -> None:
