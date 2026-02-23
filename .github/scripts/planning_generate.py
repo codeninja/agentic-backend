@@ -16,7 +16,8 @@ def main():
     with open("/tmp/triage_comment.txt") as f:
         triage_analysis = f.read()
 
-    prompt = f"""You are a principal software engineer creating an implementation plan for a GitHub issue in the NinjaStack monorepo — a schema-first agentic backend framework (Python, Google ADK, Pydantic, pytest).
+    prompt = f"""You are a principal software engineer creating an implementation plan for a GitHub issue in the
+    NinjaStack monorepo — a schema-first agentic backend framework (Python, Google ADK, Pydantic, pytest).
 
 ## Issue
 **Title:** {issue_title}

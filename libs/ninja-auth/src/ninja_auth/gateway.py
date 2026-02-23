@@ -79,10 +79,7 @@ class AuthGateway(BaseHTTPMiddleware):
         avoids accidental over-matching that could lead to auth bypass.
         """
         normalized = self._normalize_path(path)
-        return any(
-            normalized == self._normalize_path(pattern)
-            for pattern in self.config.public_paths
-        )
+        return any(normalized == self._normalize_path(pattern) for pattern in self.config.public_paths)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Authenticate the request and inject user context."""

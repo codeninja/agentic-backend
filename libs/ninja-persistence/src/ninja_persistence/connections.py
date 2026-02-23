@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from ninja_core.security import check_ssrf, redact_url
+from ninja_core.security import check_ssrf
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -27,13 +27,11 @@ class _CredentialRedactFilter(logging.Filter):
         if record.args:
             if isinstance(record.args, dict):
                 record.args = {
-                    k: self._SCRUB_RE.sub("://***:***@", v) if isinstance(v, str) else v
-                    for k, v in record.args.items()
+                    k: self._SCRUB_RE.sub("://***:***@", v) if isinstance(v, str) else v for k, v in record.args.items()
                 }
             elif isinstance(record.args, tuple):
                 record.args = tuple(
-                    self._SCRUB_RE.sub("://***:***@", a) if isinstance(a, str) else a
-                    for a in record.args
+                    self._SCRUB_RE.sub("://***:***@", a) if isinstance(a, str) else a for a in record.args
                 )
         return True
 
@@ -108,6 +106,9 @@ class ConnectionManager:
     def __init__(self, profiles: dict[str, ConnectionProfile] | None = None) -> None:
         self._profiles: dict[str, ConnectionProfile] = profiles or {}
         self._sql_engines: dict[str, AsyncEngine] = {}
+        self._mongo_databases: dict[str, Any] = {}
+        self._chroma_clients: dict[str, Any] = {}
+        self._graph_drivers: dict[str, Any] = {}
 
     @classmethod
     def from_file(cls, path: str | Path = ".ninjastack/connections.json") -> ConnectionManager:
@@ -141,11 +142,79 @@ class ConnectionManager:
             self._sql_engines[profile_name] = engine
         return self._sql_engines[profile_name]
 
+    def get_mongo_database(self, profile_name: str = "default") -> Any:
+        """Get or create an async Motor database for the given profile.
+
+        Requires the ``motor`` optional dependency.
+
+        Raises:
+            KeyError: If the profile is not found.
+        """
+        if profile_name not in self._mongo_databases:
+            from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore[import-untyped]
+
+            profile = self.get_profile(profile_name)
+            db_name = profile.options.get("database", urlparse(profile.url).path.lstrip("/") or "ninjastack")
+            client = AsyncIOMotorClient(profile.url)
+            self._mongo_databases[profile_name] = client[db_name]
+        return self._mongo_databases[profile_name]
+
+    def get_chroma_client(self, profile_name: str = "default") -> Any:
+        """Get or create a Chroma client for the given profile.
+
+        Supports persistent (``host``-based) and ephemeral (in-memory) modes
+        based on the profile URL scheme.
+
+        Requires the ``chromadb`` optional dependency.
+
+        Raises:
+            KeyError: If the profile is not found.
+        """
+        if profile_name not in self._chroma_clients:
+            import chromadb  # type: ignore[import-untyped]
+
+            profile = self.get_profile(profile_name)
+            parsed = urlparse(profile.url)
+            if parsed.scheme in ("http", "https"):
+                client = chromadb.HttpClient(host=parsed.hostname or "localhost", port=parsed.port or 8000)
+            else:
+                # Local persistent or ephemeral
+                persist_dir = profile.options.get("persist_directory")
+                if persist_dir:
+                    client = chromadb.PersistentClient(path=persist_dir)
+                else:
+                    client = chromadb.EphemeralClient()
+            self._chroma_clients[profile_name] = client
+        return self._chroma_clients[profile_name]
+
+    def get_graph_driver(self, profile_name: str = "default") -> Any:
+        """Get or create an async Neo4j driver for the given profile.
+
+        Requires the ``neo4j`` optional dependency.
+
+        Raises:
+            KeyError: If the profile is not found.
+        """
+        if profile_name not in self._graph_drivers:
+            from neo4j import AsyncGraphDatabase  # type: ignore[import-untyped]
+
+            profile = self.get_profile(profile_name)
+            auth_user = profile.options.get("username", "neo4j")
+            auth_pass = profile.options.get("password", "")
+            driver = AsyncGraphDatabase.driver(profile.url, auth=(auth_user, auth_pass))
+            self._graph_drivers[profile_name] = driver
+        return self._graph_drivers[profile_name]
+
     async def close_all(self) -> None:
         """Dispose all managed connection pools."""
         for engine in self._sql_engines.values():
             await engine.dispose()
         self._sql_engines.clear()
+        for driver in self._graph_drivers.values():
+            await driver.close()
+        self._graph_drivers.clear()
+        self._mongo_databases.clear()
+        self._chroma_clients.clear()
 
 
 def _install_credential_filter(engine: AsyncEngine) -> None:

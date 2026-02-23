@@ -248,9 +248,7 @@ class TestSanitizeAgentName:
                 ],
             )
 
-    def test_domain_agent_rejects_malicious_domain_name(
-        self, order_entity: EntitySchema
-    ) -> None:
+    def test_domain_agent_rejects_malicious_domain_name(self, order_entity: EntitySchema) -> None:
         """DomainAgent creation fails with a malicious domain name.
 
         The name is rejected at the DomainSchema level (Pydantic validation)
@@ -262,9 +260,7 @@ class TestSanitizeAgentName:
                 entities=["Order"],
             )
 
-    def test_create_domain_agent_factory_rejects_malicious_name(
-        self, order_entity: EntitySchema
-    ) -> None:
+    def test_create_domain_agent_factory_rejects_malicious_name(self, order_entity: EntitySchema) -> None:
         """Factory function also validates domain names.
 
         The name is rejected at the DomainSchema level (Pydantic validation)

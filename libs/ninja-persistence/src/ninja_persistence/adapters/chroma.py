@@ -82,7 +82,9 @@ class ChromaVectorAdapter:
             doc["document"] = documents[0]
         return doc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def find_many(
+        self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters.
 
         Args:
@@ -228,13 +230,31 @@ class ChromaVectorAdapter:
         for i, doc_id in enumerate(ids[0]):
             doc: dict[str, Any] = {"id": doc_id}
             metadatas = result.get("metadatas")
-            if metadatas and len(metadatas) > 0 and metadatas[0] and i < len(metadatas[0]) and metadatas[0][i] is not None:
+            if (
+                metadatas
+                and len(metadatas) > 0
+                and metadatas[0]
+                and i < len(metadatas[0])
+                and metadatas[0][i] is not None
+            ):
                 doc.update(metadatas[0][i])
             documents = result.get("documents")
-            if documents and len(documents) > 0 and documents[0] and i < len(documents[0]) and documents[0][i] is not None:
+            if (
+                documents
+                and len(documents) > 0
+                and documents[0]
+                and i < len(documents[0])
+                and documents[0][i] is not None
+            ):
                 doc["document"] = documents[0][i]
             distances = result.get("distances")
-            if distances and len(distances) > 0 and distances[0] and i < len(distances[0]) and distances[0][i] is not None:
+            if (
+                distances
+                and len(distances) > 0
+                and distances[0]
+                and i < len(distances[0])
+                and distances[0][i] is not None
+            ):
                 doc["_distance"] = distances[0][i]
             docs.append(doc)
         return docs

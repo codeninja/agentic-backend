@@ -75,7 +75,9 @@ class TestAddEntity:
 
     def test_duplicate_entity_rejected(self, workspace: SchemaWorkspace) -> None:
         add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
-        result = add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "string", "primary_key": True}])
+        result = add_entity(
+            workspace, name="User", fields=[{"name": "id", "field_type": "string", "primary_key": True}]
+        )
         assert "already exists" in result
         assert len(workspace.schema.entities) == 1
 
@@ -238,7 +240,14 @@ class TestReviewSchema:
     def test_schema_with_relationships(self, workspace: SchemaWorkspace) -> None:
         add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
-        add_relationship(workspace, name="user_posts", source_entity="Post", target_entity="User", source_field="author_id", target_field="id")
+        add_relationship(
+            workspace,
+            name="user_posts",
+            source_entity="Post",
+            target_entity="User",
+            source_field="author_id",
+            target_field="id",
+        )
         result = review_schema(workspace)
         assert "Relationships (1)" in result
         assert "user_posts" in result
@@ -271,7 +280,14 @@ class TestConfirmSchema:
     def test_confirm_preserves_all_data(self, workspace: SchemaWorkspace) -> None:
         add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
-        add_relationship(workspace, name="user_posts", source_entity="Post", target_entity="User", source_field="author_id", target_field="id")
+        add_relationship(
+            workspace,
+            name="user_posts",
+            source_entity="Post",
+            target_entity="User",
+            source_field="author_id",
+            target_field="id",
+        )
         create_domain(workspace, name="Content", entities=["User", "Post"])
 
         result = confirm_schema(workspace)
@@ -548,9 +564,7 @@ class TestCredentialRedactionInErrors:
         conn = "postgresql://admin:s3cret@db.host:5432/mydb"
         with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
-            mock_engine.run = AsyncMock(
-                side_effect=RuntimeError(f"could not connect to {conn}")
-            )
+            mock_engine.run = AsyncMock(side_effect=RuntimeError(f"could not connect to {conn}"))
 
             result = await introspect_database(workspace, conn)
 
@@ -565,9 +579,7 @@ class TestCredentialRedactionInErrors:
         conn = "postgresql://root:hunter2@db.internal:5432/prod"
         with self._SSRF_PATCH, patch("ninja_setup_assistant.tools.IntrospectionEngine") as mock_cls:
             mock_engine = mock_cls.return_value
-            mock_engine.run = AsyncMock(
-                side_effect=ValueError(f"bad URL: {conn}")
-            )
+            mock_engine.run = AsyncMock(side_effect=ValueError(f"bad URL: {conn}"))
 
             result = await introspect_database(workspace, conn)
 

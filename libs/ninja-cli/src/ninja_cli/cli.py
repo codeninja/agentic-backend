@@ -107,7 +107,9 @@ def deploy(
 
 @app.command()
 def introspect(
-    connection_string: str = typer.Argument(help="Database connection URI (e.g. postgresql://host/db, sqlite:///path)."),
+    connection_string: str = typer.Argument(
+        help="Database connection URI (e.g. postgresql://host/db, sqlite:///path)."
+    ),
     format: str = typer.Option("json", "--format", "-f", help="Output format: json or table."),
 ) -> None:
     """Introspect a database and print discovered schema entities and relationships."""

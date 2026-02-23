@@ -63,11 +63,7 @@ def generate_graphql(entities: list[EntitySchema], output_dir: Path) -> list[Pat
         path = generate_gql_type(entity, gql_dir)
         paths.append(path)
         safe = sanitize_name(entity.name, "entity name")
-        init_lines.append(
-            f"from .{safe.lower()}_gql import "
-            f"{safe}Type, {safe}Input, "
-            f"{safe}Query, {safe}Mutation"
-        )
+        init_lines.append(f"from .{safe.lower()}_gql import {safe}Type, {safe}Input, {safe}Query, {safe}Mutation")
 
     if entities:
         init_lines.append("")

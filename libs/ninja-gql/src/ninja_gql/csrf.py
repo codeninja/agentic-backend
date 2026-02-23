@@ -207,18 +207,11 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                     )
 
                 # If a specific value is expected, validate it
-                if (
-                    self.csrf_config.header_value is not None
-                    and header_value != self.csrf_config.header_value
-                ):
+                if self.csrf_config.header_value is not None and header_value != self.csrf_config.header_value:
                     logger.warning("CSRF check failed: invalid header value")
                     return JSONResponse(
                         status_code=403,
-                        content={
-                            "errors": [
-                                {"message": "CSRF validation failed: invalid token"}
-                            ]
-                        },
+                        content={"errors": [{"message": "CSRF validation failed: invalid token"}]},
                     )
 
         response = await call_next(request)

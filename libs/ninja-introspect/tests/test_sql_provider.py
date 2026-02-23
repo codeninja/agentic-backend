@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from ninja_core.schema.entity import FieldType, StorageEngine
 from ninja_core.schema.relationship import Cardinality, RelationshipType
-from ninja_introspect.providers.sql import SQLProvider, _CONNECT_TIMEOUT_SECONDS, _table_to_pascal
+from ninja_introspect.providers.sql import _CONNECT_TIMEOUT_SECONDS, SQLProvider, _table_to_pascal
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship

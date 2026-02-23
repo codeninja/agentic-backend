@@ -52,9 +52,7 @@ class TestIntrospectionControl:
         result = await schema.execute("{ __schema { queryType { name } } }")
         assert result.errors is None
 
-    async def test_normal_queries_work_when_introspection_disabled(
-        self, sample_asd: AgenticSchema
-    ):
+    async def test_normal_queries_work_when_introspection_disabled(self, sample_asd: AgenticSchema):
         """Non-introspection queries are not affected."""
         config = GraphQLSecurityConfig(introspection_enabled=False)
         schema = build_schema(sample_asd, security_config=config)

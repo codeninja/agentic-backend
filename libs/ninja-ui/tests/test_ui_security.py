@@ -155,12 +155,18 @@ def _xss_entity() -> EntitySchema:
     escape output correctly.
     """
     xss_field = FieldSchema.model_construct(
-        name=XSS_FIELD_NAME, field_type=FieldType.STRING,
-        primary_key=False, nullable=False, constraints=None,
+        name=XSS_FIELD_NAME,
+        field_type=FieldType.STRING,
+        primary_key=False,
+        nullable=False,
+        constraints=None,
     )
     id_field = FieldSchema.model_construct(
-        name="id", field_type=FieldType.UUID,
-        primary_key=True, nullable=False, constraints=None,
+        name="id",
+        field_type=FieldType.UUID,
+        primary_key=True,
+        nullable=False,
+        constraints=None,
     )
     return EntitySchema.model_construct(
         name=XSS_ENTITY_NAME,
@@ -423,7 +429,7 @@ class TestCrudTemplateVariables:
         gen = CrudGenerator(sample_asd)
         path = gen.generate_entity_page(customer_entity, tmp_path)
         content = path.read_text()
-        assert 'mutation DeleteEntity($id: String!)' in content
+        assert "mutation DeleteEntity($id: String!)" in content
 
     def test_list_uses_variables(self, sample_asd, customer_entity, tmp_path):
         gen = CrudGenerator(sample_asd)

@@ -113,6 +113,8 @@ class TestSetupAssistant:
     def test_tool_functions_modify_workspace(self) -> None:
         assistant = SetupAssistant(project_name="test")
         tools = assistant.get_tool_functions()
-        result = tools["adk_add_entity"](name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": "true"}])
+        result = tools["adk_add_entity"](
+            name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": "true"}]
+        )
         assert "Added entity" in result
         assert len(assistant.workspace.schema.entities) == 1

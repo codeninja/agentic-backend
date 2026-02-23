@@ -11,6 +11,7 @@ Usage:
     python3 scripts/plan_tickets.py --dry-run                # Preview without changes
     python3 scripts/plan_tickets.py --issues 124 125 130     # Only specific issues
 """
+
 import argparse
 import json
 import os
@@ -21,14 +22,14 @@ import subprocess
 PROJECT_ID = "PVT_kwHNOkLOAT6Qtg"
 FIELD_ID = "PVTSSF_lAHNOkLOAT6Qts4Pf31M"
 STATUS_OPTIONS = {
-    "Triage":       "f75ad846",
-    "Planning":     "5860e624",
-    "Todo":         "398c03ac",
-    "In Progress":  "47fc9ee4",
-    "AI Review":    "adaa04e0",
-    "Rejected":     "656e3c6f",
-    "Done":         "873d8d61",
-    "Need Human":   "0296d477",
+    "Triage": "f75ad846",
+    "Planning": "5860e624",
+    "Todo": "398c03ac",
+    "In Progress": "47fc9ee4",
+    "AI Review": "adaa04e0",
+    "Rejected": "656e3c6f",
+    "Done": "873d8d61",
+    "Need Human": "0296d477",
 }
 OWNER = "codeninja"
 REPO = "ninja-stack"
@@ -50,9 +51,9 @@ def fetch_board_tickets(status_name):
         after = f', after:"{cursor}"' if cursor else ""
         q = (
             f'query {{ user(login:"{OWNER}") {{ projectV2(number:4) {{ items(first:100{after}) '
-            f'{{ pageInfo {{ hasNextPage endCursor }} nodes {{ '
+            f"{{ pageInfo {{ hasNextPage endCursor }} nodes {{ "
             f'fieldValueByName(name:"Status") {{ ... on ProjectV2ItemFieldSingleSelectValue {{ name }} }} '
-            f'content {{ ... on Issue {{ number title state }} }} }} }} }} }} }}'
+            f"content {{ ... on Issue {{ number title state }} }} }} }} }} }} }}"
         )
         raw = gh("api", "graphql", "-f", f"query={q}")
         data = json.loads(raw)["data"]["user"]["projectV2"]["items"]
@@ -108,9 +109,7 @@ def generate_plan(issue):
     body = issue.get("body", "") or ""
 
     files, lines_info = extract_affected_files(body)
-    is_bug = "bug" in title.lower() or any(
-        l.get("name", "").lower() == "bug" for l in issue.get("labels", [])
-    )
+    is_bug = "bug" in title.lower() or any(label.get("name", "").lower() == "bug" for label in issue.get("labels", []))
     is_enhancement = any(kw in title.lower() for kw in ("enhancement", "add ", "implement"))
 
     # Verify files exist in repo
@@ -205,36 +204,70 @@ def generate_plan(issue):
 def move_ticket(num, target_option_id):
     """Move an issue to a board status column."""
     node_id = gh(
-        "api", "graphql", "-f",
-        'query=query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){id}}}',
-        "-F", f"o={OWNER}", "-F", f"r={REPO}", "-F", f"n={num}",
-        "-q", ".data.repository.issue.id",
+        "api",
+        "graphql",
+        "-f",
+        "query=query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){id}}}",
+        "-F",
+        f"o={OWNER}",
+        "-F",
+        f"r={REPO}",
+        "-F",
+        f"n={num}",
+        "-q",
+        ".data.repository.issue.id",
     )
     item_id = gh(
-        "api", "graphql", "-f",
-        'query=mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}',
-        "-F", f"p={PROJECT_ID}", "-F", f"c={node_id}",
-        "-q", ".data.addProjectV2ItemById.item.id",
+        "api",
+        "graphql",
+        "-f",
+        "query=mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}",
+        "-F",
+        f"p={PROJECT_ID}",
+        "-F",
+        f"c={node_id}",
+        "-q",
+        ".data.addProjectV2ItemById.item.id",
     )
     gh(
-        "api", "graphql", "-f",
-        'query=mutation($p:ID!,$i:ID!,$f:ID!,$v:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$v}}){projectV2Item{id}}}',
-        "-F", f"p={PROJECT_ID}", "-F", f"i={item_id}", "-F", f"f={FIELD_ID}", "-F", f"v={target_option_id}",
+        "api",
+        "graphql",
+        "-f",
+        "query=mutation($p:ID!,$i:ID!,$f:ID!,$v:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$v}}){projectV2Item{id}}}",
+        "-F",
+        f"p={PROJECT_ID}",
+        "-F",
+        f"i={item_id}",
+        "-F",
+        f"f={FIELD_ID}",
+        "-F",
+        f"v={target_option_id}",
     )
 
 
 def main():
     parser = argparse.ArgumentParser(description="Plan and promote NinjaStack board tickets")
-    parser.add_argument("--from", dest="from_status", default="Planning", choices=STATUS_OPTIONS.keys(),
-                        help="Source board column (default: Planning)")
-    parser.add_argument("--to", dest="to_status", default="Todo", choices=STATUS_OPTIONS.keys(),
-                        help="Target board column (default: Todo)")
-    parser.add_argument("--issues", nargs="+", type=int, default=None,
-                        help="Only process these issue numbers (skip board query)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print plan to stdout without posting or moving")
-    parser.add_argument("--no-plan", action="store_true",
-                        help="Move tickets without posting an implementation plan comment")
+    parser.add_argument(
+        "--from",
+        dest="from_status",
+        default="Planning",
+        choices=STATUS_OPTIONS.keys(),
+        help="Source board column (default: Planning)",
+    )
+    parser.add_argument(
+        "--to",
+        dest="to_status",
+        default="Todo",
+        choices=STATUS_OPTIONS.keys(),
+        help="Target board column (default: Todo)",
+    )
+    parser.add_argument(
+        "--issues", nargs="+", type=int, default=None, help="Only process these issue numbers (skip board query)"
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Print plan to stdout without posting or moving")
+    parser.add_argument(
+        "--no-plan", action="store_true", help="Move tickets without posting an implementation plan comment"
+    )
     args = parser.parse_args()
 
     target_id = STATUS_OPTIONS[args.to_status]

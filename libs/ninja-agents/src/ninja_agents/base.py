@@ -49,16 +49,12 @@ def sanitize_agent_name(name: str) -> str:
         raise ValueError(f"Name is empty after sanitization: {name!r}")
     # Reject any control characters (prevents prompt injection via newlines etc.)
     if re.search(r"[\x00-\x1f\x7f-\x9f]", name):
-        raise ValueError(
-            f"Name contains disallowed characters (control characters): {name!r}"
-        )
+        raise ValueError(f"Name contains disallowed characters (control characters): {name!r}")
     cleaned = name.strip()
     if not _SAFE_NAME_RE.match(cleaned):
-        raise ValueError(
-            f"Name contains disallowed characters: {cleaned!r}. "
-            f"Must match {_SAFE_NAME_RE.pattern}"
-        )
+        raise ValueError(f"Name contains disallowed characters: {cleaned!r}. Must match {_SAFE_NAME_RE.pattern}")
     return cleaned
+
 
 # Default model for LLM-powered agents (Gemini via ADK).
 _DEFAULT_MODEL = "gemini-2.5-pro"
@@ -134,9 +130,7 @@ class DataAgent(BaseAgent):
         """
         validate_tool_name(tool_name)
         if self.config.tool_permissions and tool_name not in self.config.tool_permissions:
-            raise InvalidToolAccess(
-                f"Tool '{tool_name}' is not permitted for agent '{self.name}'."
-            )
+            raise InvalidToolAccess(f"Tool '{tool_name}' is not permitted for agent '{self.name}'.")
         validate_tool_kwargs_size(kwargs)
         tool = self._tool_map.get(tool_name)
         if tool is None:
@@ -230,8 +224,7 @@ class DomainAgent:
             model=model,
             description=f"Domain agent for {safe_domain}",
             instruction=(
-                f"You are the {safe_domain} domain agent. "
-                "Delegate CRUD operations to your DataAgent sub-agents."
+                f"You are the {safe_domain} domain agent. Delegate CRUD operations to your DataAgent sub-agents."
             ),
             tools=[],
             sub_agents=list(data_agents),
@@ -379,10 +372,7 @@ def create_domain_agent(
         name=f"domain_agent_{safe_domain.lower()}",
         model=model,
         description=f"Domain agent for {safe_domain} — cross-entity reasoning",
-        instruction=(
-            f"You are the {safe_domain} domain agent. "
-            "Delegate CRUD operations to your DataAgent sub-agents."
-        ),
+        instruction=(f"You are the {safe_domain} domain agent. Delegate CRUD operations to your DataAgent sub-agents."),
         tools=[],
         sub_agents=list(data_agents),
     )

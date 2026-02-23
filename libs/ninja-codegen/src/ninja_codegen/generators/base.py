@@ -80,17 +80,11 @@ def sanitize_name(name: str, label: str = "name") -> str:
 
     # Reject if stripping changed the value (means path separators were present)
     if basename != name:
-        raise ValueError(
-            f"Path traversal detected in {label}: {name!r} "
-            f"contains path separator characters"
-        )
+        raise ValueError(f"Path traversal detected in {label}: {name!r} contains path separator characters")
 
     # Reject path traversal sequences that survive Path.name (e.g. bare "..")
     if ".." in basename:
-        raise ValueError(
-            f"Path traversal detected in {label}: {name!r} "
-            f"contains '..' sequence"
-        )
+        raise ValueError(f"Path traversal detected in {label}: {name!r} contains '..' sequence")
 
     # Validate against the safe identifier pattern
     if not _IDENTIFIER_RE.match(basename):
@@ -103,9 +97,7 @@ def sanitize_name(name: str, label: str = "name") -> str:
     # Reject Python keywords (e.g. "class", "import", "return") which would
     # produce syntactically invalid generated code.
     if keyword.iskeyword(basename):
-        raise ValueError(
-            f"Unsafe {label}: {name!r} is a Python reserved keyword."
-        )
+        raise ValueError(f"Unsafe {label}: {name!r} is a Python reserved keyword.")
 
     return basename
 
@@ -129,9 +121,7 @@ def validate_output_path(output_dir: Path, file_path: Path) -> Path:
     resolved_output = output_dir.resolve()
     resolved_file = file_path.resolve()
     if not resolved_file.is_relative_to(resolved_output):
-        raise ValueError(
-            f"Path traversal detected: {file_path} escapes output directory {output_dir}"
-        )
+        raise ValueError(f"Path traversal detected: {file_path} escapes output directory {output_dir}")
     return resolved_file
 
 

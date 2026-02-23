@@ -105,6 +105,8 @@ def sanitize_for_prompt(value: str) -> str:
 
 # Keep backward-compatible aliases
 sanitize_identifier = sanitize_for_prompt
+
+
 def sanitize_identifiers(values):
     return [sanitize_for_prompt(v) for v in values]
 

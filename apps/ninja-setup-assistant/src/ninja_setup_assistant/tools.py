@@ -307,8 +307,7 @@ def _validate_connection_string(
             return f"Invalid SQLite URL '{safe_url}': missing database path."
         if db_path.startswith("//") and not db_path.startswith("///:memory:"):
             return (
-                f"Rejected SQLite URL '{safe_url}': "
-                "absolute paths via sqlite:////... are not allowed in this context."
+                f"Rejected SQLite URL '{safe_url}': absolute paths via sqlite:////... are not allowed in this context."
             )
     # SSRF protection — block private/reserved IP ranges
     ssrf_error = check_ssrf(connection_string, allow_private_hosts=allow_private_hosts)
@@ -489,8 +488,5 @@ def _to_bool(value: object) -> bool:
             return True
         if normalized in ("false", "0", "no"):
             return False
-        raise ValueError(
-            f"Cannot convert {value!r} to bool. Expected one of: "
-            "true/false, yes/no, 1/0."
-        )
+        raise ValueError(f"Cannot convert {value!r} to bool. Expected one of: true/false, yes/no, 1/0.")
     return bool(value)

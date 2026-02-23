@@ -44,16 +44,19 @@ class AdapterRegistry:
         if engine == StorageEngine.MONGO:
             from ninja_persistence.adapters.mongo import MongoAdapter
 
-            return MongoAdapter(entity=entity)
+            database = self._connection_manager.get_mongo_database(profile_name)
+            return MongoAdapter(entity=entity, database=database)
 
         if engine == StorageEngine.GRAPH:
             from ninja_persistence.adapters.graph import GraphAdapter
 
-            return GraphAdapter(entity=entity)
+            driver = self._connection_manager.get_graph_driver(profile_name)
+            return GraphAdapter(entity=entity, driver=driver)
 
         if engine == StorageEngine.VECTOR:
             from ninja_persistence.adapters.chroma import ChromaVectorAdapter
 
-            return ChromaVectorAdapter(entity=entity)
+            client = self._connection_manager.get_chroma_client(profile_name)
+            return ChromaVectorAdapter(entity=entity, client=client)
 
         raise ValueError(f"Unsupported storage engine: {engine}")

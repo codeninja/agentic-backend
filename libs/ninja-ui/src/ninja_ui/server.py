@@ -77,9 +77,7 @@ class _SecureHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
-        self.send_header(
-            "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
-        )
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header("Cache-Control", "no-store, max-age=0")
         super().end_headers()
 
@@ -148,9 +146,7 @@ class UIServer:
         server or ASGI framework.
     """
 
-    def __init__(
-        self, root_dir: Path, host: str = "127.0.0.1", port: int = 8080
-    ) -> None:
+    def __init__(self, root_dir: Path, host: str = "127.0.0.1", port: int = 8080) -> None:
         self.root_dir = root_dir
         self.host = host
         self.port = port
@@ -177,9 +173,7 @@ class UIServer:
         self._server = http.server.HTTPServer((self.host, self.port), handler)
 
         if background:
-            self._thread = threading.Thread(
-                target=self._server.serve_forever, daemon=True
-            )
+            self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
             self._thread.start()
         else:
             self._server.serve_forever()

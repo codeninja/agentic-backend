@@ -163,9 +163,7 @@ class TestLoginRateLimit:
             with pytest.raises(AuthenticationError):
                 strategy.login("user@example.com", VALID_PASSWORD)
 
-        rate_limited_records = [
-            r for r in caplog.records if "rate-limited" in r.message.lower()
-        ]
+        rate_limited_records = [r for r in caplog.records if "rate-limited" in r.message.lower()]
         assert len(rate_limited_records) >= 1
         assert "user@example.com" in rate_limited_records[0].message
 

@@ -35,9 +35,7 @@ class IdentityStrategy:
     ) -> None:
         self.config = config
         self._store: UserStore = user_store or InMemoryUserStore()
-        self._login_limiter: RateLimiterProtocol = (
-            login_rate_limiter or InMemoryRateLimiter(config.login_rate_limit)
-        )
+        self._login_limiter: RateLimiterProtocol = login_rate_limiter or InMemoryRateLimiter(config.login_rate_limit)
 
     def hash_password(self, password: str) -> str:
         """Hash a plaintext password using bcrypt."""
@@ -122,9 +120,7 @@ class IdentityStrategy:
                 email,
                 extra={"event": "login_rate_limited", "email": email},
             )
-            raise AuthenticationError(
-                "Too many login attempts. Please try again later."
-            )
+            raise AuthenticationError("Too many login attempts. Please try again later.")
 
         user = self._store.get(email)
         # Always perform a hash comparison to prevent timing side-channel

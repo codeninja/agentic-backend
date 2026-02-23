@@ -14,6 +14,7 @@ from ninja_gql.schema import build_schema
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_user(**kwargs: Any) -> UserContext:
     defaults: dict[str, Any] = {"user_id": "u1", "provider": "test"}
     defaults.update(kwargs)
@@ -54,6 +55,7 @@ def _build(asd: AgenticSchema):
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def _reset_user_context():
     """Ensure each test starts with anonymous context."""
@@ -66,24 +68,21 @@ def _reset_user_context():
 # Tests — unauthenticated callers are rejected
 # ---------------------------------------------------------------------------
 
+
 class TestMutationAuthRejectsAnonymous:
     """Mutations must fail when no authenticated user context is set."""
 
     async def test_create_rejects_anonymous(self, sample_asd: AgenticSchema):
         schema = _build(sample_asd)
 
-        result = await schema.execute(
-            'mutation { createCustomer(input: {name: "X", email: "x@t.com"}) { id } }'
-        )
+        result = await schema.execute('mutation { createCustomer(input: {name: "X", email: "x@t.com"}) { id } }')
         assert result.errors is not None
         assert any("permission" in str(e).lower() or "authenticated" in str(e).lower() for e in result.errors)
 
     async def test_update_rejects_anonymous(self, sample_asd: AgenticSchema):
         schema = _build(sample_asd)
 
-        result = await schema.execute(
-            'mutation { updateCustomer(id: "abc", patch: {name: "Y"}) { id } }'
-        )
+        result = await schema.execute('mutation { updateCustomer(id: "abc", patch: {name: "Y"}) { id } }')
         assert result.errors is not None
         assert any("permission" in str(e).lower() or "authenticated" in str(e).lower() for e in result.errors)
 
@@ -99,6 +98,7 @@ class TestMutationAuthRejectsAnonymous:
 # Tests — authenticated callers with correct permissions succeed
 # ---------------------------------------------------------------------------
 
+
 class TestMutationAuthAllowsAuthorized:
     """Mutations succeed when the user has the required write/delete permission."""
 
@@ -107,9 +107,7 @@ class TestMutationAuthAllowsAuthorized:
         set_user_context(user)
         schema = _build(sample_asd)
 
-        result = await schema.execute(
-            'mutation { createCustomer(input: {name: "Z", email: "z@t.com"}) { id name } }'
-        )
+        result = await schema.execute('mutation { createCustomer(input: {name: "Z", email: "z@t.com"}) { id name } }')
         assert result.errors is None
         assert result.data["createCustomer"]["name"] == "Z"
 
@@ -118,9 +116,7 @@ class TestMutationAuthAllowsAuthorized:
         set_user_context(user)
         schema = _build(sample_asd)
 
-        result = await schema.execute(
-            'mutation { updateCustomer(id: "abc", patch: {name: "Updated"}) { id name } }'
-        )
+        result = await schema.execute('mutation { updateCustomer(id: "abc", patch: {name: "Updated"}) { id name } }')
         assert result.errors is None
         assert result.data["updateCustomer"]["name"] == "Updated"
 
@@ -148,6 +144,7 @@ class TestMutationAuthAllowsAuthorized:
 # Tests — authenticated but wrong permissions are rejected
 # ---------------------------------------------------------------------------
 
+
 class TestMutationAuthRejectsInsufficient:
     """Mutations fail when the user is authenticated but lacks the needed permission."""
 
@@ -156,9 +153,7 @@ class TestMutationAuthRejectsInsufficient:
         set_user_context(user)
         schema = _build(sample_asd)
 
-        result = await schema.execute(
-            'mutation { createCustomer(input: {name: "X", email: "x@t.com"}) { id } }'
-        )
+        result = await schema.execute('mutation { createCustomer(input: {name: "X", email: "x@t.com"}) { id } }')
         assert result.errors is not None
 
     async def test_write_on_wrong_entity_rejected(self, sample_asd: AgenticSchema):
@@ -166,9 +161,7 @@ class TestMutationAuthRejectsInsufficient:
         set_user_context(user)
         schema = _build(sample_asd)
 
-        result = await schema.execute(
-            'mutation { createCustomer(input: {name: "X", email: "x@t.com"}) { id } }'
-        )
+        result = await schema.execute('mutation { createCustomer(input: {name: "X", email: "x@t.com"}) { id } }')
         assert result.errors is not None
 
     async def test_delete_needs_delete_not_write(self, sample_asd: AgenticSchema):
@@ -183,6 +176,7 @@ class TestMutationAuthRejectsInsufficient:
 # ---------------------------------------------------------------------------
 # Tests — queries remain unaffected (no auth required)
 # ---------------------------------------------------------------------------
+
 
 class TestQueriesUnaffected:
     """Read queries should still work without authentication."""

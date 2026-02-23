@@ -72,41 +72,25 @@ def _check_constraints(field_name: str, value: Any, entity_field: Any) -> list[s
     # String length constraints
     if isinstance(value, str):
         if constraints.min_length is not None and len(value) < constraints.min_length:
-            errors.append(
-                f"Field '{field_name}': length {len(value)} is below "
-                f"minimum {constraints.min_length}"
-            )
+            errors.append(f"Field '{field_name}': length {len(value)} is below minimum {constraints.min_length}")
         if constraints.max_length is not None and len(value) > constraints.max_length:
-            errors.append(
-                f"Field '{field_name}': length {len(value)} exceeds "
-                f"maximum {constraints.max_length}"
-            )
+            errors.append(f"Field '{field_name}': length {len(value)} exceeds maximum {constraints.max_length}")
         if constraints.pattern is not None:
             if not re.fullmatch(constraints.pattern, value):
-                errors.append(
-                    f"Field '{field_name}': value does not match "
-                    f"pattern '{constraints.pattern}'"
-                )
+                errors.append(f"Field '{field_name}': value does not match pattern '{constraints.pattern}'")
 
     # Numeric range constraints
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         if constraints.ge is not None and value < constraints.ge:
-            errors.append(
-                f"Field '{field_name}': value {value} is below "
-                f"minimum {constraints.ge}"
-            )
+            errors.append(f"Field '{field_name}': value {value} is below minimum {constraints.ge}")
         if constraints.le is not None and value > constraints.le:
-            errors.append(
-                f"Field '{field_name}': value {value} exceeds "
-                f"maximum {constraints.le}"
-            )
+            errors.append(f"Field '{field_name}': value {value} exceeds maximum {constraints.le}")
 
     # Enum validation
     if constraints.enum_values is not None and isinstance(value, str):
         if value not in constraints.enum_values:
             errors.append(
-                f"Field '{field_name}': value '{value}' is not one of "
-                f"the allowed values: {constraints.enum_values}"
+                f"Field '{field_name}': value '{value}' is not one of the allowed values: {constraints.enum_values}"
             )
 
     return errors

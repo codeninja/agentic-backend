@@ -267,15 +267,18 @@ class TestEmailValidation:
         assert ctx is not None
         assert ctx.email is None
 
-    @pytest.mark.parametrize("bad_email", [
-        "not-an-email",
-        "missing@tld",
-        "@no-local.com",
-        "spaces in@email.com",
-        "",
-        123,
-        True,
-    ])
+    @pytest.mark.parametrize(
+        "bad_email",
+        [
+            "not-an-email",
+            "missing@tld",
+            "@no-local.com",
+            "spaces in@email.com",
+            "",
+            123,
+            True,
+        ],
+    )
     def test_invalid_email_becomes_none(self, bad_email):
         token = _make_token({"sub": "u1", "email": bad_email})
         ctx = self._strategy().validate_token(token)
@@ -350,15 +353,18 @@ class TestPermissionsValidation:
         assert ctx is not None
         assert ctx.permissions == []
 
-    @pytest.mark.parametrize("bad_perm", [
-        "no-colon",
-        "read:",
-        ":scope",
-        "",
-        "read:scope with spaces",
-        123,
-        None,
-    ])
+    @pytest.mark.parametrize(
+        "bad_perm",
+        [
+            "no-colon",
+            "read:",
+            ":scope",
+            "",
+            "read:scope with spaces",
+            123,
+            None,
+        ],
+    )
     def test_invalid_permission_entries_dropped(self, bad_perm):
         token = _make_token({"sub": "u1", "permissions": ["read:Orders", bad_perm]})
         ctx = self._strategy().validate_token(token)
@@ -387,13 +393,15 @@ class TestMetadataSafety:
         return BearerStrategy(BearerConfig(secret_key=SECRET, algorithm="HS256"))
 
     def test_sensitive_claims_excluded(self):
-        token = _make_token({
-            "sub": "u1",
-            "email": "a@b.com",
-            "roles": ["admin"],
-            "permissions": ["read:*"],
-            "secret_data": "s3cret",
-        })
+        token = _make_token(
+            {
+                "sub": "u1",
+                "email": "a@b.com",
+                "roles": ["admin"],
+                "permissions": ["read:*"],
+                "secret_data": "s3cret",
+            }
+        )
         ctx = self._strategy().validate_token(token)
         assert ctx is not None
         assert "secret_data" not in ctx.metadata

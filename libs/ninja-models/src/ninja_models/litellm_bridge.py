@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 _PROVIDER_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
-def _resolve_provider_credentials(
-    name: str, provider: ProviderConfig
-) -> dict[str, str]:
+def _resolve_provider_credentials(name: str, provider: ProviderConfig) -> dict[str, str]:
     """Resolve provider credentials from environment without writing them back.
 
     Args:
@@ -36,9 +34,7 @@ def _resolve_provider_credentials(
         ValueError: If *name* contains characters outside ``[a-zA-Z0-9_-]``.
     """
     if not _PROVIDER_NAME_RE.match(name):
-        raise ValueError(
-            f"Invalid provider name {name!r}: must match [a-zA-Z0-9_-]+"
-        )
+        raise ValueError(f"Invalid provider name {name!r}: must match [a-zA-Z0-9_-]+")
 
     creds: dict[str, str] = {}
 

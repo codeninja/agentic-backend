@@ -21,14 +21,17 @@ def main():
     is_bug = "bug" in labels.lower()
 
     task = (
-        "This is a BUG report. Identify the likely root cause, affected files, and whether existing tests cover this area."
+        "This is a BUG report. Identify the likely root cause, "
+        "affected files, and whether existing tests cover this area."
         if is_bug
-        else "This is a FEATURE/ENHANCEMENT request. Assess feasibility, identify affected components, and flag any architectural conflicts."
+        else "This is a FEATURE/ENHANCEMENT request. Assess feasibility, "
+        "identify affected components, and flag any architectural conflicts."
     )
 
     rc_or_feasibility = "Root Cause" if is_bug else "Feasibility Assessment"
 
-    prompt = f"""You are a senior software engineer triaging a GitHub issue for the NinjaStack monorepo — a schema-first agentic backend framework.
+    prompt = f"""You are a senior software engineer triaging a GitHub issue f
+    or the NinjaStack monorepo — a schema-first agentic backend framework.
 
 ## Issue
 **Title:** {issue_title}

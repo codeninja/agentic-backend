@@ -10,6 +10,7 @@ from ninja_core.schema.entity import (
     FieldType,
     StorageEngine,
 )
+from ninja_core.schema.project import AgenticSchema
 from ninja_gql.validation import (
     InputValidationError,
     validate_create_input,
@@ -307,9 +308,7 @@ class TestResolverValidationIntegration:
         yield
         clear_user_context(token)
 
-    async def test_create_unknown_field_returns_graphql_error(
-        self, sample_asd: AgenticSchema
-    ):
+    async def test_create_unknown_field_returns_graphql_error(self, sample_asd: AgenticSchema):
         """Unknown fields in create mutation produce a GraphQL error."""
         from ninja_gql.schema import build_schema
 
@@ -373,8 +372,6 @@ class TestResolverValidationIntegration:
         repos = {"Customer": MockRepo(), "Order": MockRepo(), "Product": MockRepo()}
         schema = build_schema(sample_asd, repo_getter=lambda name: repos[name])
 
-        result = await schema.execute(
-            'mutation { createCustomer(input: {name: "Alice", email: "a@b.c"}) { id name } }'
-        )
+        result = await schema.execute('mutation { createCustomer(input: {name: "Alice", email: "a@b.c"}) { id name } }')
         assert result.errors is None
         assert result.data["createCustomer"]["name"] == "Alice"

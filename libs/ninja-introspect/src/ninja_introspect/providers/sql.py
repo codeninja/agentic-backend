@@ -88,8 +88,7 @@ class SQLProvider(IntrospectionProvider):
         except asyncio.TimeoutError:
             safe_url = redact_url(connection_string)
             raise TimeoutError(
-                f"Introspection of {safe_url} timed out after {timeout}s. "
-                "The host may be unreachable."
+                f"Introspection of {safe_url} timed out after {timeout}s. The host may be unreachable."
             ) from None
         except Exception as exc:
             # Re-raise with credentials redacted from the message.

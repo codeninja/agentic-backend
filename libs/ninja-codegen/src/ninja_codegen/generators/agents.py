@@ -113,9 +113,7 @@ def generate_agents(
         path = generate_data_agent(entity, agents_dir)
         paths.append(path)
         safe = sanitize_name(entity.name, "entity name")
-        init_lines.append(
-            f"from .{safe.lower()}_agent import {safe.upper()}_ENTITY, {safe.lower()}_data_agent"
-        )
+        init_lines.append(f"from .{safe.lower()}_agent import {safe.upper()}_ENTITY, {safe.lower()}_data_agent")
 
     # Generate domain agents
     for domain in domains:
@@ -123,8 +121,7 @@ def generate_agents(
         paths.append(path)
         safe = sanitize_name(domain.name, "domain name")
         init_lines.append(
-            f"from .{safe.lower()}_agent import {safe.upper()}_DOMAIN"
-            f", create_{safe.lower()}_domain_agent"
+            f"from .{safe.lower()}_agent import {safe.upper()}_DOMAIN, create_{safe.lower()}_domain_agent"
         )
 
     # Generate coordinator agent

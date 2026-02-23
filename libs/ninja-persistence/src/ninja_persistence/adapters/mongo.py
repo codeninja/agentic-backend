@@ -106,7 +106,9 @@ class MongoAdapter:
                 cause=exc,
             ) from exc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def find_many(
+        self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """Retrieve multiple documents matching the given filters.
 
         Args:
@@ -463,6 +465,7 @@ def _reject_mongo_operators(filters: dict[str, Any], entity_name: str) -> None:
     ``$gt``, ``$ne``, ``$regex``, etc. that could be smuggled in through
     user-supplied filter dictionaries.
     """
+
     def _check(obj: Any) -> None:
         if isinstance(obj, dict):
             for key in obj:

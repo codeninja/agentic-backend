@@ -174,7 +174,9 @@ class MilvusVectorAdapter:
             return None
         return self._row_to_dict(results[0])
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def find_many(
+        self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters.
 
         Args:

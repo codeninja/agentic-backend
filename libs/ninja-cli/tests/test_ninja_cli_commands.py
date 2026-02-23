@@ -239,12 +239,13 @@ def _make_entity(name, fields_spec):
 
 class TestIntrospectCommand:
     def test_introspect_json_output(self):
-        schema = _make_schema(
-            entities=[_make_entity("Users", [("id", "INTEGER", True), ("name", "STRING", False)])]
-        )
+        schema = _make_schema(entities=[_make_entity("Users", [("id", "INTEGER", True), ("name", "STRING", False)])])
         mock_cls = _mock_introspect_engine(schema)
 
-        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+        with patch.dict(
+            "sys.modules",
+            {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)},
+        ):
             result = runner.invoke(app, ["introspect", "sqlite:///test.db"])
 
         assert result.exit_code == 0, result.output
@@ -254,12 +255,13 @@ class TestIntrospectCommand:
         assert data["entities"][0]["name"] == "Users"
 
     def test_introspect_table_output(self):
-        schema = _make_schema(
-            entities=[_make_entity("Orders", [("id", "INTEGER", True), ("total", "FLOAT", False)])]
-        )
+        schema = _make_schema(entities=[_make_entity("Orders", [("id", "INTEGER", True), ("total", "FLOAT", False)])])
         mock_cls = _mock_introspect_engine(schema)
 
-        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+        with patch.dict(
+            "sys.modules",
+            {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)},
+        ):
             result = runner.invoke(app, ["introspect", "sqlite:///test.db", "--format", "table"])
 
         assert result.exit_code == 0, result.output
@@ -282,7 +284,10 @@ class TestIntrospectCommand:
         mock_engine.run = fake_run
         mock_cls.return_value = mock_engine
 
-        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+        with patch.dict(
+            "sys.modules",
+            {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)},
+        ):
             result = runner.invoke(app, ["introspect", "postgresql://bad/db"])
 
         assert result.exit_code == 1
@@ -310,7 +315,10 @@ class TestIntrospectCommand:
         )
         mock_cls = _mock_introspect_engine(schema)
 
-        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+        with patch.dict(
+            "sys.modules",
+            {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)},
+        ):
             result = runner.invoke(app, ["introspect", "sqlite:///test.db", "--format", "table"])
 
         assert result.exit_code == 0, result.output

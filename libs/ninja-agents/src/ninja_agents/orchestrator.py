@@ -13,7 +13,7 @@ from typing import Any
 from google.adk.agents import LlmAgent, ParallelAgent
 
 from ninja_agents.base import CoordinatorAgent
-from ninja_agents.safety import sanitize_error, validate_request_size
+from ninja_agents.safety import validate_request_size
 from ninja_agents.tracing import DomainTraceView, TraceContext
 
 logger = logging.getLogger(__name__)
@@ -106,10 +106,7 @@ class Orchestrator:
             domain_views: dict[str, DomainTraceView | None] = {
                 d: trace.domain_view(d) if trace else None for d in domains
             }
-            tasks = [
-                _execute_domain(self.coordinator, d, request, domain_views[d])
-                for d in domains
-            ]
+            tasks = [_execute_domain(self.coordinator, d, request, domain_views[d]) for d in domains]
             results_list = await asyncio.gather(*tasks, return_exceptions=True)
             results: dict[str, Any] = {}
             errors: dict[str, dict[str, Any]] = {}

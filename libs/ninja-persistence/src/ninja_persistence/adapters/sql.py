@@ -188,7 +188,9 @@ class SQLAdapter:
                 cause=exc,
             ) from exc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
+    async def find_many(
+        self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0
+    ) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters.
 
         Args:

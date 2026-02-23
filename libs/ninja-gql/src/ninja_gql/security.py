@@ -85,9 +85,7 @@ class IntrospectionControlExtension(SchemaExtension):
             # Fast-path: check raw query string for introspection keywords
             if "__schema" in execution_context.query or "__type" in execution_context.query:
                 logger.warning("Introspection query blocked by security policy")
-                raise PermissionError(
-                    "Introspection is disabled. Set NINJASTACK_ENV=development to enable."
-                )
+                raise PermissionError("Introspection is disabled. Set NINJASTACK_ENV=development to enable.")
         yield
 
 
@@ -155,10 +153,7 @@ class QueryDepthExtension(SchemaExtension):
                         depth,
                         self._max_depth,
                     )
-                    raise PermissionError(
-                        f"Query depth {depth} exceeds maximum allowed depth "
-                        f"of {self._max_depth}."
-                    )
+                    raise PermissionError(f"Query depth {depth} exceeds maximum allowed depth of {self._max_depth}.")
         yield
 
 
@@ -262,8 +257,7 @@ class QueryComplexityExtension(SchemaExtension):
                         self._max_complexity,
                     )
                     raise PermissionError(
-                        f"Query complexity {cost} exceeds maximum allowed "
-                        f"complexity of {self._max_complexity}."
+                        f"Query complexity {cost} exceeds maximum allowed complexity of {self._max_complexity}."
                     )
         yield
 

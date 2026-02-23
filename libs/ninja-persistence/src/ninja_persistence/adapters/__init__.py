@@ -11,9 +11,7 @@ def _validate_limit(limit: int) -> int:
     ``MAX_QUERY_LIMIT`` (1000) are silently capped.
     """
     if limit < MIN_QUERY_LIMIT:
-        raise ValueError(
-            f"limit must be >= {MIN_QUERY_LIMIT}, got {limit}"
-        )
+        raise ValueError(f"limit must be >= {MIN_QUERY_LIMIT}, got {limit}")
     return min(limit, MAX_QUERY_LIMIT)
 
 

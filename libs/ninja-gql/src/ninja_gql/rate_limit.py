@@ -168,10 +168,7 @@ class GraphQLRateLimitMiddleware(BaseHTTPMiddleware):
                 content={
                     "errors": [
                         {
-                            "message": (
-                                f"Rate limit exceeded for {op_type} operations. "
-                                f"Please try again later."
-                            ),
+                            "message": (f"Rate limit exceeded for {op_type} operations. Please try again later."),
                         }
                     ]
                 },
