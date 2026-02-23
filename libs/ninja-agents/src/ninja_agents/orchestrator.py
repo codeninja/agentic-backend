@@ -7,6 +7,7 @@ synchronous convenience wrapper for non-async callers.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from google.adk.agents import LlmAgent, ParallelAgent
@@ -14,6 +15,8 @@ from google.adk.agents import LlmAgent, ParallelAgent
 from ninja_agents.base import CoordinatorAgent
 from ninja_agents.safety import sanitize_error, validate_request_size
 from ninja_agents.tracing import TraceContext
+
+logger = logging.getLogger(__name__)
 
 
 async def _execute_domain(
@@ -95,11 +98,19 @@ class Orchestrator:
             tasks = [_execute_domain(self.coordinator, d, request, trace) for d in domains]
             results_list = await asyncio.gather(*tasks, return_exceptions=True)
             results: dict[str, Any] = {}
-            for item in results_list:
+            for domain_name, item in zip(domains, results_list):
                 if isinstance(item, Exception):
-                    results["_error"] = sanitize_error(item)
+                    logger.error(
+                        "Domain agent '%s' failed during fan_out",
+                        domain_name,
+                        exc_info=item,
+                    )
+                    results[domain_name] = {
+                        "error": "Request failed",
+                        "error_code": "DOMAIN_ERROR",
+                    }
                 else:
-                    domain_name, result = item
+                    _, result = item
                     results[domain_name] = result
             return results
         finally:
