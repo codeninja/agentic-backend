@@ -250,12 +250,15 @@ class SQLAdapter:
     async def update(self, id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
         """Apply a partial update to an existing record."""
         pk = _get_pk_column(self._table)
-        stmt = self._table.update().where(pk == id).values(**patch)
+        update_stmt = self._table.update().where(pk == id).values(**patch)
+        select_stmt = self._table.select().where(pk == id)
         try:
             async with self._engine.begin() as conn:
-                result = await conn.execute(stmt)
+                result = await conn.execute(update_stmt)
                 if result.rowcount == 0:
                     return None
+                row = (await conn.execute(select_stmt)).mappings().first()
+                return dict(row) if row else None
         except IntegrityError as exc:
             logger.error("SQL update failed for %s (id=%s): constraint violation", self._entity.name, id)
             raise DuplicateEntityError(
@@ -280,7 +283,6 @@ class SQLAdapter:
                 detail="Update transaction failed.",
                 cause=exc,
             ) from exc
-        return await self.find_by_id(id)
 
     async def delete(self, id: str) -> bool:
         """Delete a record by primary key. Returns True if deleted."""
