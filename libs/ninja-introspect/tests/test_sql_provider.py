@@ -1,9 +1,12 @@
 """Tests for the SQL introspection provider using a real SQLite database."""
 
+import asyncio
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from ninja_core.schema.entity import FieldType, StorageEngine
 from ninja_core.schema.relationship import Cardinality, RelationshipType
-from ninja_introspect.providers.sql import SQLProvider, _table_to_pascal
+from ninja_introspect.providers.sql import SQLProvider, _CONNECT_TIMEOUT_SECONDS, _table_to_pascal
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -159,3 +162,72 @@ def test_table_to_pascal():
     assert _table_to_pascal("user_accounts") == "UserAccounts"
     assert _table_to_pascal("posts") == "Posts"
     assert _table_to_pascal("a_b_c") == "ABC"
+
+
+# ---------------------------------------------------------------------------
+# Timeout and credential redaction (issue #124)
+# ---------------------------------------------------------------------------
+
+
+def test_default_timeout_is_30_seconds():
+    """Verify the default timeout constant is 30 seconds."""
+    assert _CONNECT_TIMEOUT_SECONDS == 30
+
+
+async def test_timeout_raises_on_hang():
+    """Verify that introspection raises TimeoutError when it exceeds the timeout."""
+    provider = SQLProvider()
+
+    async def _hang(*_args, **_kwargs):
+        await asyncio.sleep(60)  # Simulate indefinite hang
+
+    with patch.object(provider, "_run_introspection", side_effect=_hang):
+        with pytest.raises(TimeoutError, match="timed out after"):
+            await provider.introspect(
+                "sqlite+aiosqlite:///:memory:",
+                timeout=0.1,
+            )
+
+
+async def test_timeout_error_redacts_credentials():
+    """Timeout error messages must not contain raw credentials."""
+    provider = SQLProvider()
+
+    async def _hang(*_args, **_kwargs):
+        await asyncio.sleep(60)
+
+    with (
+        patch("ninja_introspect.providers.sql.create_async_engine") as mock_engine,
+        patch.object(provider, "_run_introspection", side_effect=_hang),
+    ):
+        mock_engine.return_value = AsyncMock()
+        mock_engine.return_value.dispose = AsyncMock()
+        with pytest.raises(TimeoutError, match=r"\*\*\*:\*\*\*") as exc_info:
+            await provider.introspect(
+                "postgresql+asyncpg://admin:s3cret@db.host:5432/mydb",
+                timeout=0.1,
+            )
+        assert "s3cret" not in str(exc_info.value)
+        assert "admin" not in str(exc_info.value)
+
+
+async def test_exception_credentials_redacted():
+    """Non-timeout exceptions must also have credentials redacted from messages."""
+    provider = SQLProvider()
+
+    conn = "postgresql+asyncpg://admin:s3cret@db.host:5432/mydb"
+
+    with (
+        patch("ninja_introspect.providers.sql.create_async_engine") as mock_engine,
+        patch.object(
+            provider,
+            "_run_introspection",
+            side_effect=RuntimeError(f"could not connect to {conn}"),
+        ),
+    ):
+        mock_engine.return_value = AsyncMock()
+        mock_engine.return_value.dispose = AsyncMock()
+        with pytest.raises(RuntimeError) as exc_info:
+            await provider.introspect(conn, timeout=5)
+        assert "s3cret" not in str(exc_info.value)
+        assert "***:***" in str(exc_info.value)

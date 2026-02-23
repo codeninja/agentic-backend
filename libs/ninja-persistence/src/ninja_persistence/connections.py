@@ -9,23 +9,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from ninja_core.security import check_ssrf
+from ninja_core.security import check_ssrf, redact_url
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-# Pattern matches user:password@ in connection URLs.
-_CREDENTIAL_RE = re.compile(r"://([^@/]+)@")
-
-
-def redact_url(url: str) -> str:
-    """Replace credentials in a connection URL with ``***:***``.
-
-    >>> redact_url("postgresql+asyncpg://admin:s3cret@db.host:5432/mydb")
-    'postgresql+asyncpg://***:***@db.host:5432/mydb'
-    >>> redact_url("sqlite+aiosqlite:///:memory:")
-    'sqlite+aiosqlite:///:memory:'
-    """
-    return _CREDENTIAL_RE.sub("://***:***@", url)
 
 
 class _CredentialRedactFilter(logging.Filter):

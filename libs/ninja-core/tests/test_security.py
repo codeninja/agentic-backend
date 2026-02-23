@@ -1,11 +1,11 @@
-"""Tests for the shared SSRF protection utility."""
+"""Tests for the shared SSRF protection and credential redaction utilities."""
 
 from __future__ import annotations
 
 from unittest.mock import patch
 
 import pytest
-from ninja_core.security import SSRFError, check_ssrf
+from ninja_core.security import SSRFError, check_ssrf, redact_url
 
 
 class TestCheckSSRFDirectIPs:
@@ -133,3 +133,38 @@ class TestSSRFError:
     def test_can_be_raised_and_caught(self) -> None:
         with pytest.raises(SSRFError, match="blocked"):
             raise SSRFError("Connection blocked")
+
+
+class TestRedactUrl:
+    """Test credential redaction in connection URLs."""
+
+    def test_redacts_postgres_credentials(self) -> None:
+        url = "postgresql+asyncpg://admin:s3cret@db.host:5432/mydb"
+        assert redact_url(url) == "postgresql+asyncpg://***:***@db.host:5432/mydb"
+
+    def test_redacts_mongodb_credentials(self) -> None:
+        url = "mongodb://root:hunter2@mongo.internal:27017/app"
+        assert redact_url(url) == "mongodb://***:***@mongo.internal:27017/app"
+
+    def test_redacts_mysql_credentials(self) -> None:
+        url = "mysql+aiomysql://dbuser:p%40ssw0rd@mysql.host:3306/db"
+        assert redact_url(url) == "mysql+aiomysql://***:***@mysql.host:3306/db"
+
+    def test_no_credentials_unchanged(self) -> None:
+        url = "sqlite+aiosqlite:///:memory:"
+        assert redact_url(url) == url
+
+    def test_no_at_sign_unchanged(self) -> None:
+        url = "sqlite:///path/to/db.sqlite"
+        assert redact_url(url) == url
+
+    def test_empty_string(self) -> None:
+        assert redact_url("") == ""
+
+    def test_user_only_no_password(self) -> None:
+        url = "postgresql://admin@db.host:5432/mydb"
+        assert redact_url(url) == "postgresql://***:***@db.host:5432/mydb"
+
+    def test_neo4j_credentials(self) -> None:
+        url = "neo4j+s://neo4j:secret@graph.host:7687"
+        assert redact_url(url) == "neo4j+s://***:***@graph.host:7687"
