@@ -88,7 +88,8 @@ class TestDetectProviderSSRF:
 
     def test_allows_private_with_flag(self):
         provider = _detect_provider(
-            "postgresql://10.0.0.1:5432/db", allow_private_hosts=True,
+            "postgresql://10.0.0.1:5432/db",
+            allow_private_hosts=True,
         )
         assert isinstance(provider, SQLProvider)
 

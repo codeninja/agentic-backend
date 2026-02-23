@@ -247,8 +247,9 @@ async def test_reindex_raises_without_vector_support(sql_adapter: SQLAdapter):
 
 
 def test_is_postgres_detection():
-    from ninja_persistence.adapters.sql import _is_postgres
     from unittest.mock import MagicMock
+
+    from ninja_persistence.adapters.sql import _is_postgres
 
     pg_engine = MagicMock()
     pg_engine.url = "postgresql+asyncpg://localhost/testdb"

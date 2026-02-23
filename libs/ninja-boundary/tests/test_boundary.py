@@ -169,6 +169,7 @@ class TestBoundaryProcessor:
 # Constraint validation at runtime
 # ===========================================================================
 
+
 def _constrained_schema() -> EntitySchema:
     """Entity with various field constraints for testing runtime validation."""
     return EntitySchema(

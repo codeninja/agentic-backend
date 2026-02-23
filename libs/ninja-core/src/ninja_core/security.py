@@ -25,10 +25,12 @@ _BLOCKED_NETWORKS = [
 ]
 
 # Hostnames that must always be blocked regardless of DNS resolution.
-_BLOCKED_HOSTNAMES = frozenset({
-    "metadata.google.internal",
-    "metadata.internal",
-})
+_BLOCKED_HOSTNAMES = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata.internal",
+    }
+)
 
 
 def check_ssrf(url: str, *, allow_private_hosts: bool = False) -> str | None:

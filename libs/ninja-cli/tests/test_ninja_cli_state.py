@@ -127,9 +127,7 @@ class TestFilePermissions:
             filepath = state / filename
             if filepath.exists():
                 mode = stat.S_IMODE(os.stat(filepath).st_mode)
-                assert mode == _SENSITIVE_FILE_MODE, (
-                    f"{filename}: expected 0o{_SENSITIVE_FILE_MODE:o}, got 0o{mode:o}"
-                )
+                assert mode == _SENSITIVE_FILE_MODE, f"{filename}: expected 0o{_SENSITIVE_FILE_MODE:o}, got 0o{mode:o}"
 
     def test_schema_json_not_restricted(self, tmp_path):
         """schema.json is not sensitive — it should NOT have 0o600."""

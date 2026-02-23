@@ -15,7 +15,6 @@ Permission format: "action:scope"
 """
 
 from ninja_auth.config import IdentityConfig
-from ninja_auth.context import UserContext
 from ninja_auth.rbac import RBACConfig, RBACPolicy, RoleDefinition
 from ninja_auth.strategies.identity import IdentityStrategy
 
@@ -72,10 +71,10 @@ rbac_config = RBACConfig(
     roles={
         "customer": RoleDefinition(
             permissions=[
-                "read:Catalog",             # Read all Catalog entities (Book, Review)
-                "write:Catalog.Review",     # Write reviews only
-                "read:Commerce.Order",      # Read own orders
-                "read:Commerce.Customer",   # Read own profile
+                "read:Catalog",  # Read all Catalog entities (Book, Review)
+                "write:Catalog.Review",  # Write reviews only
+                "read:Commerce.Order",  # Read own orders
+                "read:Commerce.Customer",  # Read own profile
             ],
             description="Registered bookstore customer",
         ),
@@ -102,19 +101,19 @@ def can(roles: list[str], action: str, domain: str, entity: str | None = None) -
 
 
 # Admin — full access via *:*
-print(f"  Admin delete Book?       {can(['admin'], 'delete', 'Catalog', 'Book')}")      # True
-print(f"  Admin write Order?       {can(['admin'], 'write', 'Commerce', 'Order')}")      # True
+print(f"  Admin delete Book?       {can(['admin'], 'delete', 'Catalog', 'Book')}")  # True
+print(f"  Admin write Order?       {can(['admin'], 'write', 'Commerce', 'Order')}")  # True
 
 # Editor — built-in read:* + write:*, but no delete
-print(f"  Editor write Book?       {can(['editor'], 'write', 'Catalog', 'Book')}")       # True
-print(f"  Editor delete Book?      {can(['editor'], 'delete', 'Catalog', 'Book')}")      # False
+print(f"  Editor write Book?       {can(['editor'], 'write', 'Catalog', 'Book')}")  # True
+print(f"  Editor delete Book?      {can(['editor'], 'delete', 'Catalog', 'Book')}")  # False
 
 # Customer — custom scoped permissions
-print(f"  Customer read Book?      {can(['customer'], 'read', 'Catalog', 'Book')}")      # True
-print(f"  Customer write Review?   {can(['customer'], 'write', 'Catalog', 'Review')}")   # True
-print(f"  Customer write Book?     {can(['customer'], 'write', 'Catalog', 'Book')}")     # False
-print(f"  Customer read Order?     {can(['customer'], 'read', 'Commerce', 'Order')}")    # True
-print(f"  Customer write Order?    {can(['customer'], 'write', 'Commerce', 'Order')}")   # False
+print(f"  Customer read Book?      {can(['customer'], 'read', 'Catalog', 'Book')}")  # True
+print(f"  Customer write Review?   {can(['customer'], 'write', 'Catalog', 'Review')}")  # True
+print(f"  Customer write Book?     {can(['customer'], 'write', 'Catalog', 'Book')}")  # False
+print(f"  Customer read Order?     {can(['customer'], 'read', 'Commerce', 'Order')}")  # True
+print(f"  Customer write Order?    {can(['customer'], 'write', 'Commerce', 'Order')}")  # False
 print(f"  Customer delete Review?  {can(['customer'], 'delete', 'Catalog', 'Review')}")  # False
 
 # ---------------------------------------------------------------------------
@@ -150,8 +149,8 @@ except PermissionError as e:
 
 print("\n--- Protected Agent Execution ---")
 
-from ninja_agents.base import DataAgent
 from _bookstore_schema import BOOK, REVIEW
+from ninja_agents.base import DataAgent
 
 book_agent = DataAgent(entity=BOOK)
 review_agent = DataAgent(entity=REVIEW)

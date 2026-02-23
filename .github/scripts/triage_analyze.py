@@ -71,12 +71,14 @@ Respond in this exact markdown format:
 (brief implementation direction if recommending `planning`)
 """
 
-    body = json.dumps({
-        "model": "gpt-5.2",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_completion_tokens": 2000,
-        "temperature": 0.2,
-    }).encode()
+    body = json.dumps(
+        {
+            "model": "gpt-5.2",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_completion_tokens": 2000,
+            "temperature": 0.2,
+        }
+    ).encode()
 
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",

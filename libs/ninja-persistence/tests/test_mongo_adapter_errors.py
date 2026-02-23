@@ -1,8 +1,9 @@
 """Tests for MongoDB adapter error handling — verifies that raw pymongo exceptions
 are caught and re-raised as domain PersistenceError subclasses."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
 from ninja_persistence.adapters.mongo import MongoAdapter, _is_connection_error, _is_duplicate_key_error
 from ninja_persistence.exceptions import (
@@ -150,6 +151,7 @@ async def test_error_does_not_leak_details(user_entity: EntitySchema):
 
 
 # --- Unit tests for helper functions ---
+
 
 def test_is_duplicate_key_error_by_name():
     assert _is_duplicate_key_error(FakeDuplicateKeyError("dup")) is True

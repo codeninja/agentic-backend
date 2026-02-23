@@ -6,7 +6,6 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import bcrypt
 import jwt
@@ -44,17 +43,22 @@ class IdentityStrategy:
 
         user_id = secrets.token_hex(16)
         assigned_roles = roles or []
-        self._store.save(email, {
-            "user_id": user_id,
-            "email": email,
-            "password_hash": self.hash_password(password),
-            "roles": assigned_roles,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+        self._store.save(
+            email,
+            {
+                "user_id": user_id,
+                "email": email,
+                "password_hash": self.hash_password(password),
+                "roles": assigned_roles,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
 
         logger.info(
             "User registered: email=%s user_id=%s roles=%s",
-            email, user_id, assigned_roles,
+            email,
+            user_id,
+            assigned_roles,
             extra={"event": "user_registered", "email": email, "user_id": user_id, "roles": assigned_roles},
         )
 
@@ -86,7 +90,8 @@ class IdentityStrategy:
         user_id = user["user_id"]
         logger.info(
             "Login successful: email=%s user_id=%s",
-            email, user_id,
+            email,
+            user_id,
             extra={"event": "login_success", "email": email, "user_id": user_id},
         )
 

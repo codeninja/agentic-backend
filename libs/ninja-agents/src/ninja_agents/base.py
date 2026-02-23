@@ -258,9 +258,7 @@ class DomainAgent:
         """
         da = self._data_agents.get(entity_name)
         if da is None:
-            raise KeyError(
-                f"Entity '{entity_name}' not in domain '{self.domain.name}'."
-            )
+            raise KeyError(f"Entity '{entity_name}' not in domain '{self.domain.name}'.")
         validate_tool_name(tool_name)
         if trace:
             trace.start_span(self.name)

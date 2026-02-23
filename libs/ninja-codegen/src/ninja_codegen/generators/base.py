@@ -33,9 +33,7 @@ def _safe_identifier(value: str) -> str:
             "characters and underscores, and be at most 64 characters."
         )
     if keyword.iskeyword(s):
-        raise ValueError(
-            f"Unsafe identifier in template: {s!r} is a Python reserved keyword."
-        )
+        raise ValueError(f"Unsafe identifier in template: {s!r} is a Python reserved keyword.")
     return s
 
 
@@ -78,9 +76,7 @@ def validate_output_path(output_dir: Path, file_path: Path) -> Path:
     resolved_output = output_dir.resolve()
     resolved_file = file_path.resolve()
     if not str(resolved_file).startswith(str(resolved_output)):
-        raise ValueError(
-            f"Path traversal detected: {file_path} escapes output directory {output_dir}"
-        )
+        raise ValueError(f"Path traversal detected: {file_path} escapes output directory {output_dir}")
     return resolved_file
 
 
