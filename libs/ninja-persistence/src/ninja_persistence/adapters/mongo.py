@@ -8,7 +8,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from ninja_core.schema.entity import EntitySchema
 
-from ninja_persistence.adapters import _validate_limit
+from ninja_persistence.adapters import _validate_limit, _validate_offset
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -106,7 +106,7 @@ class MongoAdapter:
                 cause=exc,
             ) from exc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """Retrieve multiple documents matching the given filters.
 
         Args:
@@ -118,11 +118,12 @@ class MongoAdapter:
             QueryError: If filter keys contain MongoDB operators (``$``-prefixed keys).
         """
         limit = _validate_limit(limit)
+        offset = _validate_offset(offset)
         if filters:
             _reject_mongo_operators(filters, self._entity.name)
         coll = self._get_collection()
         try:
-            cursor = coll.find(filters or {}).limit(limit)
+            cursor = coll.find(filters or {}).skip(offset).limit(limit)
             return [dict(doc) async for doc in cursor]
         except Exception as exc:
             if _is_connection_error(exc):

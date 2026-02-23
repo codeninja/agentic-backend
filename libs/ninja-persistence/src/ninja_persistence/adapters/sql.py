@@ -10,7 +10,7 @@ from ninja_core.schema.entity import EntitySchema, FieldType
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from ninja_persistence.adapters import _validate_limit
+from ninja_persistence.adapters import _validate_limit, _validate_offset
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -188,16 +188,19 @@ class SQLAdapter:
                 cause=exc,
             ) from exc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters.
 
         Args:
             filters: Column equality filters.
             limit: Max rows to return (1–1000). Values above 1000 are capped;
                    values below 1 raise ``ValueError``.
+            offset: Number of rows to skip before returning results.
+                    Negative values raise ``ValueError``.
         """
         limit = _validate_limit(limit)
-        stmt = self._table.select().limit(limit)
+        offset = _validate_offset(offset)
+        stmt = self._table.select().limit(limit).offset(offset)
         if filters:
             for col_name, value in filters.items():
                 if col_name in self._table.c:

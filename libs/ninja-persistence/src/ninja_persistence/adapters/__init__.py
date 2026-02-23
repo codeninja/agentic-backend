@@ -15,3 +15,13 @@ def _validate_limit(limit: int) -> int:
             f"limit must be >= {MIN_QUERY_LIMIT}, got {limit}"
         )
     return min(limit, MAX_QUERY_LIMIT)
+
+
+def _validate_offset(offset: int) -> int:
+    """Validate the *offset* parameter for query methods.
+
+    Raises ``ValueError`` for negative values.
+    """
+    if offset < 0:
+        raise ValueError(f"offset must be >= 0, got {offset}")
+    return offset
