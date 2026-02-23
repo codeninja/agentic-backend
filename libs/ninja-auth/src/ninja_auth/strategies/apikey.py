@@ -23,19 +23,11 @@ class ApiKeyStrategy:
         """Check the request header for a valid API key.
 
         Only accepts API keys from the configured header. Query parameter
-        delivery is rejected to prevent credential leakage in server logs,
+        delivery is not supported to prevent credential leakage in server logs,
         proxy logs, and browser history.
         """
         api_key = request.headers.get(self.config.header_name.lower(), "")
         if not api_key:
-            if request.query_params.get("api_key", ""):
-                logger.warning(
-                    "API key provided via query parameter — rejected. "
-                    "Send the key in the '%s' header instead. "
-                    "Query parameter authentication is disabled to prevent "
-                    "credential leakage in server and proxy logs.",
-                    self.config.header_name,
-                )
             return None
 
         return self.validate_key(api_key)

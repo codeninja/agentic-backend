@@ -132,7 +132,10 @@ async def test_gateway_sets_contextvar():
     app.add_middleware(AuthGateway, config=config)
     client = TestClient(app)
 
-    token = jwt.encode({"sub": "cv-user"}, secret, algorithm="HS256")
+    from datetime import datetime, timedelta, timezone
+
+    exp = datetime.now(timezone.utc) + timedelta(hours=1)
+    token = jwt.encode({"sub": "cv-user", "exp": exp}, secret, algorithm="HS256")
     resp = client.get("/agent", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     assert resp.json()["user_id"] == "cv-user"
