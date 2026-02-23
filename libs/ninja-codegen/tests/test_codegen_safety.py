@@ -7,6 +7,7 @@ import pytest
 from jinja2.sandbox import SandboxedEnvironment
 from ninja_codegen.generators.base import (
     _safe_identifier,
+    build_fields_meta,
     get_template_env,
     sanitize_name,
     validate_output_path,
@@ -115,6 +116,68 @@ class TestSanitizeName:
         with pytest.raises(ValueError, match="entity name"):
             sanitize_name("../../bad", label="entity name")
 
+    def test_rejects_python_keyword_class(self) -> None:
+        with pytest.raises(ValueError, match="reserved keyword"):
+            sanitize_name("class")
+
+    def test_rejects_python_keyword_import(self) -> None:
+        with pytest.raises(ValueError, match="reserved keyword"):
+            sanitize_name("import")
+
+    def test_rejects_python_keyword_return(self) -> None:
+        with pytest.raises(ValueError, match="reserved keyword"):
+            sanitize_name("return")
+
+    def test_rejects_python_keyword_def(self) -> None:
+        with pytest.raises(ValueError, match="reserved keyword"):
+            sanitize_name("def")
+
+
+class TestBuildFieldsMetaSanitization:
+    """Tests verifying build_fields_meta rejects unsafe field names."""
+
+    def _make_entity_with_field(self, field_name: str) -> MagicMock:
+        """Create a mock entity with a single field with the given name."""
+        field = MagicMock()
+        field.name = field_name
+        field.field_type.value = "string"
+        field.nullable = False
+        field.primary_key = False
+        field.unique = False
+        field.indexed = False
+        field.default = None
+        field.description = None
+        field.constraints = None
+        entity = MagicMock()
+        entity.name = "ValidEntity"
+        entity.fields = [field]
+        return entity
+
+    def test_valid_field_name(self) -> None:
+        entity = self._make_entity_with_field("customer_id")
+        meta = build_fields_meta(entity)
+        assert meta[0]["name"] == "customer_id"
+
+    def test_rejects_field_with_special_chars(self) -> None:
+        entity = self._make_entity_with_field("field;DROP")
+        with pytest.raises(ValueError, match="Unsafe"):
+            build_fields_meta(entity)
+
+    def test_rejects_field_with_path_traversal(self) -> None:
+        entity = self._make_entity_with_field("../../etc/passwd")
+        with pytest.raises(ValueError, match="path separator|Path traversal"):
+            build_fields_meta(entity)
+
+    def test_rejects_field_with_python_keyword(self) -> None:
+        entity = self._make_entity_with_field("class")
+        with pytest.raises(ValueError, match="reserved keyword"):
+            build_fields_meta(entity)
+
+    def test_rejects_field_with_spaces(self) -> None:
+        entity = self._make_entity_with_field("my field")
+        with pytest.raises(ValueError, match="Unsafe"):
+            build_fields_meta(entity)
+
 
 class TestSanitizeNameInGenerators:
     """Integration-style tests verifying generators reject malicious names."""
@@ -160,6 +223,34 @@ class TestSanitizeNameInGenerators:
         entity = self._make_entity_mock("../../etc/cron.d/backdoor")
         with pytest.raises(ValueError, match="path separator|Path traversal"):
             generate_gql_type(entity, tmp_path)
+
+    def test_generate_coordinator_rejects_unsafe_domain(self, tmp_path: Path) -> None:
+        from ninja_codegen.generators.agents import generate_coordinator
+
+        domain = self._make_domain_mock("../../etc/cron.d/backdoor")
+        with pytest.raises(ValueError, match="path separator|Path traversal"):
+            generate_coordinator([domain], tmp_path)
+
+    def test_generate_coordinator_rejects_keyword_domain(self, tmp_path: Path) -> None:
+        from ninja_codegen.generators.agents import generate_coordinator
+
+        domain = self._make_domain_mock("class")
+        with pytest.raises(ValueError, match="reserved keyword"):
+            generate_coordinator([domain], tmp_path)
+
+    def test_generate_data_agent_rejects_keyword(self, tmp_path: Path) -> None:
+        from ninja_codegen.generators.agents import generate_data_agent
+
+        entity = self._make_entity_mock("import")
+        with pytest.raises(ValueError, match="reserved keyword"):
+            generate_data_agent(entity, tmp_path)
+
+    def test_generate_model_rejects_keyword(self, tmp_path: Path) -> None:
+        from ninja_codegen.generators.models import generate_model
+
+        entity = self._make_entity_mock("class")
+        with pytest.raises(ValueError, match="reserved keyword"):
+            generate_model(entity, tmp_path)
 
 
 class TestValidateOutputPath:
