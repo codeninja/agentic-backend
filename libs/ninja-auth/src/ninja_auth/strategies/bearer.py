@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import jwt
@@ -15,6 +16,15 @@ logger = logging.getLogger(__name__)
 
 # Claims that must be present in every JWT.
 _REQUIRED_CLAIMS = ("sub", "exp")
+
+# Lightweight email format check (RFC 5322 simplified).
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# Permission strings must follow the ``action:scope`` format.
+_PERMISSION_RE = re.compile(r"^[a-zA-Z*]+:[a-zA-Z0-9.*_-]+$")
+
+# Safe claim keys forwarded to metadata (excludes the full payload).
+_SAFE_METADATA_CLAIMS = frozenset({"iss", "aud", "iat", "exp", "jti", "nbf"})
 
 
 class BearerStrategy:
@@ -32,6 +42,69 @@ class BearerStrategy:
     def _get_algorithms(self) -> list[str]:
         """Return the list of acceptable signing algorithms."""
         return [self.config.algorithm]
+
+    @staticmethod
+    def _validate_email(value: Any) -> str | None:
+        """Return a validated email string, or ``None`` if invalid/absent."""
+        if value is None:
+            return None
+        if not isinstance(value, str) or not _EMAIL_RE.match(value):
+            logger.warning(
+                "JWT 'email' claim has invalid format: %r",
+                value,
+                extra={"event": "claim_validation_failed", "claim": "email"},
+            )
+            return None
+        return value
+
+    @staticmethod
+    def _validate_roles(value: Any) -> list[str]:
+        """Return a validated list of role strings, dropping non-string entries."""
+        if not isinstance(value, list):
+            if value is not None:
+                logger.warning(
+                    "JWT 'roles' claim is not a list, ignoring",
+                    extra={"event": "claim_validation_failed", "claim": "roles"},
+                )
+            return []
+        valid: list[str] = []
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                valid.append(item.strip())
+            else:
+                logger.warning(
+                    "JWT 'roles' contains non-string or empty entry: %r, skipping",
+                    item,
+                    extra={"event": "claim_validation_failed", "claim": "roles"},
+                )
+        return valid
+
+    @staticmethod
+    def _validate_permissions(value: Any) -> list[str]:
+        """Return a validated list of ``action:scope`` permission strings."""
+        if not isinstance(value, list):
+            if value is not None:
+                logger.warning(
+                    "JWT 'permissions' claim is not a list, ignoring",
+                    extra={"event": "claim_validation_failed", "claim": "permissions"},
+                )
+            return []
+        valid: list[str] = []
+        for item in value:
+            if isinstance(item, str) and _PERMISSION_RE.match(item):
+                valid.append(item)
+            else:
+                logger.warning(
+                    "JWT 'permissions' contains invalid entry: %r, skipping",
+                    item,
+                    extra={"event": "claim_validation_failed", "claim": "permissions"},
+                )
+        return valid
+
+    @staticmethod
+    def _safe_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+        """Extract only safe, non-sensitive claims for metadata."""
+        return {k: v for k, v in payload.items() if k in _SAFE_METADATA_CLAIMS}
 
     async def authenticate(self, request: Request) -> UserContext | None:
         """Extract and validate a JWT from the Authorization header.
@@ -56,6 +129,12 @@ class BearerStrategy:
           corresponding config fields are set.
         * ``exp`` is required and validated by PyJWT.
         * Required claims (``sub``, ``exp``) must be present.
+        * ``email`` is validated for format (RFC 5322 simplified).
+        * ``roles`` must be a list of non-empty strings.
+        * ``permissions`` must be a list of ``action:scope`` strings.
+        * Raw JWT payload is **not** exposed in metadata — only safe
+          standard claims (``iss``, ``aud``, ``iat``, ``exp``, ``jti``,
+          ``nbf``) are forwarded.
 
         Returns ``None`` for any invalid, expired, or incomplete token.
         """
@@ -91,11 +170,11 @@ class BearerStrategy:
 
             return UserContext(
                 user_id=sub,
-                email=payload.get("email"),
-                roles=payload.get("roles", []),
-                permissions=payload.get("permissions", []),
+                email=self._validate_email(payload.get("email")),
+                roles=self._validate_roles(payload.get("roles")),
+                permissions=self._validate_permissions(payload.get("permissions")),
                 provider="bearer",
-                metadata={"claims": payload},
+                metadata=self._safe_metadata(payload),
             )
         except jwt.ExpiredSignatureError:
             # Attempt to extract identifiers from expired token for logging

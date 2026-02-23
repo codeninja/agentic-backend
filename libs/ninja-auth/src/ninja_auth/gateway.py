@@ -190,15 +190,13 @@ class AuthGateway(BaseHTTPMiddleware):
                 revoked, or if the token was issued before the user's
                 revocation cutoff timestamp.
         """
-        claims = ctx.metadata.get("claims") or {}
-
         # Per-token revocation check
-        jti = claims.get("jti")
+        jti = ctx.metadata.get("jti")
         if jti and await self._revocation_store.is_token_revoked(jti):
             raise AuthenticationError("Token has been revoked")
 
         # Per-user revocation check (all tokens issued before a cutoff)
-        iat_raw = claims.get("iat")
+        iat_raw = ctx.metadata.get("iat")
         if iat_raw and ctx.user_id:
             revoked_before = await self._revocation_store.get_user_revoked_before(ctx.user_id)
             if revoked_before:
