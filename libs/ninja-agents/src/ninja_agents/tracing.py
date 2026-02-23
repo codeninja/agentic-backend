@@ -33,6 +33,7 @@ class AgentSpan:
     """Timing and cost span for a single agent invocation."""
 
     agent_name: str
+    span_id: str = ""
     start_time: float = field(default_factory=time.monotonic)
     end_time: float | None = None
     input_tokens: int = 0
@@ -82,22 +83,29 @@ class TraceContext:
         self.trace_id = trace_id or uuid.uuid4().hex
         self.spans: list[AgentSpan] = []
         self._active_spans: dict[str, AgentSpan] = {}
+        self._span_counter: int = 0
+
+    def _next_span_id(self, agent_name: str) -> str:
+        self._span_counter += 1
+        return f"{agent_name}#{self._span_counter}"
 
     def start_span(self, agent_name: str) -> AgentSpan:
         span = AgentSpan(agent_name=agent_name)
+        span_id = self._next_span_id(agent_name)
+        span.span_id = span_id
         self.spans.append(span)
-        self._active_spans[agent_name] = span
-        logger.debug("trace=%s agent=%s started", self.trace_id, agent_name)
+        self._active_spans[span_id] = span
+        logger.debug("trace=%s span=%s started", self.trace_id, span_id)
         return span
 
-    def finish_span(self, agent_name: str) -> AgentSpan | None:
-        span = self._active_spans.pop(agent_name, None)
+    def finish_span(self, span_id: str) -> AgentSpan | None:
+        span = self._active_spans.pop(span_id, None)
         if span is not None:
             span.finish()
             logger.debug(
-                "trace=%s agent=%s finished duration_ms=%.1f",
+                "trace=%s span=%s finished duration_ms=%.1f",
                 self.trace_id,
-                agent_name,
+                span_id,
                 span.duration_ms,
             )
         return span
@@ -124,7 +132,12 @@ class TraceContext:
         author: str | None = getattr(event, "author", None)
         usage = getattr(event, "usage_metadata", None)
         if author and usage:
-            span = self._active_spans.get(author)
+            # Find the most recent active span for this author.
+            span: AgentSpan | None = None
+            for s in reversed(list(self._active_spans.values())):
+                if s.agent_name == author:
+                    span = s
+                    break
             if span is None:
                 span = self.start_span(author)
             input_tokens = getattr(usage, "prompt_token_count", 0) or 0

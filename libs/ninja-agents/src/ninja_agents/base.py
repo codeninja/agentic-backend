@@ -143,8 +143,8 @@ class DataAgent(BaseAgent):
         try:
             return invoke_tool(tool, span=span, **kwargs)
         finally:
-            if trace:
-                trace.finish_span(self.name)
+            if span:
+                trace.finish_span(span.span_id)
 
     # -- ADK BaseAgent contract ------------------------------------------
 
@@ -265,13 +265,12 @@ class DomainAgent:
         if da is None:
             raise KeyError(f"Entity '{entity_name}' not in domain '{self.domain.name}'.")
         validate_tool_name(tool_name)
-        if trace:
-            trace.start_span(self.name)
+        span = trace.start_span(self.name) if trace else None
         try:
             return da.execute(tool_name, trace=trace, **kwargs)
         finally:
-            if trace:
-                trace.finish_span(self.name)
+            if span:
+                trace.finish_span(span.span_id)
 
     def execute(self, request: str, trace: TraceContext | None = None) -> dict[str, Any]:
         """Process a domain-level request (stub — full impl uses LLM).
@@ -282,8 +281,7 @@ class DomainAgent:
             AgentInputTooLarge: If the request exceeds the size limit.
         """
         validate_request_size(request)
-        if trace:
-            trace.start_span(self.name)
+        span = trace.start_span(self.name) if trace else None
         try:
             return {
                 "agent": self.name,
@@ -293,8 +291,8 @@ class DomainAgent:
                 "uses_llm": self.uses_llm,
             }
         finally:
-            if trace:
-                trace.finish_span(self.name)
+            if span:
+                trace.finish_span(span.span_id)
 
 
 class CoordinatorAgent:
