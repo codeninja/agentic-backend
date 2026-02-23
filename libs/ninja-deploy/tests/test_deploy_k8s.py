@@ -357,7 +357,7 @@ class TestK8sGeneratorGenerateAll:
         files = gen.generate_all()
 
         infra_files = [k for k in files if k.startswith("infra/")]
-        assert len(infra_files) == 8  # 4 deployment + 4 RBAC
+        assert len(infra_files) == 12  # 4 deployment + 4 RBAC + 4 NetworkPolicy
 
     def test_write_manifests_creates_files(self, sample_asd: AgenticSchema, tmp_path):
         gen = K8sGenerator(sample_asd)
@@ -553,6 +553,130 @@ class TestK8sRbac:
 
         infra_rbac_files = [k for k in files if k.startswith("infra/") and "rbac" in k]
         assert len(infra_rbac_files) == 4
+
+
+class TestK8sNetworkPolicy:
+    """Tests for NetworkPolicy generation."""
+
+    def test_app_network_policy_kind(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        assert parsed["kind"] == "NetworkPolicy"
+        assert parsed["apiVersion"] == "networking.k8s.io/v1"
+
+    def test_app_network_policy_selects_app_pods(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        assert parsed["spec"]["podSelector"]["matchLabels"]["app"] == "ninja-api"
+
+    def test_app_network_policy_has_ingress_and_egress(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        assert "Ingress" in parsed["spec"]["policyTypes"]
+        assert "Egress" in parsed["spec"]["policyTypes"]
+
+    def test_app_network_policy_ingress_port(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        ingress_ports = parsed["spec"]["ingress"][0]["ports"]
+        assert any(p["port"] == 8000 for p in ingress_ports)
+
+    def test_app_network_policy_egress_allows_dns(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        egress = parsed["spec"]["egress"]
+        dns_rule = egress[0]
+        dns_ports = [p["port"] for p in dns_rule["ports"]]
+        assert 53 in dns_ports
+
+    def test_app_network_policy_egress_allows_infra(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        egress = parsed["spec"]["egress"]
+        # First rule is DNS, remaining are infra services
+        infra_egress = egress[1:]
+        infra_ports = {r["ports"][0]["port"] for r in infra_egress}
+        # sample_asd has all 4 engines: postgres(5432), mongo(27017), neo4j(7687), milvus(19530)
+        assert 5432 in infra_ports
+        assert 27017 in infra_ports
+        assert 7687 in infra_ports
+        assert 19530 in infra_ports
+
+    def test_app_network_policy_custom_app_name(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        np = gen.generate_network_policy(app_name="my-app", port="9000")
+        parsed = yaml.safe_load(np)
+
+        assert parsed["spec"]["podSelector"]["matchLabels"]["app"] == "my-app"
+        assert parsed["spec"]["ingress"][0]["ports"][0]["port"] == 9000
+
+    def test_infra_network_policies_generated_per_engine(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        policies = gen.generate_infra_network_policies()
+
+        assert "postgresql-networkpolicy.yaml" in policies
+        assert "mongodb-networkpolicy.yaml" in policies
+        assert "neo4j-networkpolicy.yaml" in policies
+        assert "milvus-networkpolicy.yaml" in policies
+
+    def test_infra_network_policy_kind(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        policies = gen.generate_infra_network_policies()
+
+        for name, content in policies.items():
+            parsed = yaml.safe_load(content)
+            assert parsed["kind"] == "NetworkPolicy", f"{name} wrong kind"
+
+    def test_infra_network_policy_restricts_ingress_to_app(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        policies = gen.generate_infra_network_policies()
+
+        for name, content in policies.items():
+            parsed = yaml.safe_load(content)
+            ingress = parsed["spec"]["ingress"][0]
+            from_selector = ingress["from"][0]["podSelector"]["matchLabels"]
+            assert from_selector["app"] == "ninja-api", f"{name} wrong ingress source"
+
+    def test_infra_network_policy_egress_dns_only(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        policies = gen.generate_infra_network_policies()
+
+        for name, content in policies.items():
+            parsed = yaml.safe_load(content)
+            egress = parsed["spec"]["egress"]
+            assert len(egress) == 1, f"{name} should only allow DNS egress"
+            dns_ports = [p["port"] for p in egress[0]["ports"]]
+            assert 53 in dns_ports, f"{name} missing DNS egress"
+
+    def test_generate_all_includes_network_policies(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        files = gen.generate_all()
+
+        assert "networkpolicy.yaml" in files
+        infra_netpol_files = [k for k in files if k.startswith("infra/") and "networkpolicy" in k]
+        assert len(infra_netpol_files) == 4
+
+    def test_sql_only_app_egress_only_postgres(self, sql_only_asd: AgenticSchema):
+        gen = K8sGenerator(sql_only_asd)
+        np = gen.generate_network_policy()
+        parsed = yaml.safe_load(np)
+
+        egress = parsed["spec"]["egress"]
+        # DNS + 1 infra service
+        assert len(egress) == 2
+        assert egress[1]["ports"][0]["port"] == 5432
 
 
 class TestK8sLatestTagWarning:

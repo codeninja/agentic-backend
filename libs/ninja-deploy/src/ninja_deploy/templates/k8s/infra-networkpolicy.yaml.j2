@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ project_name }}-{{ svc.name }}-netpol
+  labels:
+    app: {{ svc.name }}
+    project: {{ project_name }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ svc.name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ app_name }}
+      ports:
+        - protocol: TCP
+          port: {{ svc.port }}
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
