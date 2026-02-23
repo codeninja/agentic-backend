@@ -150,6 +150,15 @@ class IdentityConfig(BaseModel):
     token_secret: str = _INSECURE_TOKEN_SECRET
     token_expiry_minutes: int = 60
     password_policy: PasswordPolicy = Field(default_factory=PasswordPolicy)
+    login_rate_limit: RateLimitConfig = Field(
+        default_factory=lambda: RateLimitConfig(
+            max_attempts=5,
+            window_seconds=60,
+            lockout_threshold=5,
+            lockout_duration_seconds=900,
+        ),
+        description="Per-email rate limiting for login attempts.",
+    )
 
     @model_validator(mode="after")
     def _check_token_secret(self) -> IdentityConfig:

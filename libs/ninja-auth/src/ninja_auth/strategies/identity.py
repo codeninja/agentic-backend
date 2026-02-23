@@ -13,6 +13,8 @@ import jwt
 
 from ninja_auth.config import IdentityConfig
 from ninja_auth.context import UserContext
+from ninja_auth.errors import AuthenticationError
+from ninja_auth.rate_limiter import InMemoryRateLimiter, RateLimiterProtocol
 from ninja_auth.user_store import InMemoryUserStore, UserStore
 
 logger = logging.getLogger(__name__)
@@ -29,9 +31,13 @@ class IdentityStrategy:
         self,
         config: IdentityConfig,
         user_store: UserStore | None = None,
+        login_rate_limiter: RateLimiterProtocol | None = None,
     ) -> None:
         self.config = config
         self._store: UserStore = user_store or InMemoryUserStore()
+        self._login_limiter: RateLimiterProtocol = (
+            login_rate_limiter or InMemoryRateLimiter(config.login_rate_limit)
+        )
 
     def hash_password(self, password: str) -> str:
         """Hash a plaintext password using bcrypt."""
@@ -99,7 +105,27 @@ class IdentityStrategy:
         )
 
     def login(self, email: str, password: str) -> UserContext | None:
-        """Authenticate a user by email and password."""
+        """Authenticate a user by email and password.
+
+        Rate limits login attempts per email address.  When the configured
+        threshold is exceeded, an :class:`~ninja_auth.errors.AuthenticationError`
+        is raised so callers can return an appropriate 429 response.
+
+        Raises:
+            AuthenticationError: If the email is currently rate-limited or
+                locked out due to too many consecutive failures.
+        """
+        # Check per-email rate limit before doing any work
+        if self._login_limiter.is_rate_limited(email):
+            logger.warning(
+                "Login rate-limited: email=%s",
+                email,
+                extra={"event": "login_rate_limited", "email": email},
+            )
+            raise AuthenticationError(
+                "Too many login attempts. Please try again later."
+            )
+
         user = self._store.get(email)
         # Always perform a hash comparison to prevent timing side-channel
         # user enumeration — missing users take the same time as wrong passwords.
@@ -107,6 +133,7 @@ class IdentityStrategy:
         password_valid = self.verify_password(password, password_hash)
 
         if not user:
+            self._login_limiter.record_attempt(email, success=False)
             logger.warning(
                 "Login failed: unknown email=%s",
                 email,
@@ -114,12 +141,17 @@ class IdentityStrategy:
             )
             return None
         if not password_valid:
+            self._login_limiter.record_attempt(email, success=False)
             logger.warning(
                 "Login failed: bad password for email=%s",
                 email,
                 extra={"event": "login_failed", "reason": "bad_password", "email": email},
             )
             return None
+
+        # Successful login — reset the failure counter for this email
+        self._login_limiter.record_attempt(email, success=True)
+        self._login_limiter.reset(email)
 
         user_id = user["user_id"]
         logger.info(
