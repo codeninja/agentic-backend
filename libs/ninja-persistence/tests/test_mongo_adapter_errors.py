@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
-from ninja_persistence.adapters.mongo import MongoAdapter, _is_connection_error, _is_duplicate_key_error
+from ninja_persistence.adapters.mongo import MongoAdapter, _is_connection_error, _is_duplicate_key_error, _reject_mongo_operators
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -173,3 +173,58 @@ def test_is_connection_error_true():
 
 def test_is_connection_error_false():
     assert _is_connection_error(RuntimeError("nope")) is False
+
+
+# --- NoSQL injection prevention tests ---
+
+
+def test_reject_mongo_operators_top_level():
+    """Top-level $-prefixed keys are rejected."""
+    with pytest.raises(QueryError, match="\\$gt.*not allowed"):
+        _reject_mongo_operators({"$gt": 1}, "TestEntity")
+
+
+def test_reject_mongo_operators_nested():
+    """Nested $-prefixed keys inside filter values are rejected."""
+    with pytest.raises(QueryError, match="\\$ne.*not allowed"):
+        _reject_mongo_operators({"age": {"$ne": ""}}, "TestEntity")
+
+
+def test_reject_mongo_operators_deeply_nested():
+    """Deeply nested $-prefixed keys are rejected."""
+    with pytest.raises(QueryError, match="\\$regex.*not allowed"):
+        _reject_mongo_operators({"name": {"nested": {"$regex": ".*"}}}, "TestEntity")
+
+
+def test_reject_mongo_operators_in_list():
+    """$-prefixed keys inside list elements are rejected."""
+    with pytest.raises(QueryError, match="\\$where.*not allowed"):
+        _reject_mongo_operators({"tags": [{"$where": "1==1"}]}, "TestEntity")
+
+
+def test_reject_mongo_operators_allows_safe_filters():
+    """Plain key-value filters pass validation."""
+    _reject_mongo_operators({"name": "Alice", "age": 30}, "TestEntity")
+
+
+def test_reject_mongo_operators_allows_empty():
+    """Empty filter dict passes validation."""
+    _reject_mongo_operators({}, "TestEntity")
+
+
+async def test_find_many_rejects_dollar_operator(user_entity: EntitySchema):
+    """find_many raises QueryError when filters contain $-prefixed keys."""
+    coll = MagicMock()
+    adapter = _make_mongo_adapter(user_entity, coll)
+
+    with pytest.raises(QueryError, match="not allowed"):
+        await adapter.find_many(filters={"$gt": ""})
+
+
+async def test_find_many_rejects_nested_operator(user_entity: EntitySchema):
+    """find_many raises QueryError for nested MongoDB operators."""
+    coll = MagicMock()
+    adapter = _make_mongo_adapter(user_entity, coll)
+
+    with pytest.raises(QueryError, match="not allowed"):
+        await adapter.find_many(filters={"password": {"$ne": ""}})

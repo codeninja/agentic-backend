@@ -113,8 +113,13 @@ class MongoAdapter:
             filters: MongoDB query filters.
             limit: Max documents to return (1–1000). Values above 1000 are
                    capped; values below 1 raise ``ValueError``.
+
+        Raises:
+            QueryError: If filter keys contain MongoDB operators (``$``-prefixed keys).
         """
         limit = _validate_limit(limit)
+        if filters:
+            _reject_mongo_operators(filters, self._entity.name)
         coll = self._get_collection()
         try:
             cursor = coll.find(filters or {}).limit(limit)
@@ -448,6 +453,30 @@ class MongoAdapter:
                 reindexed += 1
 
         return reindexed
+
+
+def _reject_mongo_operators(filters: dict[str, Any], entity_name: str) -> None:
+    """Raise ``QueryError`` if any filter key (recursively) starts with ``$``.
+
+    This prevents NoSQL injection via MongoDB query operators such as
+    ``$gt``, ``$ne``, ``$regex``, etc. that could be smuggled in through
+    user-supplied filter dictionaries.
+    """
+    def _check(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for key in obj:
+                if isinstance(key, str) and key.startswith("$"):
+                    raise QueryError(
+                        entity_name=entity_name,
+                        operation="find_many",
+                        detail=f"Filter key '{key}' is not allowed: MongoDB operators are rejected for security.",
+                    )
+                _check(obj[key])
+        elif isinstance(obj, list):
+            for item in obj:
+                _check(item)
+
+    _check(filters)
 
 
 def _is_duplicate_key_error(exc: Exception) -> bool:
