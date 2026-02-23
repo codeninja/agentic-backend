@@ -6,6 +6,7 @@ from ninja_agents.base import (
     DomainAgent,
     create_coordinator_agent,
     create_domain_agent,
+    sanitize_agent_name,
 )
 from ninja_agents.orchestrator import Orchestrator
 from ninja_agents.safety import (
@@ -38,6 +39,7 @@ __all__ = [
     "create_domain_agent",
     "generate_crud_tools",
     "safe_error_message",
+    "sanitize_agent_name",
     "sanitize_error",
     "sanitize_for_prompt",
     "sanitize_identifier",
