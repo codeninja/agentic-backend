@@ -1,0 +1,70 @@
+name: Auto-move issues to In Progress
+
+on:
+  create:
+    # Triggers when a branch is created
+
+jobs:
+  move-to-in-progress:
+    if: github.event.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      repository-projects: write
+    steps:
+      - name: Extract issue number from branch name
+        id: extract
+        run: |
+          BRANCH="${{ github.event.ref }}"
+          # Match patterns: fix/issue-123, feat/issue-123, issue-123, fix/123
+          if [[ "$BRANCH" =~ (issue[-/]?)([0-9]+) ]]; then
+            echo "issue_number=${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+            echo "Found issue #${BASH_REMATCH[2]} in branch: $BRANCH"
+          else
+            echo "No issue number found in branch: $BRANCH"
+            echo "issue_number=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Move issue to In Progress on project board
+        if: steps.extract.outputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROJECT_ID: "PVT_kwHNOkLOAT6Qtg"
+          FIELD_ID: "PVTSSF_lAHNOkLOAT6Qts4Pf31M"
+          IN_PROGRESS_ID: "47fc9ee4"
+          ISSUE_NUM: ${{ steps.extract.outputs.issue_number }}
+        run: |
+          # Get the issue node ID
+          NODE_ID=$(gh api graphql -f query="
+            query {
+              repository(owner:\"${{ github.repository_owner }}\", name:\"${{ github.event.repository.name }}\") {
+                issue(number: $ISSUE_NUM) { id }
+              }
+            }" -q '.data.repository.issue.id' 2>/dev/null)
+
+          if [ -z "$NODE_ID" ] || [ "$NODE_ID" = "null" ]; then
+            echo "Issue #$ISSUE_NUM not found, skipping"
+            exit 0
+          fi
+
+          # Add issue to project (idempotent — returns existing item if already added)
+          ITEM_ID=$(gh api graphql -f query="
+            mutation {
+              addProjectV2ItemById(input: {
+                projectId: \"$PROJECT_ID\",
+                contentId: \"$NODE_ID\"
+              }) { item { id } }
+            }" -q '.data.addProjectV2ItemById.item.id')
+
+          # Move to In Progress
+          gh api graphql -f query="
+            mutation {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: \"$PROJECT_ID\",
+                itemId: \"$ITEM_ID\",
+                fieldId: \"$FIELD_ID\",
+                value: { singleSelectOptionId: \"$IN_PROGRESS_ID\" }
+              }) { projectV2Item { id } }
+            }" > /dev/null
+
+          echo "✅ Moved issue #$ISSUE_NUM to In Progress"
