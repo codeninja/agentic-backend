@@ -65,13 +65,47 @@ class BearerConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_keys(self) -> BearerConfig:
+        """Validate key configuration and prevent algorithm confusion.
+
+        Algorithm confusion is a classic JWT attack where an attacker uses an
+        HMAC algorithm (e.g. HS256) with a known public key as the secret,
+        allowing them to forge tokens.  This validator enforces that:
+
+        * ``algorithm='none'`` is always rejected.
+        * HMAC algorithms (HS256/384/512) require ``secret_key`` and must
+          **not** have ``public_key`` set.
+        * Asymmetric algorithms require ``public_key`` and must **not** have
+          ``secret_key`` set (to prevent accidental misuse).
+        """
         if self.algorithm.lower() == "none":
             raise ValueError(
                 "BearerConfig.algorithm must not be 'none'. "
                 "The 'none' algorithm disables JWT signature verification "
                 "and allows forged tokens."
             )
-        if self.algorithm in _HMAC_ALGORITHMS and not self.secret_key:
+
+        is_hmac = self.algorithm in _HMAC_ALGORITHMS
+
+        # --- Algorithm confusion guard ---
+        if is_hmac and self.public_key:
+            raise ValueError(
+                f"BearerConfig uses HMAC algorithm '{self.algorithm}' but "
+                f"'public_key' is also set. This is a JWT algorithm confusion "
+                f"vulnerability — an attacker who knows the public key could "
+                f"forge tokens by signing with HMAC using the public key as "
+                f"the secret. Either switch to an asymmetric algorithm "
+                f"(e.g. RS256) or remove 'public_key'."
+            )
+        if not is_hmac and self.secret_key:
+            raise ValueError(
+                f"BearerConfig uses asymmetric algorithm '{self.algorithm}' "
+                f"but 'secret_key' is also set. Use 'public_key' for "
+                f"asymmetric algorithms and remove 'secret_key' to avoid "
+                f"configuration errors."
+            )
+
+        # --- Key presence checks ---
+        if is_hmac and not self.secret_key:
             env = os.environ.get("NINJASTACK_ENV", "").lower()
             if env in ("dev", "development", "test"):
                 logger.warning(
@@ -87,7 +121,7 @@ class BearerConfig(BaseModel):
                 f"HMAC algorithm '{self.algorithm}'. Provide a secret key or "
                 f"switch to an asymmetric algorithm (e.g. RS256)."
             )
-        if self.algorithm not in _HMAC_ALGORITHMS and not self.public_key:
+        if not is_hmac and not self.public_key:
             raise ValueError(
                 f"BearerConfig.public_key must not be empty when using asymmetric algorithm '{self.algorithm}'."
             )

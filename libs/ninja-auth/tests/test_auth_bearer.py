@@ -366,6 +366,20 @@ class TestPermissionsValidation:
         assert ctx.permissions == ["read:Orders"]
 
 
+class TestAlgorithmConfusion:
+    """Verify that algorithm confusion attacks are blocked at config time (issue #172)."""
+
+    def test_cannot_create_hmac_config_with_public_key(self):
+        """An attacker cannot configure HS256 + public_key to forge tokens."""
+        with pytest.raises(ValueError, match="algorithm confusion"):
+            BearerConfig(algorithm="HS256", secret_key="secret", public_key="rsa-pub-key")
+
+    def test_cannot_create_asymmetric_config_with_secret_key(self):
+        """Asymmetric algorithms must not accept secret_key."""
+        with pytest.raises(ValueError, match="secret_key.*also set"):
+            BearerConfig(algorithm="RS256", secret_key="secret", public_key="rsa-pub-key")
+
+
 class TestMetadataSafety:
     """Ensure raw JWT payload is not leaked through metadata."""
 
