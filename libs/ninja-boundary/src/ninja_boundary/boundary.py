@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from ninja_core.schema.entity import EntitySchema, FieldSchema
@@ -13,6 +14,11 @@ from ninja_boundary.coercion import CoercionEngine, StrictnessLevel
 from ninja_boundary.defaults import DefaultResolver
 from ninja_boundary.drift import DriftDetector, DriftEvent
 from ninja_boundary.validators import ValidationError, ValidatorRegistry
+
+# Maximum input string length against which regex patterns will be evaluated.
+# Acts as defense-in-depth against pathological inputs even when patterns have
+# already been validated for ReDoS safety at schema construction time.
+_MAX_REGEX_INPUT_LENGTH = 10_000
 
 
 @dataclass
@@ -96,6 +102,17 @@ class BoundaryProcessor:
         return BoundaryResult(data=result, audit=audit, drift_events=drift_events)
 
 
+@lru_cache(maxsize=256)
+def _compile_pattern(pattern: str) -> re.Pattern[str]:
+    """Compile and cache a regex pattern.
+
+    Patterns are validated for syntax and ReDoS safety at schema construction
+    time (see :class:`~ninja_core.schema.entity.FieldConstraint`).  This
+    function caches compilations to avoid redundant work on repeated calls.
+    """
+    return re.compile(pattern)
+
+
 def _validate_field_constraints(
     value: Any,
     field_schema: FieldSchema,
@@ -115,7 +132,24 @@ def _validate_field_constraints(
 
     # Pattern constraint — only applies to string values
     if constraints.pattern is not None and isinstance(value, str):
-        compiled = re.compile(constraints.pattern)
+        # Defense-in-depth: reject overly long inputs before regex matching
+        # to limit CPU exposure even for patterns that passed ReDoS validation.
+        if len(value) > _MAX_REGEX_INPUT_LENGTH:
+            audit.record(
+                entity_name,
+                field_name,
+                CoercionAction.VALIDATION_ERROR,
+                value,
+                None,
+                f"value length {len(value)} exceeds regex input limit ({_MAX_REGEX_INPUT_LENGTH})",
+            )
+            raise ValidationError(
+                entity_name,
+                field_name,
+                f"Value length {len(value)} exceeds maximum allowed for "
+                f"pattern matching ({_MAX_REGEX_INPUT_LENGTH} characters)",
+            )
+        compiled = _compile_pattern(constraints.pattern)
         if not compiled.fullmatch(value):
             audit.record(
                 entity_name,
