@@ -106,6 +106,79 @@ class K8sGenerator:
                 services.append(INFRA_IMAGES[engine])
         return services
 
+    # Least-privilege RBAC rules per component type.
+    _APP_RBAC_RULES: list[dict[str, list[str]]] = [
+        {
+            "api_groups": [""],
+            "resources": ["configmaps", "secrets"],
+            "verbs": ["get", "watch"],
+        },
+    ]
+
+    _INFRA_RBAC_RULES: list[dict[str, list[str]]] = [
+        {
+            "api_groups": [""],
+            "resources": ["configmaps"],
+            "verbs": ["get", "watch"],
+        },
+    ]
+
+    def generate_rbac(self, app_name: str = "ninja-api") -> str:
+        """Generate ServiceAccount + Role + RoleBinding for the app deployment."""
+        sa_name = f"{app_name}-sa"
+        role_name = f"{app_name}-role"
+        binding_name = f"{app_name}-rolebinding"
+
+        sa = self.env.get_template("serviceaccount.yaml.j2").render(
+            sa_name=sa_name,
+            app_label=app_name,
+            project_name=self.schema.project_name,
+        )
+        role = self.env.get_template("role.yaml.j2").render(
+            role_name=role_name,
+            app_label=app_name,
+            project_name=self.schema.project_name,
+            rules=self._APP_RBAC_RULES,
+        )
+        binding = self.env.get_template("rolebinding.yaml.j2").render(
+            binding_name=binding_name,
+            app_label=app_name,
+            project_name=self.schema.project_name,
+            role_name=role_name,
+            sa_name=sa_name,
+        )
+        return f"{sa}---\n{role}---\n{binding}"
+
+    def generate_infra_rbac(self) -> dict[str, str]:
+        """Generate RBAC manifests (SA + Role + RoleBinding) per infra service."""
+        manifests: dict[str, str] = {}
+        for svc in self._infra_services():
+            svc_name = f"{self.schema.project_name}-{svc['name']}"
+            sa_name = f"{svc_name}-sa"
+            role_name = f"{svc_name}-role"
+            binding_name = f"{svc_name}-rolebinding"
+
+            sa = self.env.get_template("serviceaccount.yaml.j2").render(
+                sa_name=sa_name,
+                app_label=svc["name"],
+                project_name=self.schema.project_name,
+            )
+            role = self.env.get_template("role.yaml.j2").render(
+                role_name=role_name,
+                app_label=svc["name"],
+                project_name=self.schema.project_name,
+                rules=self._INFRA_RBAC_RULES,
+            )
+            binding = self.env.get_template("rolebinding.yaml.j2").render(
+                binding_name=binding_name,
+                app_label=svc["name"],
+                project_name=self.schema.project_name,
+                role_name=role_name,
+                sa_name=sa_name,
+            )
+            manifests[f"{svc['name']}-rbac.yaml"] = f"{sa}---\n{role}---\n{binding}"
+        return manifests
+
     def generate_deployment(
         self,
         app_name: str = "ninja-api",
@@ -216,8 +289,12 @@ class K8sGenerator:
         files["service.yaml"] = self.generate_service(app_name, port)
         files["configmap.yaml"] = self.generate_configmap()
         files["secret.yaml"] = self.generate_secret()
+        files["rbac.yaml"] = self.generate_rbac(app_name)
 
         for name, content in self.generate_infra_deployments().items():
+            files[f"infra/{name}"] = content
+
+        for name, content in self.generate_infra_rbac().items():
             files[f"infra/{name}"] = content
 
         # Validate: placeholder credentials

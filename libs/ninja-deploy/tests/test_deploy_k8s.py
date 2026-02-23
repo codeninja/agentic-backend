@@ -357,7 +357,7 @@ class TestK8sGeneratorGenerateAll:
         files = gen.generate_all()
 
         infra_files = [k for k in files if k.startswith("infra/")]
-        assert len(infra_files) == 4
+        assert len(infra_files) == 8  # 4 deployment + 4 RBAC
 
     def test_write_manifests_creates_files(self, sample_asd: AgenticSchema, tmp_path):
         gen = K8sGenerator(sample_asd)
@@ -422,6 +422,137 @@ class TestK8sPlaceholderCredentials:
         gen = K8sGenerator(sample_asd)
         secret = gen.generate_secret()
         assert "changeme" not in secret
+
+
+class TestK8sDeploymentServiceAccount:
+    """Tests for ServiceAccount references on deployments."""
+
+    def test_deployment_references_service_account(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        pod_spec = parsed["spec"]["template"]["spec"]
+        assert pod_spec["serviceAccountName"] == "ninja-api-sa"
+
+    def test_deployment_automount_disabled(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment()
+        parsed = yaml.safe_load(deployment)
+
+        pod_spec = parsed["spec"]["template"]["spec"]
+        assert pod_spec["automountServiceAccountToken"] is False
+
+    def test_custom_app_name_service_account(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        deployment = gen.generate_deployment(app_name="my-app")
+        parsed = yaml.safe_load(deployment)
+
+        assert parsed["spec"]["template"]["spec"]["serviceAccountName"] == "my-app-sa"
+
+    def test_infra_deployments_reference_service_account(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra = gen.generate_infra_deployments()
+        for name, content in infra.items():
+            docs = list(yaml.safe_load_all(content))
+            deployment = next(d for d in docs if d["kind"] == "Deployment")
+            pod_spec = deployment["spec"]["template"]["spec"]
+            assert "serviceAccountName" in pod_spec, f"{name} missing serviceAccountName"
+            assert pod_spec["serviceAccountName"].endswith("-sa")
+            assert pod_spec["automountServiceAccountToken"] is False
+
+
+class TestK8sRbac:
+    """Tests for RBAC resource generation (ServiceAccount, Role, RoleBinding)."""
+
+    def test_rbac_contains_all_resource_kinds(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        rbac = gen.generate_rbac()
+        docs = list(yaml.safe_load_all(rbac))
+
+        kinds = {d["kind"] for d in docs}
+        assert "ServiceAccount" in kinds
+        assert "Role" in kinds
+        assert "RoleBinding" in kinds
+
+    def test_service_account_metadata(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        rbac = gen.generate_rbac()
+        docs = list(yaml.safe_load_all(rbac))
+
+        sa = next(d for d in docs if d["kind"] == "ServiceAccount")
+        assert sa["metadata"]["name"] == "ninja-api-sa"
+        assert sa["metadata"]["labels"]["project"] == "test-shop"
+        assert sa["automountServiceAccountToken"] is False
+
+    def test_role_has_least_privilege_rules(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        rbac = gen.generate_rbac()
+        docs = list(yaml.safe_load_all(rbac))
+
+        role = next(d for d in docs if d["kind"] == "Role")
+        assert role["metadata"]["name"] == "ninja-api-role"
+        assert len(role["rules"]) > 0
+        for rule in role["rules"]:
+            # No wildcard permissions
+            assert "*" not in rule["verbs"]
+            assert "*" not in rule["resources"]
+
+    def test_rolebinding_links_sa_to_role(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        rbac = gen.generate_rbac()
+        docs = list(yaml.safe_load_all(rbac))
+
+        binding = next(d for d in docs if d["kind"] == "RoleBinding")
+        assert binding["metadata"]["name"] == "ninja-api-rolebinding"
+        assert binding["roleRef"]["name"] == "ninja-api-role"
+        assert binding["roleRef"]["kind"] == "Role"
+        assert binding["subjects"][0]["kind"] == "ServiceAccount"
+        assert binding["subjects"][0]["name"] == "ninja-api-sa"
+
+    def test_generate_all_includes_rbac(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        files = gen.generate_all()
+
+        assert "rbac.yaml" in files
+
+    def test_infra_rbac_generated_per_engine(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra_rbac = gen.generate_infra_rbac()
+
+        assert "postgresql-rbac.yaml" in infra_rbac
+        assert "mongodb-rbac.yaml" in infra_rbac
+        assert "neo4j-rbac.yaml" in infra_rbac
+        assert "milvus-rbac.yaml" in infra_rbac
+
+    def test_infra_rbac_contains_all_kinds(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra_rbac = gen.generate_infra_rbac()
+
+        for name, content in infra_rbac.items():
+            docs = list(yaml.safe_load_all(content))
+            kinds = {d["kind"] for d in docs}
+            assert "ServiceAccount" in kinds, f"{name} missing ServiceAccount"
+            assert "Role" in kinds, f"{name} missing Role"
+            assert "RoleBinding" in kinds, f"{name} missing RoleBinding"
+
+    def test_infra_rbac_no_wildcard_permissions(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        infra_rbac = gen.generate_infra_rbac()
+
+        for name, content in infra_rbac.items():
+            docs = list(yaml.safe_load_all(content))
+            role = next(d for d in docs if d["kind"] == "Role")
+            for rule in role["rules"]:
+                assert "*" not in rule["verbs"], f"{name} has wildcard verbs"
+                assert "*" not in rule["resources"], f"{name} has wildcard resources"
+
+    def test_generate_all_includes_infra_rbac(self, sample_asd: AgenticSchema):
+        gen = K8sGenerator(sample_asd)
+        files = gen.generate_all()
+
+        infra_rbac_files = [k for k in files if k.startswith("infra/") and "rbac" in k]
+        assert len(infra_rbac_files) == 4
 
 
 class TestK8sLatestTagWarning:
