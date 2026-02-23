@@ -64,7 +64,10 @@ class TestOrchestrator:
     ) -> None:
         orch = self._build_orchestrator(order_entity, shipment_entity, billing_domain, logistics_domain)
         results = await orch.fan_out("overview")
-        assert len(results) == 2
+        # 2 domain results + 1 "errors" key
+        assert len(results) == 3
+        assert "Billing" in results
+        assert "Logistics" in results
 
     @pytest.mark.asyncio
     async def test_fan_out_with_tracing(
@@ -165,8 +168,77 @@ class TestOrchestrator:
         ):
             results = await orch.fan_out("status", target_domains=["Billing", "Logistics"])
 
-        # Billing should have generic error
+        # Billing should have generic error with domain context
         assert results["Billing"]["error"] == "Request failed"
         assert results["Billing"]["error_code"] == "DOMAIN_ERROR"
+        assert results["Billing"]["domain"] == "Billing"
         # Logistics should succeed normally
         assert results["Logistics"]["domain"] == "Logistics"
+        # errors dict should contain only Billing
+        assert "Billing" in results["errors"]
+        assert "Logistics" not in results["errors"]
+
+    @pytest.mark.asyncio
+    async def test_fan_out_all_domains_fail_preserves_every_error(
+        self,
+        order_entity: EntitySchema,
+        shipment_entity: EntitySchema,
+        billing_domain: DomainSchema,
+        logistics_domain: DomainSchema,
+    ) -> None:
+        """When ALL domains fail, every error must be preserved — no last-writer-wins."""
+        orch = self._build_orchestrator(order_entity, shipment_entity, billing_domain, logistics_domain)
+
+        with patch(
+            "ninja_agents.orchestrator._execute_domain",
+            side_effect=RuntimeError("connection refused"),
+        ):
+            results = await orch.fan_out("status", target_domains=["Billing", "Logistics"])
+
+        # Both domains must have their own error entry
+        assert results["Billing"]["error"] == "Request failed"
+        assert results["Billing"]["domain"] == "Billing"
+        assert results["Logistics"]["error"] == "Request failed"
+        assert results["Logistics"]["domain"] == "Logistics"
+        # errors dict must contain BOTH failures
+        assert len(results["errors"]) == 2
+        assert "Billing" in results["errors"]
+        assert "Logistics" in results["errors"]
+
+    @pytest.mark.asyncio
+    async def test_fan_out_errors_dict_empty_on_success(
+        self,
+        order_entity: EntitySchema,
+        shipment_entity: EntitySchema,
+        billing_domain: DomainSchema,
+        logistics_domain: DomainSchema,
+    ) -> None:
+        """When all domains succeed, the errors dict must be empty."""
+        orch = self._build_orchestrator(order_entity, shipment_entity, billing_domain, logistics_domain)
+        results = await orch.fan_out("get status", target_domains=["Billing", "Logistics"])
+        assert results["errors"] == {}
+        assert results["Billing"]["domain"] == "Billing"
+        assert results["Logistics"]["domain"] == "Logistics"
+
+    @pytest.mark.asyncio
+    async def test_fan_out_error_entries_are_self_describing(
+        self,
+        order_entity: EntitySchema,
+        shipment_entity: EntitySchema,
+        billing_domain: DomainSchema,
+        logistics_domain: DomainSchema,
+    ) -> None:
+        """Each error entry must include the domain name so errors are distinguishable."""
+        orch = self._build_orchestrator(order_entity, shipment_entity, billing_domain, logistics_domain)
+
+        with patch(
+            "ninja_agents.orchestrator._execute_domain",
+            side_effect=RuntimeError("timeout"),
+        ):
+            results = await orch.fan_out("status", target_domains=["Billing", "Logistics"])
+
+        for domain_name in ("Billing", "Logistics"):
+            entry = results[domain_name]
+            assert entry["domain"] == domain_name
+            assert entry["error"] == "Request failed"
+            assert entry["error_code"] == "DOMAIN_ERROR"

@@ -85,7 +85,10 @@ class Orchestrator:
             trace: Optional trace context for observability.
 
         Returns:
-            Dict mapping domain name to its result.
+            Dict mapping domain name to its result, plus an ``errors`` key
+            containing a dict of all domain-level failures keyed by domain
+            name.  Each error entry includes ``domain``, ``error``, and
+            ``error_code`` so failures are self-describing.
 
         Raises:
             ValueError: If the request exceeds the size limit.
@@ -98,6 +101,7 @@ class Orchestrator:
             tasks = [_execute_domain(self.coordinator, d, request, trace) for d in domains]
             results_list = await asyncio.gather(*tasks, return_exceptions=True)
             results: dict[str, Any] = {}
+            errors: dict[str, dict[str, Any]] = {}
             for domain_name, item in zip(domains, results_list):
                 if isinstance(item, Exception):
                     logger.error(
@@ -105,13 +109,17 @@ class Orchestrator:
                         domain_name,
                         exc_info=item,
                     )
-                    results[domain_name] = {
+                    entry = {
+                        "domain": domain_name,
                         "error": "Request failed",
                         "error_code": "DOMAIN_ERROR",
                     }
+                    results[domain_name] = entry
+                    errors[domain_name] = entry
                 else:
                     _, result = item
                     results[domain_name] = result
+            results["errors"] = errors
             return results
         finally:
             if trace:
