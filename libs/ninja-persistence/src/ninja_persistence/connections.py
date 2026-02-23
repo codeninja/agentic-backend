@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -10,6 +12,44 @@ from urllib.parse import urlparse
 from ninja_core.security import check_ssrf
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+# Pattern matches user:password@ in connection URLs.
+_CREDENTIAL_RE = re.compile(r"://([^@/]+)@")
+
+
+def redact_url(url: str) -> str:
+    """Replace credentials in a connection URL with ``***:***``.
+
+    >>> redact_url("postgresql+asyncpg://admin:s3cret@db.host:5432/mydb")
+    'postgresql+asyncpg://***:***@db.host:5432/mydb'
+    >>> redact_url("sqlite+aiosqlite:///:memory:")
+    'sqlite+aiosqlite:///:memory:'
+    """
+    return _CREDENTIAL_RE.sub("://***:***@", url)
+
+
+class _CredentialRedactFilter(logging.Filter):
+    """Logging filter that scrubs credentials from SQLAlchemy log messages."""
+
+    _SCRUB_RE = re.compile(
+        r"://[A-Za-z0-9_.~%!$&'()*+,;=:-]+@",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._SCRUB_RE.sub("://***:***@", record.msg)
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {
+                    k: self._SCRUB_RE.sub("://***:***@", v) if isinstance(v, str) else v
+                    for k, v in record.args.items()
+                }
+            elif isinstance(record.args, tuple):
+                record.args = tuple(
+                    self._SCRUB_RE.sub("://***:***@", a) if isinstance(a, str) else a
+                    for a in record.args
+                )
+        return True
 
 
 class InvalidConnectionURL(ValueError):
@@ -103,12 +143,16 @@ class ConnectionManager:
         """Get or create an async SQLAlchemy engine for the given profile."""
         if profile_name not in self._sql_engines:
             profile = self.get_profile(profile_name)
-            kwargs: dict[str, Any] = {"echo": profile.options.get("echo", False)}
+            echo = profile.options.get("echo", False)
+            kwargs: dict[str, Any] = {"echo": echo}
             # pool_size/max_overflow are not supported by SQLite's StaticPool
             if not profile.url.startswith("sqlite"):
                 kwargs["pool_size"] = profile.options.get("pool_size", 5)
                 kwargs["max_overflow"] = profile.options.get("max_overflow", 10)
-            self._sql_engines[profile_name] = create_async_engine(profile.url, **kwargs)
+            engine = create_async_engine(profile.url, **kwargs)
+            if echo:
+                _install_credential_filter(engine)
+            self._sql_engines[profile_name] = engine
         return self._sql_engines[profile_name]
 
     async def close_all(self) -> None:
@@ -116,3 +160,14 @@ class ConnectionManager:
         for engine in self._sql_engines.values():
             await engine.dispose()
         self._sql_engines.clear()
+
+
+def _install_credential_filter(engine: AsyncEngine) -> None:
+    """Attach :class:`_CredentialRedactFilter` to every logger used by *engine*."""
+    filt = _CredentialRedactFilter()
+    for name in (
+        "sqlalchemy.engine",
+        "sqlalchemy.pool",
+        f"sqlalchemy.engine.Engine.{engine.sync_engine.logging_name or ''}",
+    ):
+        logging.getLogger(name).addFilter(filt)
