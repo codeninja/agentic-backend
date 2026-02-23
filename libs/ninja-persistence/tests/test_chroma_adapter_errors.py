@@ -217,6 +217,98 @@ async def test_search_semantic_uses_to_thread(doc_entity: EntitySchema):
     assert mock_to_thread.call_count == 2  # _get_collection + coll.query
 
 
+async def test_find_by_id_empty_metadatas(doc_entity: EntitySchema):
+    """find_by_id handles empty metadatas list without IndexError."""
+    coll = MagicMock()
+    coll.get.return_value = {"ids": ["d1"], "metadatas": [], "documents": ["doc"]}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    result = await adapter.find_by_id("d1")
+    assert result == {"id": "d1", "document": "doc"}
+
+
+async def test_find_by_id_none_metadatas(doc_entity: EntitySchema):
+    """find_by_id handles None metadatas without TypeError."""
+    coll = MagicMock()
+    coll.get.return_value = {"ids": ["d1"], "metadatas": None, "documents": None}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    result = await adapter.find_by_id("d1")
+    assert result == {"id": "d1"}
+
+
+async def test_find_by_id_none_inner_metadata(doc_entity: EntitySchema):
+    """find_by_id handles [None] in metadatas without TypeError."""
+    coll = MagicMock()
+    coll.get.return_value = {"ids": ["d1"], "metadatas": [None], "documents": [None]}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    result = await adapter.find_by_id("d1")
+    assert result == {"id": "d1"}
+
+
+async def test_find_by_id_missing_ids_key(doc_entity: EntitySchema):
+    """find_by_id returns None when ids key is missing from result."""
+    coll = MagicMock()
+    coll.get.return_value = {"ids": [], "metadatas": [], "documents": []}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    result = await adapter.find_by_id("d1")
+    assert result is None
+
+
+async def test_search_semantic_empty_ids(doc_entity: EntitySchema):
+    """search_semantic returns empty list when ids is empty."""
+    coll = MagicMock()
+    coll.query.return_value = {"ids": [], "metadatas": [], "documents": [], "distances": []}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    results = await adapter.search_semantic("query")
+    assert results == []
+
+
+async def test_search_semantic_none_ids(doc_entity: EntitySchema):
+    """search_semantic returns empty list when ids is None."""
+    coll = MagicMock()
+    coll.query.return_value = {"ids": None, "metadatas": None, "documents": None, "distances": None}
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    results = await adapter.search_semantic("query")
+    assert results == []
+
+
+async def test_search_semantic_none_inner_metadatas(doc_entity: EntitySchema):
+    """search_semantic handles None in nested metadatas without TypeError."""
+    coll = MagicMock()
+    coll.query.return_value = {
+        "ids": [["d1"]],
+        "metadatas": [None],
+        "documents": [None],
+        "distances": [None],
+    }
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    results = await adapter.search_semantic("query")
+    assert len(results) == 1
+    assert results[0] == {"id": "d1"}
+
+
+async def test_search_semantic_empty_inner_lists(doc_entity: EntitySchema):
+    """search_semantic handles empty inner lists gracefully."""
+    coll = MagicMock()
+    coll.query.return_value = {
+        "ids": [["d1"]],
+        "metadatas": [[]],
+        "documents": [[]],
+        "distances": [[]],
+    }
+    adapter = _make_chroma_adapter(doc_entity, coll)
+
+    results = await adapter.search_semantic("query")
+    assert len(results) == 1
+    assert results[0] == {"id": "d1"}
+
+
 async def test_no_client_raises_runtime_error(doc_entity: EntitySchema):
     """Adapter with no client raises RuntimeError from _get_collection."""
     adapter = ChromaVectorAdapter(entity=doc_entity, client=None)
