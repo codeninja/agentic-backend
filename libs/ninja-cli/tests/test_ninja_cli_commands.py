@@ -202,6 +202,126 @@ class TestValidateName:
         assert "Invalid name" in result.output
 
 
+def _mock_introspect_engine(mock_schema):
+    """Create a mock IntrospectionEngine that returns mock_schema from run()."""
+    mock_engine_cls = MagicMock()
+    mock_engine = MagicMock()
+
+    async def fake_run(conn_strs, **kw):
+        return mock_schema
+
+    mock_engine.run = fake_run
+    mock_engine_cls.return_value = mock_engine
+    return mock_engine_cls
+
+
+def _make_schema(entities=None, relationships=None):
+    """Build an AgenticSchema for testing."""
+    from ninja_core.schema.project import AgenticSchema
+
+    return AgenticSchema(
+        project_name="untitled",
+        entities=entities or [],
+        relationships=relationships or [],
+    )
+
+
+def _make_entity(name, fields_spec):
+    """Build an EntitySchema. fields_spec is list of (name, type, is_pk) tuples."""
+    from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
+
+    fields = [
+        FieldSchema(name=fname, field_type=getattr(FieldType, ftype), primary_key=pk)
+        for fname, ftype, pk in fields_spec
+    ]
+    return EntitySchema(name=name, storage_engine=StorageEngine.SQL, fields=fields)
+
+
+class TestIntrospectCommand:
+    def test_introspect_json_output(self):
+        schema = _make_schema(
+            entities=[_make_entity("Users", [("id", "INTEGER", True), ("name", "STRING", False)])]
+        )
+        mock_cls = _mock_introspect_engine(schema)
+
+        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+            result = runner.invoke(app, ["introspect", "sqlite:///test.db"])
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["project_name"] == "untitled"
+        assert len(data["entities"]) == 1
+        assert data["entities"][0]["name"] == "Users"
+
+    def test_introspect_table_output(self):
+        schema = _make_schema(
+            entities=[_make_entity("Orders", [("id", "INTEGER", True), ("total", "FLOAT", False)])]
+        )
+        mock_cls = _mock_introspect_engine(schema)
+
+        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+            result = runner.invoke(app, ["introspect", "sqlite:///test.db", "--format", "table"])
+
+        assert result.exit_code == 0, result.output
+        assert "Orders" in result.output
+        assert "id, total" in result.output
+        assert "Discovered 1 entity(ies)" in result.output
+
+    def test_introspect_invalid_format(self):
+        result = runner.invoke(app, ["introspect", "sqlite:///test.db", "--format", "xml"])
+        assert result.exit_code == 1
+        assert "Unknown format" in result.output
+
+    def test_introspect_engine_error(self):
+        mock_cls = MagicMock()
+        mock_engine = MagicMock()
+
+        async def fake_run(conn_strs, **kw):
+            raise ValueError("Connection refused")
+
+        mock_engine.run = fake_run
+        mock_cls.return_value = mock_engine
+
+        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+            result = runner.invoke(app, ["introspect", "postgresql://bad/db"])
+
+        assert result.exit_code == 1
+        assert "Introspection failed" in result.output
+
+    def test_introspect_with_relationships(self):
+        from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
+
+        schema = _make_schema(
+            entities=[
+                _make_entity("Users", [("id", "INTEGER", True)]),
+                _make_entity("Orders", [("id", "INTEGER", True), ("user_id", "INTEGER", False)]),
+            ],
+            relationships=[
+                RelationshipSchema(
+                    name="orders_user_id_fk",
+                    source_entity="Orders",
+                    target_entity="Users",
+                    relationship_type=RelationshipType.HARD,
+                    cardinality=Cardinality.MANY_TO_ONE,
+                    source_field="user_id",
+                    target_field="id",
+                ),
+            ],
+        )
+        mock_cls = _mock_introspect_engine(schema)
+
+        with patch.dict("sys.modules", {"ninja_introspect": MagicMock(), "ninja_introspect.engine": MagicMock(IntrospectionEngine=mock_cls)}):
+            result = runner.invoke(app, ["introspect", "sqlite:///test.db", "--format", "table"])
+
+        assert result.exit_code == 0, result.output
+        assert "Orders -> Users" in result.output
+        assert "Relationships (1):" in result.output
+
+    def test_introspect_missing_connection_string(self):
+        result = runner.invoke(app, ["introspect"])
+        assert result.exit_code != 0
+
+
 class TestCreateCommands:
     def test_create_lib_missing_script(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
