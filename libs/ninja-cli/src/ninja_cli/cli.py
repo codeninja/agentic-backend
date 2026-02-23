@@ -105,6 +105,44 @@ def deploy(
     typer.echo(f"Wrote {len(written)} manifest(s) to {dest}.")
 
 
+@app.command()
+def introspect(
+    connection_string: str = typer.Argument(help="Database connection URI (e.g. postgresql://host/db, sqlite:///path)."),
+    format: str = typer.Option("json", "--format", "-f", help="Output format: json or table."),
+) -> None:
+    """Introspect a database and print discovered schema entities and relationships."""
+    if format not in ("json", "table"):
+        typer.echo(f"Unknown format '{format}'. Use 'json' or 'table'.", err=True)
+        raise typer.Exit(code=1)
+
+    import asyncio
+    import json as json_mod
+
+    from ninja_introspect.engine import IntrospectionEngine
+
+    engine = IntrospectionEngine(allow_private_hosts=True)
+
+    try:
+        schema = asyncio.run(engine.run([connection_string]))
+    except Exception as exc:
+        typer.echo(f"Introspection failed: {exc}", err=True)
+        raise typer.Exit(code=1) from None
+
+    if format == "json":
+        typer.echo(json_mod.dumps(schema.model_dump(mode="json"), indent=2))
+    else:
+        # Table format
+        typer.echo(f"Entities ({len(schema.entities)}):")
+        for entity in schema.entities:
+            fields = ", ".join(f.name for f in entity.fields)
+            typer.echo(f"  {entity.name}  [{fields}]")
+        if schema.relationships:
+            typer.echo(f"\nRelationships ({len(schema.relationships)}):")
+            for rel in schema.relationships:
+                typer.echo(f"  {rel.source_entity} -> {rel.target_entity}  ({rel.relationship_type.value})")
+        typer.echo(f"\nDiscovered {len(schema.entities)} entity(ies), {len(schema.relationships)} relationship(s).")
+
+
 _VALID_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 _MAX_NAME_LENGTH = 64
 

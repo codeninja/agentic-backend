@@ -3,7 +3,7 @@ name = "ninja-cli"
 version = "0.1.0"
 description = "Ninja CLI — Typer-based CLI for Ninja Stack operations"
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.0", "typer>=0.15", "ninja-core", "ninja-codegen", "ninja-deploy", "ninja-api", "uvicorn[standard]>=0.30"]
+dependencies = ["pydantic>=2.0", "typer>=0.15", "ninja-core", "ninja-codegen", "ninja-deploy", "ninja-api", "ninja-introspect", "uvicorn[standard]>=0.30"]
 
 [project.scripts]
 ninjastack = "ninja_cli.cli:app"
@@ -13,6 +13,7 @@ ninja-core = { workspace = true }
 ninja-codegen = { workspace = true }
 ninja-deploy = { workspace = true }
 ninja-api = { workspace = true }
+ninja-introspect = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
