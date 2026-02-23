@@ -3,7 +3,7 @@
 import time
 from types import SimpleNamespace
 
-from ninja_agents.tracing import AgentSpan, TraceContext
+from ninja_agents.tracing import AgentSpan, TraceContext, sanitize_summary
 
 
 class TestTraceContext:
@@ -194,3 +194,218 @@ class TestAgentSpan:
         )
         assert span.tool_calls[0].success is False
         assert span.tool_calls[0].error == "Something broke"
+
+    def test_domain_field_propagated(self) -> None:
+        """Spans tagged with a domain propagate it to tool call records."""
+        span = AgentSpan(agent_name="agent", domain="Finance")
+        record = span.record_tool_call(
+            tool_name="get",
+            input_summary="id=1",
+            output_summary="ok",
+            duration_ms=1.0,
+        )
+        assert record.domain == "Finance"
+        assert span.domain == "Finance"
+
+    def test_record_tool_call_sanitizes_summaries(self) -> None:
+        """Tool call recording must sanitize input and output summaries."""
+        span = AgentSpan(agent_name="agent")
+        record = span.record_tool_call(
+            tool_name="login",
+            input_summary="password=super_secret_123",
+            output_summary="token=abc123 user@example.com",
+            duration_ms=1.0,
+        )
+        assert "super_secret_123" not in record.input_summary
+        assert "user@example.com" not in record.output_summary
+
+
+class TestSanitizeSummary:
+    """Tests for the sanitize_summary helper."""
+
+    def test_redacts_password(self) -> None:
+        assert "my_pass" not in sanitize_summary("password=my_pass foo")
+
+    def test_redacts_api_key(self) -> None:
+        assert "sk-abc123" not in sanitize_summary("api_key=sk-abc123")
+
+    def test_redacts_email(self) -> None:
+        result = sanitize_summary("user john@example.com created")
+        assert "john@example.com" not in result
+        assert "***@***.***" in result
+
+    def test_redacts_ssn(self) -> None:
+        result = sanitize_summary("ssn: 123-45-6789")
+        assert "123-45-6789" not in result
+        assert "***-**-****" in result
+
+    def test_redacts_credit_card(self) -> None:
+        result = sanitize_summary("card: 4111-1111-1111-1111")
+        assert "4111-1111-1111-1111" not in result
+
+    def test_redacts_bearer_token(self) -> None:
+        result = sanitize_summary("Authorization: Bearer eyJhbGciOiJI...")
+        assert "eyJhbGciOiJI" not in result
+
+    def test_truncates_long_summaries(self) -> None:
+        long_input = "x" * 300
+        result = sanitize_summary(long_input)
+        assert len(result) <= 204  # 200 + "..."
+
+    def test_preserves_safe_content(self) -> None:
+        safe = "order_id=abc status=active"
+        assert sanitize_summary(safe) == safe
+
+    def test_custom_max_length(self) -> None:
+        result = sanitize_summary("a" * 50, max_length=10)
+        assert len(result) <= 14  # 10 + "..."
+
+
+class TestDomainTraceView:
+    """Tests for domain-scoped trace isolation."""
+
+    def test_domain_view_tags_spans(self) -> None:
+        """Spans created via a domain view are tagged with the domain."""
+        trace = TraceContext()
+        view = trace.domain_view("Finance")
+        span = view.start_span("agent_a")
+        assert span.domain == "Finance"
+        view.finish_span(span.span_id)
+        assert trace.spans[0].domain == "Finance"
+
+    def test_domain_view_shares_trace_id(self) -> None:
+        """Domain views use the same trace_id as the parent context."""
+        trace = TraceContext(trace_id="shared-id")
+        view = trace.domain_view("HR")
+        assert view.trace_id == "shared-id"
+
+    def test_domain_view_to_dict_isolates_spans(self) -> None:
+        """to_dict on a domain view only returns that domain's spans."""
+        trace = TraceContext()
+        finance_view = trace.domain_view("Finance")
+        hr_view = trace.domain_view("HR")
+
+        f_span = finance_view.start_span("finance_agent")
+        f_span.record_tool_call(
+            tool_name="get_salary",
+            input_summary="emp_id=1",
+            output_summary="salary=100000",
+            duration_ms=5.0,
+        )
+        finance_view.finish_span(f_span.span_id)
+
+        h_span = hr_view.start_span("hr_agent")
+        h_span.record_tool_call(
+            tool_name="get_employee",
+            input_summary="emp_id=1",
+            output_summary="name=John",
+            duration_ms=3.0,
+        )
+        hr_view.finish_span(h_span.span_id)
+
+        # Finance view should only see finance spans
+        finance_dict = finance_view.to_dict()
+        assert len(finance_dict["spans"]) == 1
+        assert finance_dict["spans"][0]["agent_name"] == "finance_agent"
+        assert finance_dict["spans"][0]["tool_calls"][0]["tool_name"] == "get_salary"
+
+        # HR view should only see HR spans
+        hr_dict = hr_view.to_dict()
+        assert len(hr_dict["spans"]) == 1
+        assert hr_dict["spans"][0]["agent_name"] == "hr_agent"
+
+        # Parent trace sees everything
+        full_dict = trace.to_dict()
+        assert len(full_dict["spans"]) == 2
+
+    def test_domain_view_token_isolation(self) -> None:
+        """Token counts on domain views only reflect that domain's spans."""
+        trace = TraceContext()
+        v1 = trace.domain_view("A")
+        v2 = trace.domain_view("B")
+
+        s1 = v1.start_span("agent_a")
+        s1.record_tokens(100, 50)
+        v1.finish_span(s1.span_id)
+
+        s2 = v2.start_span("agent_b")
+        s2.record_tokens(200, 80)
+        v2.finish_span(s2.span_id)
+
+        assert v1.total_input_tokens == 100
+        assert v1.total_output_tokens == 50
+        assert v2.total_input_tokens == 200
+        assert v2.total_output_tokens == 80
+        # Parent has totals
+        assert trace.total_input_tokens == 300
+        assert trace.total_output_tokens == 130
+
+    def test_domain_view_prevents_cross_domain_tool_leakage(self) -> None:
+        """A domain view must NOT expose tool calls from other domains."""
+        trace = TraceContext()
+        billing_view = trace.domain_view("Billing")
+        hr_view = trace.domain_view("HR")
+
+        # Billing agent records a sensitive tool call
+        b_span = billing_view.start_span("billing_agent")
+        b_span.record_tool_call(
+            tool_name="charge_card",
+            input_summary="card=4111111111111111",
+            output_summary="charged $500",
+            duration_ms=10.0,
+        )
+        billing_view.finish_span(b_span.span_id)
+
+        # HR view should see zero spans/tool calls
+        hr_dict = hr_view.to_dict()
+        assert len(hr_dict["spans"]) == 0
+        # Verify no billing data in HR's serialized output
+        hr_str = str(hr_dict)
+        assert "charge_card" not in hr_str
+        assert "charged" not in hr_str
+
+    def test_domain_view_record_adk_event(self) -> None:
+        """ADK events recorded via a domain view are tagged correctly."""
+        trace = TraceContext()
+        view = trace.domain_view("Sales")
+        event = SimpleNamespace(
+            author="sales_agent",
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=30,
+                candidates_token_count=15,
+            ),
+        )
+        view.record_adk_event(event)
+        assert view.total_input_tokens == 30
+        assert view.total_output_tokens == 15
+        # The auto-created span should be tagged with the domain
+        assert trace.spans[-1].domain == "Sales"
+
+    def test_to_dict_domain_filter(self) -> None:
+        """TraceContext.to_dict(domain=...) filters correctly."""
+        trace = TraceContext()
+        s1 = trace.start_span("a1", domain="X")
+        s1.record_tokens(10, 5)
+        trace.finish_span(s1.span_id)
+
+        s2 = trace.start_span("a2", domain="Y")
+        s2.record_tokens(20, 10)
+        trace.finish_span(s2.span_id)
+
+        x_dict = trace.to_dict(domain="X")
+        assert len(x_dict["spans"]) == 1
+        assert x_dict["total_input_tokens"] == 10
+
+        y_dict = trace.to_dict(domain="Y")
+        assert len(y_dict["spans"]) == 1
+        assert y_dict["total_input_tokens"] == 20
+
+        all_dict = trace.to_dict()
+        assert len(all_dict["spans"]) == 2
+        assert all_dict["total_input_tokens"] == 30
+
+    def test_domain_view_domain_property(self) -> None:
+        """DomainTraceView exposes the domain it's scoped to."""
+        trace = TraceContext()
+        view = trace.domain_view("MyDomain")
+        assert view.domain == "MyDomain"

@@ -28,7 +28,10 @@ from ninja_agents.safety import (
     validate_tool_name,
 )
 from ninja_agents.tools import generate_crud_tools, invoke_tool
-from ninja_agents.tracing import TraceContext
+from ninja_agents.tracing import DomainTraceView, TraceContext
+
+# Type alias for trace parameters — accepts either the full context or a domain-scoped view.
+TraceParam = TraceContext | DomainTraceView | None
 
 # Pattern for valid agent-facing names: starts with a letter, then letters/digits/underscores/hyphens/spaces.
 _SAFE_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_ -]*$")
@@ -115,7 +118,7 @@ class DataAgent(BaseAgent):
     def execute(
         self,
         tool_name: str,
-        trace: TraceContext | None = None,
+        trace: TraceParam = None,
         **kwargs: Any,
     ) -> Any:
         """Execute a tool by name.
@@ -249,7 +252,7 @@ class DomainAgent:
         self,
         entity_name: str,
         tool_name: str,
-        trace: TraceContext | None = None,
+        trace: TraceParam = None,
         **kwargs: Any,
     ) -> Any:
         """Delegate a tool call to a DataAgent.
@@ -271,7 +274,7 @@ class DomainAgent:
             if span:
                 trace.finish_span(span.span_id)
 
-    def execute(self, request: str, trace: TraceContext | None = None) -> dict[str, Any]:
+    def execute(self, request: str, trace: TraceParam = None) -> dict[str, Any]:
         """Process a domain-level request (stub — full impl uses LLM).
 
         Validates request size before processing.
@@ -335,7 +338,7 @@ class CoordinatorAgent:
         self,
         request: str,
         target_domains: list[str],
-        trace: TraceContext | None = None,
+        trace: TraceParam = None,
     ) -> dict[str, Any]:
         """Route a request to specific domains and collect results.
 

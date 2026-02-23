@@ -93,8 +93,8 @@ def invoke_tool(
         if span is not None:
             span.record_tool_call(
                 tool_name=getattr(tool, "__name__", "unknown"),
-                input_summary=str(kwargs)[:200],
-                output_summary="" if not success else str(result)[:200],  # type: ignore[possibly-undefined]
+                input_summary=str(kwargs),
+                output_summary="" if not success else str(result),  # type: ignore[possibly-undefined]
                 duration_ms=duration_ms,
                 success=success,
                 error=error,
