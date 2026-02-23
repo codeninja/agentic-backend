@@ -85,6 +85,29 @@ class TestOrchestrator:
         agent_names = [s.agent_name for s in trace.spans]
         assert "coordinator" in agent_names
 
+    @pytest.mark.asyncio
+    async def test_fan_out_domain_trace_isolation(
+        self,
+        order_entity: EntitySchema,
+        shipment_entity: EntitySchema,
+        billing_domain: DomainSchema,
+        logistics_domain: DomainSchema,
+    ) -> None:
+        """Each domain gets its own trace view — spans are tagged by domain."""
+        orch = self._build_orchestrator(order_entity, shipment_entity, billing_domain, logistics_domain)
+        trace = TraceContext()
+        await orch.fan_out("status", target_domains=["Billing", "Logistics"], trace=trace)
+
+        # Domain agent spans should be tagged with their domain
+        billing_spans = trace.to_dict(domain="Billing")["spans"]
+        logistics_spans = trace.to_dict(domain="Logistics")["spans"]
+        assert len(billing_spans) >= 1
+        assert len(logistics_spans) >= 1
+        # Cross-check: billing spans shouldn't appear in logistics view
+        billing_agents = {s["agent_name"] for s in billing_spans}
+        logistics_agents = {s["agent_name"] for s in logistics_spans}
+        assert billing_agents.isdisjoint(logistics_agents)
+
     def test_fan_out_sync(
         self,
         order_entity: EntitySchema,

@@ -23,7 +23,7 @@ from ninja_agents.safety import (
     validate_tool_name,
 )
 from ninja_agents.tools import generate_crud_tools
-from ninja_agents.tracing import TraceContext
+from ninja_agents.tracing import DomainTraceView, TraceContext, sanitize_summary
 
 __all__ = [
     "AgentInputTooLarge",
@@ -31,6 +31,7 @@ __all__ = [
     "CoordinatorAgent",
     "DataAgent",
     "DomainAgent",
+    "DomainTraceView",
     "InvalidToolAccess",
     "Orchestrator",
     "TraceContext",
@@ -41,6 +42,7 @@ __all__ = [
     "safe_error_message",
     "sanitize_agent_name",
     "sanitize_error",
+    "sanitize_summary",
     "sanitize_for_prompt",
     "sanitize_identifier",
     "validate_request_size",

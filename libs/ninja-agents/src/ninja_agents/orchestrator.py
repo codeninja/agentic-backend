@@ -13,8 +13,8 @@ from typing import Any
 from google.adk.agents import LlmAgent, ParallelAgent
 
 from ninja_agents.base import CoordinatorAgent
-from ninja_agents.safety import validate_request_size
-from ninja_agents.tracing import TraceContext
+from ninja_agents.safety import sanitize_error, validate_request_size
+from ninja_agents.tracing import DomainTraceView, TraceContext
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,13 @@ async def _execute_domain(
     coordinator: CoordinatorAgent,
     domain_name: str,
     request: str,
-    trace: TraceContext | None,
+    trace: DomainTraceView | None,
 ) -> tuple[str, dict[str, Any]]:
-    """Execute a single domain agent (runs in executor for sync agents)."""
+    """Execute a single domain agent with a domain-scoped trace view.
+
+    Each domain receives its own :class:`DomainTraceView` so that tool
+    input/output recorded during execution is isolated from other domains.
+    """
     da = coordinator.get_domain_agent(domain_name)
     if da is None:
         return domain_name, {"error": f"Unknown domain: {domain_name}"}
@@ -97,7 +101,15 @@ class Orchestrator:
         domains = target_domains or self.coordinator.domain_names
         span = trace.start_span(self.coordinator.name) if trace else None
         try:
-            tasks = [_execute_domain(self.coordinator, d, request, trace) for d in domains]
+            # Create per-domain trace views so each domain only sees its own
+            # tool I/O — prevents cross-domain data leakage.
+            domain_views: dict[str, DomainTraceView | None] = {
+                d: trace.domain_view(d) if trace else None for d in domains
+            }
+            tasks = [
+                _execute_domain(self.coordinator, d, request, domain_views[d])
+                for d in domains
+            ]
             results_list = await asyncio.gather(*tasks, return_exceptions=True)
             results: dict[str, Any] = {}
             errors: dict[str, dict[str, Any]] = {}
