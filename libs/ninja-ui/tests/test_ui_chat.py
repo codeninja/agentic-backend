@@ -63,7 +63,7 @@ class TestChatGenerator:
         content = (tmp_path / "chat" / "index.html").read_text()
         assert "GQL_ENDPOINT" in content
         assert "gqlQuery" in content
-        assert "ask_${activeDomain" in content
+        assert "ask_${domainKey}" in content
 
     def test_chat_page_send_message(self, sample_asd, tmp_path):
         gen = ChatGenerator(sample_asd)

@@ -85,11 +85,12 @@ async function sendMessage() {
 
   document.getElementById("typing").style.display = "block";
 
-  const query = `query AskDomain($query: String!) { ask_${activeDomain.toLowerCase()}(query: $query) }`;
+  const domainKey = activeDomain.toLowerCase();
+  const query = `query AskAgent($query: String!) { ask_${domainKey}(query: $query) }`;
   const data = await gqlQuery(query, { query: text });
   document.getElementById("typing").style.display = "none";
 
-  const result = data?.data?.[`ask_${activeDomain.toLowerCase()}`];
+  const result = data?.data?.[`ask_${domainKey}`];
   if (result) {
     const parsed = typeof result === "string" ? tryParseJson(result) : result;
     const answer = parsed?.answer || parsed?.response || String(result);
@@ -104,8 +105,8 @@ async function sendMessage() {
 async function gqlQuery(query, variables) {
   const res = await fetch(GQL_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
+    headers: { "Content-Type": "application/json", "X-Requested-With": "NinjaStack" },
+    body: JSON.stringify({ query, variables: variables || {} }),
   });
   return res.json();
 }

@@ -2650,17 +2650,21 @@ name = "ninja-gql"
 version = "0.1.0"
 source = { editable = "libs/ninja-gql" }
 dependencies = [
+    { name = "ninja-auth" },
     { name = "ninja-core" },
     { name = "ninja-persistence" },
     { name = "pydantic" },
+    { name = "starlette" },
     { name = "strawberry-graphql" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "ninja-auth", editable = "libs/ninja-auth" },
     { name = "ninja-core", editable = "libs/ninja-core" },
     { name = "ninja-persistence", editable = "libs/ninja-persistence" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "starlette", specifier = ">=0.27" },
     { name = "strawberry-graphql", specifier = ">=0.236" },
 ]
 

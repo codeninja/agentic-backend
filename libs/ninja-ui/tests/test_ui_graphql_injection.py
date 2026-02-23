@@ -77,33 +77,33 @@ class TestCrudGraphQLVariables:
     def test_update_mutation_uses_variables(self, sample_asd, customer_entity, tmp_path):
         """The update mutation must declare $id and $patch as GraphQL variables."""
         html = _generate_crud_html(sample_asd, customer_entity, tmp_path)
-        assert "mutation($id: ID!, $patch: JSON!)" in html
+        assert "mutation UpdateEntity($id: String!, $patch: JSON!)" in html
 
     def test_create_mutation_uses_variables(self, sample_asd, customer_entity, tmp_path):
         """The create mutation must declare $input as a GraphQL variable."""
         html = _generate_crud_html(sample_asd, customer_entity, tmp_path)
-        assert "mutation($input: JSON!)" in html
+        assert "mutation CreateEntity($input: JSON!)" in html
 
     def test_delete_mutation_uses_variables(self, sample_asd, customer_entity, tmp_path):
         """The delete mutation must declare $id as a GraphQL variable."""
         html = _generate_crud_html(sample_asd, customer_entity, tmp_path)
-        assert "mutation($id: ID!)" in html
+        assert "mutation DeleteEntity($id: String!)" in html
 
     def test_list_query_uses_variables(self, sample_asd, customer_entity, tmp_path):
         """The list query must use $limit and $offset variables."""
         html = _generate_crud_html(sample_asd, customer_entity, tmp_path)
-        assert "query($limit: Int!, $offset: Int!)" in html
+        assert "query ListEntities($limit: Int!, $offset: Int!)" in html
 
     def test_semantic_search_uses_variables(self, sample_asd, product_entity, tmp_path):
         """Semantic search must pass the query string as a GraphQL variable."""
         html = _generate_crud_html(sample_asd, product_entity, tmp_path)
-        assert "query($query: String!)" in html
+        assert "query SearchEntities($query: String!)" in html
 
     def test_gqlquery_accepts_variables_param(self, sample_asd, customer_entity, tmp_path):
         """The gqlQuery function must accept and forward a variables parameter."""
         html = _generate_crud_html(sample_asd, customer_entity, tmp_path)
         assert "async function gqlQuery(query, variables)" in html
-        assert "JSON.stringify({ query, variables })" in html
+        assert "JSON.stringify({ query, variables: variables || {} })" in html
 
     def test_action_buttons_use_event_listeners(self, sample_asd, customer_entity, tmp_path):
         """Action buttons must use addEventListener, not inline onclick with interpolation."""
@@ -137,10 +137,10 @@ class TestChatGraphQLVariables:
     def test_chat_query_uses_variables(self, sample_asd, tmp_path):
         """The chat ask query must declare $query as a GraphQL variable."""
         html = _generate_chat_html(sample_asd, tmp_path)
-        assert "query($query: String!)" in html
+        assert "query AskAgent($query: String!)" in html
 
     def test_chat_gqlquery_accepts_variables(self, sample_asd, tmp_path):
         """The chat gqlQuery function must accept and forward a variables parameter."""
         html = _generate_chat_html(sample_asd, tmp_path)
         assert "async function gqlQuery(query, variables)" in html
-        assert "JSON.stringify({ query, variables })" in html
+        assert "JSON.stringify({ query, variables: variables || {} })" in html

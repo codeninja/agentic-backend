@@ -113,15 +113,15 @@ function hideCreateForm() { document.getElementById("create-form").style.display
 async function gqlQuery(query, variables) {
   const res = await fetch(GQL_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, variables }),
+    headers: { "Content-Type": "application/json", "X-Requested-With": "NinjaStack" },
+    body: JSON.stringify({ query, variables: variables || {} }),
   });
   return res.json();
 }
 
 async function loadData() {
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const query = `query ListEntities($limit: Int, $offset: Int) { list_${ENTITY}(limit: $limit, offset: $offset) { ${fieldNames} } }`;
+  const query = `query ListEntities($limit: Int!, $offset: Int!) { list_${ENTITY}(limit: $limit, offset: $offset) { ${fieldNames} } }`;
   const data = await gqlQuery(query, { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE });
   renderTable(data?.data?.[`list_${ENTITY}`] || []);
 }
@@ -197,7 +197,7 @@ async function saveEdit(btn, id) {
   const patch = {};
   inputs.forEach(inp => { patch[inp.dataset.field] = inp.value; });
   const fieldNames = FIELDS.map(f => f.name).join(" ");
-  const query = `mutation UpdateEntity($id: ID!, $patch: JSON!) { update_${ENTITY}(id: $id, patch: $patch) { ${fieldNames} } }`;
+  const query = `mutation UpdateEntity($id: String!, $patch: JSON!) { update_${ENTITY}(id: $id, patch: $patch) { ${fieldNames} } }`;
   await gqlQuery(query, { id: id, patch: patch });
   tr.classList.remove("editing");
   loadData();
@@ -221,7 +221,7 @@ async function createRecord(e) {
 
 async function deleteRecord(id) {
   if (!confirm("Delete this record?")) return;
-  const query = `mutation DeleteEntity($id: ID!) { delete_${ENTITY}(id: $id) }`;
+  const query = `mutation DeleteEntity($id: String!) { delete_${ENTITY}(id: $id) }`;
   await gqlQuery(query, { id: id });
   loadData();
 }
@@ -256,11 +256,11 @@ document.querySelectorAll(".sort-header").forEach(th => {
 {% if has_embedding %}
 document.getElementById("semantic-search")?.addEventListener("keydown", async function(e) {
   if (e.key !== "Enter") return;
-  const searchText = e.target.value;
-  if (!searchText) { loadData(); return; }
+  const searchQuery = e.target.value;
+  if (!searchQuery) { loadData(); return; }
   const fieldNames = FIELDS.map(f => f.name).join(" ");
   const query = `query SearchEntities($query: String!) { search_${ENTITY}(query: $query) { ${fieldNames} } }`;
-  const data = await gqlQuery(query, { query: searchText });
+  const data = await gqlQuery(query, { query: searchQuery });
   renderTable(data?.data?.[`search_${ENTITY}`] || []);
 });
 {% endif %}
