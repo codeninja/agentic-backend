@@ -95,8 +95,7 @@ class Orchestrator:
         """
         validate_request_size(request)
         domains = target_domains or self.coordinator.domain_names
-        if trace:
-            trace.start_span(self.coordinator.name)
+        span = trace.start_span(self.coordinator.name) if trace else None
         try:
             tasks = [_execute_domain(self.coordinator, d, request, trace) for d in domains]
             results_list = await asyncio.gather(*tasks, return_exceptions=True)
@@ -122,8 +121,8 @@ class Orchestrator:
             results["errors"] = errors
             return results
         finally:
-            if trace:
-                trace.finish_span(self.coordinator.name)
+            if span:
+                trace.finish_span(span.span_id)
 
     def fan_out_sync(
         self,

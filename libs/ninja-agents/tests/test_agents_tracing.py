@@ -20,17 +20,18 @@ class TestTraceContext:
         trace = TraceContext()
         span = trace.start_span("test_agent")
         assert span.agent_name == "test_agent"
+        assert span.span_id  # unique key assigned
         assert span.end_time is None
-        trace.finish_span("test_agent")
+        trace.finish_span(span.span_id)
         assert span.end_time is not None
         assert span.duration_ms >= 0
 
     def test_multiple_spans(self) -> None:
         trace = TraceContext()
-        trace.start_span("agent_a")
-        trace.start_span("agent_b")
-        trace.finish_span("agent_a")
-        trace.finish_span("agent_b")
+        span_a = trace.start_span("agent_a")
+        span_b = trace.start_span("agent_b")
+        trace.finish_span(span_a.span_id)
+        trace.finish_span(span_b.span_id)
         assert len(trace.spans) == 2
 
     def test_total_tokens(self) -> None:
@@ -38,7 +39,7 @@ class TestTraceContext:
         span = trace.start_span("agent")
         span.record_tokens(100, 50)
         span.record_tokens(200, 100)
-        trace.finish_span("agent")
+        trace.finish_span(span.span_id)
         assert trace.total_input_tokens == 300
         assert trace.total_output_tokens == 150
 
@@ -52,7 +53,7 @@ class TestTraceContext:
             duration_ms=5.0,
         )
         span.record_tokens(10, 20)
-        trace.finish_span("agent")
+        trace.finish_span(span.span_id)
 
         d = trace.to_dict()
         assert d["trace_id"] == "test-trace"
@@ -65,7 +66,7 @@ class TestTraceContext:
 
     def test_record_adk_event_captures_tokens(self) -> None:
         trace = TraceContext()
-        trace.start_span("my_agent")
+        span = trace.start_span("my_agent")
         # Simulate an ADK event with usage_metadata
         event = SimpleNamespace(
             author="my_agent",
@@ -75,7 +76,7 @@ class TestTraceContext:
             ),
         )
         trace.record_adk_event(event)
-        trace.finish_span("my_agent")
+        trace.finish_span(span.span_id)
         assert trace.total_input_tokens == 50
         assert trace.total_output_tokens == 25
 
@@ -84,6 +85,82 @@ class TestTraceContext:
         event = SimpleNamespace(author="agent", usage_metadata=None)
         trace.record_adk_event(event)
         assert trace.total_input_tokens == 0
+
+    # -- Duplicate name collision tests ------------------------------------
+
+    def test_duplicate_agent_names_do_not_collide(self) -> None:
+        """Two agents with the same name get separate spans."""
+        trace = TraceContext()
+        span1 = trace.start_span("worker")
+        span2 = trace.start_span("worker")
+
+        # They must have different span IDs
+        assert span1.span_id != span2.span_id
+        # Both should be in the spans list
+        assert len(trace.spans) == 2
+
+        # Finishing one should not affect the other
+        span1.record_tokens(100, 50)
+        span2.record_tokens(200, 80)
+        trace.finish_span(span1.span_id)
+
+        # span2 should still be active (not finished)
+        assert span2.end_time is None
+
+        trace.finish_span(span2.span_id)
+        assert span1.end_time is not None
+        assert span2.end_time is not None
+
+        # Token totals should reflect both spans
+        assert trace.total_input_tokens == 300
+        assert trace.total_output_tokens == 130
+
+    def test_duplicate_names_in_to_dict(self) -> None:
+        """Serialization preserves all spans even with duplicate names."""
+        trace = TraceContext(trace_id="dup-test")
+        span1 = trace.start_span("worker")
+        span2 = trace.start_span("worker")
+        span1.record_tokens(10, 5)
+        span2.record_tokens(20, 10)
+        trace.finish_span(span1.span_id)
+        trace.finish_span(span2.span_id)
+
+        d = trace.to_dict()
+        assert len(d["spans"]) == 2
+        assert d["spans"][0]["agent_name"] == "worker"
+        assert d["spans"][1]["agent_name"] == "worker"
+        assert d["total_input_tokens"] == 30
+        assert d["total_output_tokens"] == 15
+
+    def test_adk_event_attributes_to_most_recent_active_span(self) -> None:
+        """ADK events go to the most recently started active span for that agent."""
+        trace = TraceContext()
+        span1 = trace.start_span("llm_agent")
+        span2 = trace.start_span("llm_agent")
+
+        event = SimpleNamespace(
+            author="llm_agent",
+            usage_metadata=SimpleNamespace(
+                prompt_token_count=40,
+                candidates_token_count=20,
+            ),
+        )
+        trace.record_adk_event(event)
+
+        # Tokens should go to the most recent active span (span2)
+        assert span2.input_tokens == 40
+        assert span2.output_tokens == 20
+        assert span1.input_tokens == 0
+        assert span1.output_tokens == 0
+
+    def test_span_ids_are_unique_across_names(self) -> None:
+        """Span IDs are globally unique, not just per agent name."""
+        trace = TraceContext()
+        ids = set()
+        for name in ["a", "b", "a", "b", "c"]:
+            span = trace.start_span(name)
+            ids.add(span.span_id)
+        assert len(ids) == 5
 
 
 class TestAgentSpan:
