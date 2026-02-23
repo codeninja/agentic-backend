@@ -10,6 +10,7 @@ from ninja_core.schema.entity import EntitySchema, FieldType
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from ninja_persistence.adapters import _validate_limit
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -188,7 +189,14 @@ class SQLAdapter:
             ) from exc
 
     async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        """Retrieve multiple records matching the given filters."""
+        """Retrieve multiple records matching the given filters.
+
+        Args:
+            filters: Column equality filters.
+            limit: Max rows to return (1–1000). Values above 1000 are capped;
+                   values below 1 raise ``ValueError``.
+        """
+        limit = _validate_limit(limit)
         stmt = self._table.select().limit(limit)
         if filters:
             for col_name, value in filters.items():
@@ -314,7 +322,13 @@ class SQLAdapter:
 
         Uses pgvector cosine distance when PostgreSQL + pgvector is available,
         otherwise delegates to the configured ``vector_sidecar``.
+
+        Args:
+            query: The search query or embedding vector.
+            limit: Max results to return (1–1000). Values above 1000 are capped;
+                   values below 1 raise ``ValueError``.
         """
+        limit = _validate_limit(limit)
         if self._pgvector_available:
             return await self._pgvector_search(query, limit)
         if self._vector_sidecar is not None:
