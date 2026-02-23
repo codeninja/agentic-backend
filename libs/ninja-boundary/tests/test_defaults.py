@@ -85,3 +85,24 @@ class TestDefaultResolver:
         field = _field("updated_at", FieldType.DATETIME)
         resolver.resolve(data, field, "User")
         assert isinstance(data["updated_at"], datetime)
+
+    def test_nullable_bool_stays_absent(self):
+        resolver = DefaultResolver()
+        data: dict = {}
+        field = _field("is_verified", FieldType.BOOLEAN, nullable=True)
+        resolver.resolve(data, field, "User")
+        assert "is_verified" not in data
+
+    def test_non_nullable_bool_still_gets_false(self):
+        resolver = DefaultResolver()
+        data: dict = {}
+        field = _field("active", FieldType.BOOLEAN, nullable=False)
+        resolver.resolve(data, field, "User")
+        assert data["active"] is False
+
+    def test_nullable_bool_with_explicit_value_preserved(self):
+        resolver = DefaultResolver()
+        data = {"is_verified": True}
+        field = _field("is_verified", FieldType.BOOLEAN, nullable=True)
+        resolver.resolve(data, field, "User")
+        assert data["is_verified"] is True

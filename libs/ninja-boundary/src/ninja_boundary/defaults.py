@@ -62,7 +62,7 @@ class DefaultResolver:
             return data
 
         # Nullable fields can stay None
-        if field.nullable and field.field_type not in (FieldType.BOOLEAN,):
+        if field.nullable:
             return data
 
         # Check custom defaults
