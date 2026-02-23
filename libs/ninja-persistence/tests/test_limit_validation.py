@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
@@ -11,7 +11,6 @@ from ninja_persistence.adapters.chroma import ChromaVectorAdapter
 from ninja_persistence.adapters.mongo import MongoAdapter
 from ninja_persistence.adapters.sql import SQLAdapter
 from sqlalchemy.ext.asyncio import create_async_engine
-
 
 # ---------------------------------------------------------------------------
 # Unit tests for the shared _validate_limit helper

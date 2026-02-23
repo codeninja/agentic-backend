@@ -13,7 +13,7 @@ from typing import Any
 from google.adk.agents import LlmAgent, ParallelAgent
 
 from ninja_agents.base import CoordinatorAgent
-from ninja_agents.safety import sanitize_error, validate_request_size
+from ninja_agents.safety import validate_request_size
 from ninja_agents.tracing import TraceContext
 
 logger = logging.getLogger(__name__)

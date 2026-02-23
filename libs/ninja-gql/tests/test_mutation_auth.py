@@ -10,7 +10,6 @@ from ninja_auth.context import ANONYMOUS_USER, UserContext
 from ninja_core.schema.project import AgenticSchema
 from ninja_gql.schema import build_schema
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

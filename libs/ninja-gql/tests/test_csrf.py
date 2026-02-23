@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from ninja_gql.csrf import (
     CSRFConfig,
     CSRFMiddleware,
@@ -15,7 +14,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Token helpers

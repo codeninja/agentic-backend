@@ -23,7 +23,6 @@ from ninja_agents.safety import (
     AgentSafetyError,
     InvalidToolAccess,
     safe_error_message,
-    sanitize_for_prompt,
     validate_request_size,
     validate_tool_kwargs_size,
     validate_tool_name,

@@ -12,7 +12,7 @@ from typing import Any, AsyncGenerator, Callable
 import strawberry
 from ninja_core.schema.entity import EntitySchema
 
-from ninja_gql.event_bus import EntityChangeEvent, EventBus, get_event_bus
+from ninja_gql.event_bus import EventBus, get_event_bus
 from ninja_gql.resolvers.crud import _snake
 
 

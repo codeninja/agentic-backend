@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from ninja_core.schema.entity import EntitySchema, FieldSchema, FieldType, StorageEngine
-from ninja_persistence.adapters.mongo import MongoAdapter, _is_connection_error, _is_duplicate_key_error, _reject_mongo_operators
+from ninja_persistence.adapters.mongo import (
+    MongoAdapter,
+    _is_connection_error,
+    _is_duplicate_key_error,
+    _reject_mongo_operators,
+)
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,

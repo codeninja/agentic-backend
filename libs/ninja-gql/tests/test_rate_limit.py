@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 from ninja_gql.rate_limit import (
     GraphQLRateLimitConfig,
     GraphQLRateLimitMiddleware,
-    _client_ip,
     _is_mutation,
 )
 from starlette.applications import Starlette
@@ -14,7 +12,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Config model

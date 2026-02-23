@@ -11,7 +11,11 @@ Usage:
     python3 scripts/plan_tickets.py --dry-run                # Preview without changes
     python3 scripts/plan_tickets.py --issues 124 125 130     # Only specific issues
 """
-import subprocess, json, sys, re, os, argparse
+import argparse
+import json
+import os
+import re
+import subprocess
 
 # Board constants
 PROJECT_ID = "PVT_kwHNOkLOAT6Qtg"
@@ -202,19 +206,19 @@ def move_ticket(num, target_option_id):
     """Move an issue to a board status column."""
     node_id = gh(
         "api", "graphql", "-f",
-        f'query=query($o:String!,$r:String!,$n:Int!){{repository(owner:$o,name:$r){{issue(number:$n){{id}}}}}}',
+        'query=query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){issue(number:$n){id}}}',
         "-F", f"o={OWNER}", "-F", f"r={REPO}", "-F", f"n={num}",
         "-q", ".data.repository.issue.id",
     )
     item_id = gh(
         "api", "graphql", "-f",
-        f'query=mutation($p:ID!,$c:ID!){{addProjectV2ItemById(input:{{projectId:$p,contentId:$c}}){{item{{id}}}}}}',
+        'query=mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}',
         "-F", f"p={PROJECT_ID}", "-F", f"c={node_id}",
         "-q", ".data.addProjectV2ItemById.item.id",
     )
     gh(
         "api", "graphql", "-f",
-        f'query=mutation($p:ID!,$i:ID!,$f:ID!,$v:String!){{updateProjectV2ItemFieldValue(input:{{projectId:$p,itemId:$i,fieldId:$f,value:{{singleSelectOptionId:$v}}}}){{projectV2Item{{id}}}}}}',
+        'query=mutation($p:ID!,$i:ID!,$f:ID!,$v:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$v}}){projectV2Item{id}}}',
         "-F", f"p={PROJECT_ID}", "-F", f"i={item_id}", "-F", f"f={FIELD_ID}", "-F", f"v={target_option_id}",
     )
 

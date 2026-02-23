@@ -5,12 +5,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-import strawberry
-
 from ninja_gql.event_bus import ChangeType, EntityChangeEvent, EventBus, get_event_bus
 from ninja_gql.resolvers.subscription import EntityChangePayload, make_subscription_resolver
 from ninja_gql.schema import build_schema
-
 
 # ---------------------------------------------------------------------------
 # EventBus unit tests

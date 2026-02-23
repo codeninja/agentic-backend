@@ -14,7 +14,6 @@ from ninja_persistence.adapters.mongo import MongoAdapter
 from ninja_persistence.adapters.sql import SQLAdapter
 from sqlalchemy.ext.asyncio import create_async_engine
 
-
 # ---------------------------------------------------------------------------
 # Unit tests for _validate_offset helper
 # ---------------------------------------------------------------------------

@@ -12,7 +12,6 @@ from typing import Any
 
 from ninja_core.schema.entity import EntitySchema, FieldType
 
-
 # ---------------------------------------------------------------------------
 # Field-type validators
 # ---------------------------------------------------------------------------

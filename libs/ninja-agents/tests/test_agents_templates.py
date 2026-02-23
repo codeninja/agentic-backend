@@ -1,7 +1,6 @@
 """Tests for ninja_agents.templates path-traversal protection."""
 
 import pytest
-
 from ninja_agents.templates import TEMPLATES_DIR, get_template
 
 

@@ -2,23 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
-import strawberry
 from graphql import parse as gql_parse
 from ninja_core.schema.project import AgenticSchema
 from ninja_gql.schema import build_schema
 from ninja_gql.security import (
     GraphQLSecurityConfig,
-    IntrospectionControlExtension,
-    QueryComplexityExtension,
-    QueryDepthExtension,
     _measure_complexity,
     _measure_depth,
     build_security_extensions,
 )
-
 
 # ---------------------------------------------------------------------------
 # Introspection control
