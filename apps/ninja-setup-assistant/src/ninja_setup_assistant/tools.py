@@ -472,9 +472,21 @@ def create_adk_tools(workspace: SchemaWorkspace) -> list[Callable[..., Any]]:
 
 
 def _to_bool(value: object) -> bool:
-    """Coerce a value to bool (handles string 'true'/'false' from LLM)."""
+    """Coerce a value to bool (handles string 'true'/'false' from LLM).
+
+    Raises:
+        ValueError: If *value* is a string not recognised as a boolean.
+    """
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value.lower() in ("true", "1", "yes")
+        normalized = value.lower()
+        if normalized in ("true", "1", "yes"):
+            return True
+        if normalized in ("false", "0", "no"):
+            return False
+        raise ValueError(
+            f"Cannot convert {value!r} to bool. Expected one of: "
+            "true/false, yes/no, 1/0."
+        )
     return bool(value)

@@ -58,7 +58,7 @@ class TestAddEntity:
         result = add_entity(
             workspace,
             name="Product",
-            fields=[{"name": "id", "field_type": "string"}],
+            fields=[{"name": "id", "field_type": "string", "primary_key": True}],
             storage_engine="mongo",
         )
         assert "mongo" in result
@@ -68,19 +68,19 @@ class TestAddEntity:
         add_entity(
             workspace,
             name="Order",
-            fields=[{"name": "id", "field_type": "uuid"}],
+            fields=[{"name": "id", "field_type": "uuid", "primary_key": True}],
             description="Customer orders",
         )
         assert workspace.schema.entities[0].description == "Customer orders"
 
     def test_duplicate_entity_rejected(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
-        result = add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "string"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        result = add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "string", "primary_key": True}])
         assert "already exists" in result
         assert len(workspace.schema.entities) == 1
 
     def test_field_type_defaults_to_string(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="Tag", fields=[{"name": "label"}])
+        add_entity(workspace, name="Tag", fields=[{"name": "label", "primary_key": True}])
         assert workspace.schema.entities[0].fields[0].field_type == FieldType.STRING
 
     def test_boolean_fields_from_string(self, workspace: SchemaWorkspace) -> None:
@@ -94,8 +94,8 @@ class TestAddEntity:
         assert field.nullable is False
 
     def test_multiple_entities(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
-        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         assert len(workspace.schema.entities) == 2
 
 
@@ -107,8 +107,8 @@ class TestAddEntity:
 class TestAddRelationship:
     @pytest.fixture(autouse=True)
     def _setup_entities(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
-        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
 
     def test_add_basic_relationship(self, workspace: SchemaWorkspace) -> None:
         result = add_relationship(
@@ -116,6 +116,8 @@ class TestAddRelationship:
             name="user_posts",
             source_entity="Post",
             target_entity="User",
+            source_field="author_id",
+            target_field="id",
         )
         assert "Added relationship" in result
         assert len(workspace.schema.relationships) == 1
@@ -132,6 +134,8 @@ class TestAddRelationship:
             source_entity="User",
             target_entity="Post",
             cardinality="one_to_many",
+            source_field="id",
+            target_field="author_id",
         )
         assert workspace.schema.relationships[0].cardinality == Cardinality.ONE_TO_MANY
 
@@ -188,8 +192,8 @@ class TestAddRelationship:
 class TestCreateDomain:
     @pytest.fixture(autouse=True)
     def _setup_entities(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
-        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
 
     def test_create_domain(self, workspace: SchemaWorkspace) -> None:
         result = create_domain(workspace, name="Content", entities=["User", "Post"])
@@ -225,22 +229,22 @@ class TestReviewSchema:
         assert "No entities defined" in result
 
     def test_schema_with_entities(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         result = review_schema(workspace)
         assert "User" in result
         assert "sql" in result
         assert "Entities (1)" in result
 
     def test_schema_with_relationships(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
-        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid"}])
-        add_relationship(workspace, name="user_posts", source_entity="Post", target_entity="User")
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_relationship(workspace, name="user_posts", source_entity="Post", target_entity="User", source_field="author_id", target_field="id")
         result = review_schema(workspace)
         assert "Relationships (1)" in result
         assert "user_posts" in result
 
     def test_schema_with_domains(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         create_domain(workspace, name="Users", entities=["User"])
         result = review_schema(workspace)
         assert "Domains (1)" in result
@@ -257,7 +261,7 @@ class TestConfirmSchema:
         assert "Cannot confirm" in result
 
     def test_confirm_valid_schema(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         result = confirm_schema(workspace)
         data = json.loads(result)
         assert data["project_name"] == "test-project"
@@ -265,9 +269,9 @@ class TestConfirmSchema:
         assert data["entities"][0]["name"] == "User"
 
     def test_confirm_preserves_all_data(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
-        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid"}])
-        add_relationship(workspace, name="user_posts", source_entity="Post", target_entity="User")
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_entity(workspace, name="Post", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
+        add_relationship(workspace, name="user_posts", source_entity="Post", target_entity="User", source_field="author_id", target_field="id")
         create_domain(workspace, name="Content", entities=["User", "Post"])
 
         result = confirm_schema(workspace)
@@ -305,19 +309,19 @@ class TestCreateAdkTools:
     def test_adk_add_entity_modifies_workspace(self, workspace: SchemaWorkspace) -> None:
         tools = create_adk_tools(workspace)
         add_fn = next(t for t in tools if t.__name__ == "adk_add_entity")
-        result = add_fn(name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        result = add_fn(name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         assert "Added entity" in result
         assert len(workspace.schema.entities) == 1
 
     def test_adk_review_schema_reads_workspace(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         tools = create_adk_tools(workspace)
         review_fn = next(t for t in tools if t.__name__ == "adk_review_schema")
         result = review_fn()
         assert "User" in result
 
     def test_adk_confirm_schema_returns_json(self, workspace: SchemaWorkspace) -> None:
-        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        add_entity(workspace, name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": True}])
         tools = create_adk_tools(workspace)
         confirm_fn = next(t for t in tools if t.__name__ == "adk_confirm_schema")
         result = confirm_fn()

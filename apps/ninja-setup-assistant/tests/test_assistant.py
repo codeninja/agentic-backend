@@ -50,7 +50,7 @@ class TestCreateSetupAgent:
         agent = create_setup_agent(ws)
         # Call the first tool (add_entity) and verify it modifies the shared workspace
         add_tool = next(t for t in agent.tools if callable(t) and getattr(t, "__name__", "") == "adk_add_entity")
-        result = add_tool(name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        result = add_tool(name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": "true"}])
         assert "Added entity" in result
         assert len(ws.schema.entities) == 1
 
@@ -113,6 +113,6 @@ class TestSetupAssistant:
     def test_tool_functions_modify_workspace(self) -> None:
         assistant = SetupAssistant(project_name="test")
         tools = assistant.get_tool_functions()
-        result = tools["adk_add_entity"](name="User", fields=[{"name": "id", "field_type": "uuid"}])
+        result = tools["adk_add_entity"](name="User", fields=[{"name": "id", "field_type": "uuid", "primary_key": "true"}])
         assert "Added entity" in result
         assert len(assistant.workspace.schema.entities) == 1
