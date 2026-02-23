@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 class IdentityStrategy:
     """Manages local user accounts with password hashing and JWT session tokens."""
 
+    # Pre-computed dummy hash so missing-user lookups still run bcrypt,
+    # preventing timing side-channel user enumeration.
+    _DUMMY_HASH: str = bcrypt.hashpw(b"dummy", bcrypt.gensalt()).decode()
+
     def __init__(
         self,
         config: IdentityConfig,
@@ -97,6 +101,11 @@ class IdentityStrategy:
     def login(self, email: str, password: str) -> UserContext | None:
         """Authenticate a user by email and password."""
         user = self._store.get(email)
+        # Always perform a hash comparison to prevent timing side-channel
+        # user enumeration — missing users take the same time as wrong passwords.
+        password_hash = user["password_hash"] if user else self._DUMMY_HASH
+        password_valid = self.verify_password(password, password_hash)
+
         if not user:
             logger.warning(
                 "Login failed: unknown email=%s",
@@ -104,7 +113,7 @@ class IdentityStrategy:
                 extra={"event": "login_failed", "reason": "unknown_email", "email": email},
             )
             return None
-        if not self.verify_password(password, user["password_hash"]):
+        if not password_valid:
             logger.warning(
                 "Login failed: bad password for email=%s",
                 email,

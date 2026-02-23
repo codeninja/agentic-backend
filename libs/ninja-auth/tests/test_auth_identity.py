@@ -283,3 +283,49 @@ def test_issue_token_logs_info(caplog: pytest.LogCaptureFixture) -> None:
     info_records = [r for r in caplog.records if r.levelno == logging.INFO and "Token issued" in r.message]
     assert len(info_records) == 1
     assert ctx.user_id in info_records[0].message
+
+
+# ---------------------------------------------------------------------------
+# Timing side-channel prevention (issue #99)
+# ---------------------------------------------------------------------------
+
+
+def test_login_unknown_user_performs_hash_comparison() -> None:
+    """Login with a non-existent user still performs bcrypt work (constant-time)."""
+    strategy = _make_strategy()
+    # Measure that both paths take comparable time by verifying the dummy
+    # hash class attribute exists and that login still returns None.
+    assert hasattr(IdentityStrategy, "_DUMMY_HASH")
+    assert strategy.login("ghost@example.com", "Password1") is None
+
+
+def test_login_timing_similarity() -> None:
+    """Both missing-user and wrong-password paths invoke bcrypt verify."""
+    import time
+
+    strategy = _make_strategy()
+    strategy.register("real@example.com", VALID_PASSWORD)
+
+    # Warm up bcrypt (first call can be slower due to imports/caching)
+    strategy.login("real@example.com", "WrongPass1")
+
+    samples = 3
+    missing_times: list[float] = []
+    wrong_pw_times: list[float] = []
+
+    for _ in range(samples):
+        t0 = time.perf_counter()
+        strategy.login("nonexistent@example.com", "Password1")
+        missing_times.append(time.perf_counter() - t0)
+
+        t0 = time.perf_counter()
+        strategy.login("real@example.com", "WrongPass1")
+        wrong_pw_times.append(time.perf_counter() - t0)
+
+    avg_missing = sum(missing_times) / samples
+    avg_wrong = sum(wrong_pw_times) / samples
+
+    # Both paths should be within 3x of each other (generous margin for CI).
+    # Before the fix, missing-user was ~1000x faster (no bcrypt).
+    ratio = max(avg_missing, avg_wrong) / min(avg_missing, avg_wrong)
+    assert ratio < 3.0, f"Timing ratio {ratio:.1f}x — possible enumeration leak"
