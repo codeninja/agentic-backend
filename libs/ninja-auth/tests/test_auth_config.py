@@ -164,6 +164,32 @@ class TestBearerConfigValidation:
             with pytest.raises(ValueError, match="must not be 'none'"):
                 BearerConfig(algorithm=variant)
 
+    # --- Algorithm confusion tests (issue #172) ---
+
+    def test_hmac_with_public_key_rejected(self):
+        """HMAC algorithm + public_key = algorithm confusion vulnerability."""
+        for alg in ("HS256", "HS384", "HS512"):
+            with pytest.raises(ValueError, match="algorithm confusion"):
+                BearerConfig(algorithm=alg, secret_key="my-secret", public_key="some-pub-key")
+
+    def test_asymmetric_with_secret_key_rejected(self):
+        """Asymmetric algorithm + secret_key = misconfiguration."""
+        for alg in ("RS256", "RS384", "RS512", "ES256", "ES384", "ES512"):
+            with pytest.raises(ValueError, match="secret_key.*also set"):
+                BearerConfig(algorithm=alg, secret_key="my-secret", public_key="some-pub-key")
+
+    def test_asymmetric_without_secret_key_accepted(self):
+        """Asymmetric algorithm with only public_key should work."""
+        cfg = BearerConfig(algorithm="RS256", public_key="some-public-key")
+        assert cfg.algorithm == "RS256"
+        assert cfg.public_key == "some-public-key"
+
+    def test_hmac_without_public_key_accepted(self):
+        """HMAC algorithm with only secret_key should work."""
+        cfg = BearerConfig(algorithm="HS256", secret_key="my-secret")
+        assert cfg.algorithm == "HS256"
+        assert cfg.secret_key == "my-secret"
+
 
 # --- Tests for OAuth2ProviderConfig.redirect_uri validation (issue #56) ---
 
