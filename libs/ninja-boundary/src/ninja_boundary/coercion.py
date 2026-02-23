@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import uuid
 from datetime import date, datetime, timezone
 from enum import Enum
@@ -226,6 +228,80 @@ def _coerce_text(value: Any, strictness: StrictnessLevel) -> str:
     return _coerce_string(value, strictness)
 
 
+def _coerce_json(value: Any, strictness: StrictnessLevel) -> Any:
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError("expected dict or list, got str")
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid JSON string: {exc}") from exc
+        if not isinstance(parsed, (dict, list)):
+            raise ValueError(f"JSON must parse to dict or list, got {type(parsed).__name__}")
+        return parsed
+    raise ValueError(f"cannot coerce {type(value).__name__} to json")
+
+
+def _coerce_array(value: Any, strictness: StrictnessLevel) -> list:
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError("expected list, got tuple")
+        return list(value)
+    if isinstance(value, set | frozenset):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError(f"expected list, got {type(value).__name__}")
+        return sorted(value, key=str)
+    if isinstance(value, str):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError("expected list, got str")
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid JSON array string: {exc}") from exc
+        if not isinstance(parsed, list):
+            raise ValueError(f"expected JSON array, got {type(parsed).__name__}")
+        return parsed
+    raise ValueError(f"cannot coerce {type(value).__name__} to array")
+
+
+def _coerce_binary(value: Any, strictness: StrictnessLevel) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError("expected bytes, got bytearray")
+        return bytes(value)
+    if isinstance(value, str):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError("expected bytes, got str")
+        try:
+            return base64.b64decode(value, validate=True)
+        except Exception:
+            pass
+        try:
+            if value.startswith(("0x", "0X")):
+                return bytes.fromhex(value[2:])
+            return bytes.fromhex(value)
+        except ValueError:
+            pass
+        raise ValueError("cannot decode str to bytes (expected base64 or hex)")
+    raise ValueError(f"cannot coerce {type(value).__name__} to binary")
+
+
+def _coerce_enum(value: Any, strictness: StrictnessLevel) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, int) and not isinstance(value, bool):
+        if strictness == StrictnessLevel.STRICT:
+            raise ValueError("expected str for enum, got int")
+        return str(value)
+    raise ValueError(f"cannot coerce {type(value).__name__} to enum")
+
+
 _COERCERS: dict[FieldType, Any] = {
     FieldType.STRING: _coerce_string,
     FieldType.TEXT: _coerce_text,
@@ -235,4 +311,8 @@ _COERCERS: dict[FieldType, Any] = {
     FieldType.DATETIME: _coerce_datetime,
     FieldType.DATE: _coerce_date,
     FieldType.UUID: _coerce_uuid,
+    FieldType.JSON: _coerce_json,
+    FieldType.ARRAY: _coerce_array,
+    FieldType.BINARY: _coerce_binary,
+    FieldType.ENUM: _coerce_enum,
 }

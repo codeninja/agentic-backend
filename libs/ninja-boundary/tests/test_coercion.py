@@ -1,5 +1,6 @@
 """Tests for the coercion engine."""
 
+import base64
 from datetime import date, datetime, timezone
 
 import pytest
@@ -161,6 +162,163 @@ class TestUUIDCoercion:
     def test_invalid_uuid_raises(self, engine):
         with pytest.raises(CoercionError):
             engine.coerce("not-a-uuid", FieldType.UUID, "id", "User")
+
+
+class TestJSONCoercion:
+    def test_dict_passthrough(self, engine, audit):
+        val = {"key": "value"}
+        result = engine.coerce(val, FieldType.JSON, "meta", "User", audit=audit)
+        assert result == {"key": "value"}
+        assert len(audit) == 0
+
+    def test_list_passthrough(self, engine):
+        val = [1, 2, 3]
+        assert engine.coerce(val, FieldType.JSON, "tags", "User") == [1, 2, 3]
+
+    def test_string_to_dict(self, engine, audit):
+        result = engine.coerce('{"a": 1}', FieldType.JSON, "meta", "User", audit=audit)
+        assert result == {"a": 1}
+        assert len(audit) == 1
+
+    def test_string_to_list(self, engine):
+        result = engine.coerce("[1, 2]", FieldType.JSON, "tags", "User")
+        assert result == [1, 2]
+
+    def test_invalid_json_string_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce("{bad json", FieldType.JSON, "meta", "User")
+
+    def test_scalar_json_string_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce('"just a string"', FieldType.JSON, "meta", "User")
+
+    def test_strict_rejects_string(self):
+        engine = CoercionEngine(StrictnessLevel.STRICT)
+        with pytest.raises(CoercionError):
+            engine.coerce('{"a": 1}', FieldType.JSON, "meta", "User")
+
+    def test_non_string_non_dict_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce(42, FieldType.JSON, "meta", "User")
+
+
+class TestArrayCoercion:
+    def test_list_passthrough(self, engine, audit):
+        val = [1, 2, 3]
+        result = engine.coerce(val, FieldType.ARRAY, "tags", "User", audit=audit)
+        assert result == [1, 2, 3]
+        assert len(audit) == 0
+
+    def test_tuple_to_list(self, engine, audit):
+        result = engine.coerce((1, 2, 3), FieldType.ARRAY, "tags", "User", audit=audit)
+        assert result == [1, 2, 3]
+        assert isinstance(result, list)
+        assert len(audit) == 1
+
+    def test_set_to_list(self, engine):
+        result = engine.coerce({"b", "a"}, FieldType.ARRAY, "tags", "User")
+        assert isinstance(result, list)
+        assert sorted(result) == ["a", "b"]
+
+    def test_string_json_array(self, engine):
+        result = engine.coerce('[1, "two", 3]', FieldType.ARRAY, "tags", "User")
+        assert result == [1, "two", 3]
+
+    def test_string_json_object_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce('{"a": 1}', FieldType.ARRAY, "tags", "User")
+
+    def test_invalid_json_string_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce("[bad", FieldType.ARRAY, "tags", "User")
+
+    def test_strict_rejects_tuple(self):
+        engine = CoercionEngine(StrictnessLevel.STRICT)
+        with pytest.raises(CoercionError):
+            engine.coerce((1, 2), FieldType.ARRAY, "tags", "User")
+
+    def test_strict_rejects_string(self):
+        engine = CoercionEngine(StrictnessLevel.STRICT)
+        with pytest.raises(CoercionError):
+            engine.coerce("[1]", FieldType.ARRAY, "tags", "User")
+
+    def test_non_iterable_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce(42, FieldType.ARRAY, "tags", "User")
+
+
+class TestBinaryCoercion:
+    def test_bytes_passthrough(self, engine, audit):
+        val = b"\x00\x01\x02"
+        result = engine.coerce(val, FieldType.BINARY, "data", "File", audit=audit)
+        assert result == b"\x00\x01\x02"
+        assert len(audit) == 0
+
+    def test_bytearray_to_bytes(self, engine):
+        result = engine.coerce(bytearray(b"\x01\x02"), FieldType.BINARY, "data", "File")
+        assert result == b"\x01\x02"
+        assert isinstance(result, bytes)
+
+    def test_base64_string(self, engine):
+        encoded = base64.b64encode(b"hello world").decode()
+        result = engine.coerce(encoded, FieldType.BINARY, "data", "File")
+        assert result == b"hello world"
+
+    def test_hex_string_0x_prefix(self, engine):
+        result = engine.coerce("0xdeadbeef", FieldType.BINARY, "data", "File")
+        assert result == b"\xde\xad\xbe\xef"
+
+    def test_hex_string_0X_prefix(self, engine):
+        result = engine.coerce("0X0102", FieldType.BINARY, "data", "File")
+        assert result == b"\x01\x02"
+
+    def test_invalid_string_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce("not-binary-data!!!", FieldType.BINARY, "data", "File")
+
+    def test_strict_rejects_string(self):
+        engine = CoercionEngine(StrictnessLevel.STRICT)
+        with pytest.raises(CoercionError):
+            engine.coerce("deadbeef", FieldType.BINARY, "data", "File")
+
+    def test_strict_rejects_bytearray(self):
+        engine = CoercionEngine(StrictnessLevel.STRICT)
+        with pytest.raises(CoercionError):
+            engine.coerce(bytearray(b"\x01"), FieldType.BINARY, "data", "File")
+
+    def test_non_bytes_type_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce(42, FieldType.BINARY, "data", "File")
+
+
+class TestEnumCoercion:
+    def test_string_passthrough(self, engine, audit):
+        result = engine.coerce("ACTIVE", FieldType.ENUM, "status", "User", audit=audit)
+        assert result == "ACTIVE"
+        assert len(audit) == 0
+
+    def test_string_stripped(self, engine, audit):
+        result = engine.coerce("  ACTIVE  ", FieldType.ENUM, "status", "User", audit=audit)
+        assert result == "ACTIVE"
+        assert len(audit) == 1
+
+    def test_int_to_string_permissive(self, engine, audit):
+        result = engine.coerce(1, FieldType.ENUM, "priority", "Task", audit=audit)
+        assert result == "1"
+        assert len(audit) == 1
+
+    def test_strict_rejects_int(self):
+        engine = CoercionEngine(StrictnessLevel.STRICT)
+        with pytest.raises(CoercionError):
+            engine.coerce(1, FieldType.ENUM, "status", "User")
+
+    def test_bool_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce(True, FieldType.ENUM, "status", "User")
+
+    def test_non_string_raises(self, engine):
+        with pytest.raises(CoercionError):
+            engine.coerce([1, 2], FieldType.ENUM, "status", "User")
 
 
 class TestNullHandling:
