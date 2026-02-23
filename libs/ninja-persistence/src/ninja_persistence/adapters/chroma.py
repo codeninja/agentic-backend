@@ -8,7 +8,7 @@ from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
 
-from ninja_persistence.adapters import _validate_limit
+from ninja_persistence.adapters import _validate_limit, _validate_offset
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     DuplicateEntityError,
@@ -82,18 +82,21 @@ class ChromaVectorAdapter:
             doc["document"] = documents[0]
         return doc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters.
 
         Args:
             filters: Chroma ``where`` filters.
             limit: Max records to return (1–1000). Values above 1000 are capped;
                    values below 1 raise ``ValueError``.
+            offset: Number of records to skip before returning results.
+                    Negative values raise ``ValueError``.
         """
         limit = _validate_limit(limit)
+        offset = _validate_offset(offset)
         try:
             coll = await self._get_collection()
-            kwargs: dict[str, Any] = {"limit": limit}
+            kwargs: dict[str, Any] = {"limit": limit, "offset": offset}
             if filters and "where" in filters:
                 kwargs["where"] = filters["where"]
             result = await asyncio.to_thread(coll.get, **kwargs)

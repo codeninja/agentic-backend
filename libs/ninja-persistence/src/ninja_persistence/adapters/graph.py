@@ -7,6 +7,7 @@ from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
 
+from ninja_persistence.adapters import _validate_limit, _validate_offset
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     PersistenceError,
@@ -83,7 +84,7 @@ class GraphAdapter:
                 cause=exc,
             ) from exc
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """Retrieve multiple nodes matching optional property filters.
 
         Args:
@@ -91,12 +92,16 @@ class GraphAdapter:
                      If ``None`` or empty, all nodes with the entity label
                      are returned.
             limit: Maximum number of nodes to return.
+            offset: Number of nodes to skip before returning results.
+                    Negative values raise ``ValueError``.
 
         Returns:
             A list of dicts, each representing a matched node's properties.
         """
+        limit = _validate_limit(limit)
+        offset = _validate_offset(offset)
         driver = self._get_driver()
-        params: dict[str, Any] = {"limit": limit}
+        params: dict[str, Any] = {"limit": limit, "skip": offset}
 
         if filters:
             where_clauses = []
@@ -105,9 +110,9 @@ class GraphAdapter:
                 where_clauses.append(f"n.`{key}` = ${param_name}")
                 params[param_name] = value
             where_str = " AND ".join(where_clauses)
-            query = f"MATCH (n:`{self._label}`) WHERE {where_str} RETURN n LIMIT $limit"
+            query = f"MATCH (n:`{self._label}`) WHERE {where_str} RETURN n SKIP $skip LIMIT $limit"
         else:
-            query = f"MATCH (n:`{self._label}`) RETURN n LIMIT $limit"
+            query = f"MATCH (n:`{self._label}`) RETURN n SKIP $skip LIMIT $limit"
 
         try:
             async with driver.session() as session:

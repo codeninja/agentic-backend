@@ -9,6 +9,7 @@ from typing import Any
 
 from ninja_core.schema.entity import EntitySchema
 
+from ninja_persistence.adapters import _validate_limit, _validate_offset
 from ninja_persistence.exceptions import (
     ConnectionFailedError,
     PersistenceError,
@@ -173,7 +174,7 @@ class MilvusVectorAdapter:
             return None
         return self._row_to_dict(results[0])
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters.
 
         Args:
@@ -182,10 +183,14 @@ class MilvusVectorAdapter:
                 (e.g. ``"category == 'news'"``) .  A ``"where"`` key is also
                 accepted for compatibility with the Chroma adapter.
             limit: Maximum number of records to return.
+            offset: Number of records to skip before returning results.
+                    Negative values raise ``ValueError``.
 
         Returns:
             A list of matching record dicts.
         """
+        limit = _validate_limit(limit)
+        offset = _validate_offset(offset)
         await self._ensure_collection()
         client = self._require_client()
 
@@ -197,6 +202,7 @@ class MilvusVectorAdapter:
             "collection_name": self._collection_name,
             "output_fields": self._output_fields(),
             "limit": limit,
+            "offset": offset,
         }
         if filter_expr:
             kwargs["filter"] = filter_expr

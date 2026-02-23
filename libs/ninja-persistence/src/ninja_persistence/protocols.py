@@ -19,7 +19,7 @@ class Repository(Protocol[T]):
         """Retrieve a single record by primary key."""
         ...
 
-    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    async def find_many(self, filters: dict[str, Any] | None = None, limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         """Retrieve multiple records matching the given filters."""
         ...
 
