@@ -56,6 +56,24 @@ class TestAuditLog:
         audit.clear()
         assert len(audit) == 0
 
+    def test_bool_empty_is_false(self):
+        audit = AuditLog()
+        assert not audit
+        assert bool(audit) is False
+
+    def test_bool_non_empty_is_true(self):
+        audit = AuditLog()
+        audit.record("User", "age", CoercionAction.TYPE_CAST, "1", 1, "cast")
+        assert audit
+        assert bool(audit) is True
+
+    def test_bool_after_clear_is_false(self):
+        audit = AuditLog()
+        audit.record("User", "age", CoercionAction.TYPE_CAST, "1", 1, "cast")
+        assert bool(audit) is True
+        audit.clear()
+        assert bool(audit) is False
+
 
 # --- Tests for sensitive field redaction in audit logging (issue #56) ---
 
