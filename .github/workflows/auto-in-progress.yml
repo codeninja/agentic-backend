@@ -28,7 +28,7 @@ jobs:
       - name: Move issue to In Progress on project board
         if: steps.extract.outputs.issue_number != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
           PROJECT_ID: "PVT_kwHNOkLOAT6Qtg"
           FIELD_ID: "PVTSSF_lAHNOkLOAT6Qts4Pf31M"
           IN_PROGRESS_ID: "47fc9ee4"
