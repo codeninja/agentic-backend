@@ -273,7 +273,9 @@ class TestRBACLogging:
             result = policy.is_allowed(perms, "write", "Orders")
 
         assert result is False
-        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING and "Permission denied" in r.message]
+        warning_records = [
+            r for r in caplog.records if r.levelno == logging.WARNING and "Permission denied" in r.message
+        ]
         assert len(warning_records) == 1
         assert "write" in warning_records[0].message
         assert "Orders" in warning_records[0].message

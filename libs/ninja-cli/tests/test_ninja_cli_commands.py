@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import typer
-
 from ninja_cli.cli import _validate_name, app
 from typer.testing import CliRunner
 
@@ -17,12 +16,16 @@ def _init_project(root: Path) -> None:
     """Create a minimal .ninjastack/ directory for testing."""
     ns = root / ".ninjastack"
     ns.mkdir()
-    ns.joinpath("schema.json").write_text(json.dumps({
-        "project_name": "test-project",
-        "version": "1.0.0",
-        "entities": [],
-        "domains": [],
-    }))
+    ns.joinpath("schema.json").write_text(
+        json.dumps(
+            {
+                "project_name": "test-project",
+                "version": "1.0.0",
+                "entities": [],
+                "domains": [],
+            }
+        )
+    )
 
 
 class TestInitCommand:
@@ -157,20 +160,20 @@ class TestValidateName:
     @pytest.mark.parametrize(
         "name",
         [
-            "",                        # empty
-            "Uppercase",               # uppercase letters
-            "123start",                # starts with digit
-            "-leading-hyphen",         # starts with hyphen
-            "has spaces",              # spaces
-            "semi;colon",              # shell metacharacter
-            "pipe|char",               # shell metacharacter
-            "back`tick",               # shell metacharacter
-            "$(cmd)",                  # command substitution
-            "../traversal",            # path traversal
-            "foo\nbar",               # newline injection
-            "a" * 65,                  # exceeds max length
-            "ninja_underscore",        # underscores not allowed
-            "has.dot",                 # dots not allowed
+            "",  # empty
+            "Uppercase",  # uppercase letters
+            "123start",  # starts with digit
+            "-leading-hyphen",  # starts with hyphen
+            "has spaces",  # spaces
+            "semi;colon",  # shell metacharacter
+            "pipe|char",  # shell metacharacter
+            "back`tick",  # shell metacharacter
+            "$(cmd)",  # command substitution
+            "../traversal",  # path traversal
+            "foo\nbar",  # newline injection
+            "a" * 65,  # exceeds max length
+            "ninja_underscore",  # underscores not allowed
+            "has.dot",  # dots not allowed
         ],
     )
     def test_invalid_names_rejected(self, name):

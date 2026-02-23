@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 import yaml
 from ninja_core.schema.project import AgenticSchema
-from ninja_deploy.k8s_generator import INFRA_IMAGES, K8sGenerator, PlaceholderCredentialError
+from ninja_deploy.k8s_generator import INFRA_IMAGES, K8sGenerator
 
 
 class TestK8sGeneratorDeployment:
@@ -371,9 +370,18 @@ class TestK8sGeneratorGenerateAll:
 
 class TestK8sInfraImages:
     def test_infra_images_have_required_keys(self):
-        required = {"name", "image", "port", "run_as_user", "run_as_group",
-                     "read_only_fs", "cpu_request", "memory_request",
-                     "cpu_limit", "memory_limit"}
+        required = {
+            "name",
+            "image",
+            "port",
+            "run_as_user",
+            "run_as_group",
+            "read_only_fs",
+            "cpu_request",
+            "memory_request",
+            "cpu_limit",
+            "memory_limit",
+        }
         for engine, info in INFRA_IMAGES.items():
             assert required.issubset(info.keys()), f"{engine} missing keys"
 
@@ -393,8 +401,7 @@ class TestK8sPlaceholderCredentials:
 
     def test_allow_placeholder_creds_suppresses_error(self, sample_asd):
         """With allow_placeholder_creds=True, changeme triggers a warning not an error."""
-        import logging
-        gen = K8sGenerator(sample_asd)
+        K8sGenerator(sample_asd)
         # Inject changeme into a file to test the warning path
         files = {"test.yaml": "password: changeme\n"}
         locations = K8sGenerator._check_placeholder_credentials(files)

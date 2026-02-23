@@ -163,7 +163,10 @@ class RBACPolicy:
         if not allowed:
             logger.warning(
                 "Permission denied: action=%s domain=%s entity=%s granted_permissions=%s",
-                action, domain, entity, permissions,
+                action,
+                domain,
+                entity,
+                permissions,
                 extra={
                     "event": "permission_denied",
                     "action": action,
@@ -175,7 +178,9 @@ class RBACPolicy:
         else:
             logger.debug(
                 "Permission check passed: action=%s domain=%s entity=%s",
-                action, domain, entity,
+                action,
+                domain,
+                entity,
                 extra={"event": "permission_granted", "action": action, "domain": domain, "entity": entity},
             )
         return allowed

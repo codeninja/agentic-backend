@@ -73,9 +73,7 @@ def _build_table(entity: EntitySchema, metadata: sa.MetaData) -> sa.Table:
     return sa.Table(table_name, metadata, *columns)
 
 
-def _build_embedding_table(
-    base_table_name: str, metadata: sa.MetaData, dimensions: int, vector_type: Any
-) -> sa.Table:
+def _build_embedding_table(base_table_name: str, metadata: sa.MetaData, dimensions: int, vector_type: Any) -> sa.Table:
     """Build the companion ``_embeddings`` table for pgvector storage."""
     return sa.Table(
         f"{base_table_name}_embeddings",
@@ -134,9 +132,7 @@ class SQLAdapter:
                 self._pgvector_available = True
                 self._vector_type = Vector
                 base_name = entity.collection_name or entity.name.lower()
-                self._embedding_table = _build_embedding_table(
-                    base_name, self._metadata, embedding_dimensions, Vector
-                )
+                self._embedding_table = _build_embedding_table(base_name, self._metadata, embedding_dimensions, Vector)
             except ImportError:
                 logger.debug(
                     "pgvector not installed; pgvector features disabled for %s. "
@@ -399,7 +395,7 @@ class SQLAdapter:
 
         assert self._embedding_table is not None  # noqa: S101
         tbl = self._embedding_table
-        pk = _get_pk_column(self._table)
+        _get_pk_column(self._table)
 
         try:
             query_vec = json.loads(query) if isinstance(query, str) else query
@@ -419,9 +415,7 @@ class SQLAdapter:
         try:
             cosine_distance = tbl.c.embedding.cosine_distance(query_vec)
             emb_stmt = (
-                sa.select(tbl.c.record_id, cosine_distance.label("distance"))
-                .order_by(cosine_distance)
-                .limit(limit)
+                sa.select(tbl.c.record_id, cosine_distance.label("distance")).order_by(cosine_distance).limit(limit)
             )
             async with AsyncSession(self._engine) as session:
                 emb_result = await session.execute(emb_stmt)
@@ -474,8 +468,7 @@ class SQLAdapter:
         """
         if not self.has_vector_support:
             raise NotImplementedError(
-                "Cannot reindex: no vector backend configured. "
-                "Enable pgvector or provide a vector_sidecar."
+                "Cannot reindex: no vector backend configured. Enable pgvector or provide a vector_sidecar."
             )
 
         pk = _get_pk_column(self._table)
@@ -486,9 +479,7 @@ class SQLAdapter:
             emb_tbl = self._embedding_table
             stmt = (
                 sa.select(pk)
-                .select_from(
-                    self._table.outerjoin(emb_tbl, pk == emb_tbl.c.record_id)
-                )
+                .select_from(self._table.outerjoin(emb_tbl, pk == emb_tbl.c.record_id))
                 .where(emb_tbl.c.record_id.is_(None))
                 .limit(batch_size)
             )

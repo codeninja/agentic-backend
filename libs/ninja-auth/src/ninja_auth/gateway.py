@@ -83,7 +83,10 @@ class AuthGateway(BaseHTTPMiddleware):
         if user_ctx is not None:
             logger.info(
                 "Authentication successful: user_id=%s provider=%s ip=%s path=%s",
-                user_ctx.user_id, user_ctx.provider, client_ip, request.url.path,
+                user_ctx.user_id,
+                user_ctx.provider,
+                client_ip,
+                request.url.path,
                 extra={
                     "event": "auth_success",
                     "user_id": user_ctx.user_id,

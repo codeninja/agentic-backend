@@ -55,7 +55,8 @@ class ApiKeyStrategy:
             if hmac.compare_digest(input_hash, expected_hash):
                 logger.info(
                     "API key validated: key_name=%s user_id=apikey:%s",
-                    name, name,
+                    name,
+                    name,
                     extra={"event": "apikey_validated", "key_name": name, "user_id": f"apikey:{name}"},
                 )
                 return UserContext(

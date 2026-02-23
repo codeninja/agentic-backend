@@ -21,7 +21,6 @@ from ninja_core.schema.entity import (
 )
 from ninja_core.schema.project import AgenticSchema
 from ninja_core.schema.relationship import Cardinality, RelationshipSchema, RelationshipType
-from ninja_core.serialization.io import save_schema
 
 # ---------------------------------------------------------------------------
 # 1. Define Entities
@@ -33,17 +32,22 @@ book = EntitySchema(
     description="A book in the catalog.",
     fields=[
         FieldSchema(name="id", field_type=FieldType.UUID, primary_key=True),
-        FieldSchema(name="title", field_type=FieldType.STRING, indexed=True,
-                    constraints=FieldConstraint(min_length=1, max_length=500)),
+        FieldSchema(
+            name="title",
+            field_type=FieldType.STRING,
+            indexed=True,
+            constraints=FieldConstraint(min_length=1, max_length=500),
+        ),
         FieldSchema(name="author", field_type=FieldType.STRING, indexed=True),
-        FieldSchema(name="isbn", field_type=FieldType.STRING, unique=True,
-                    constraints=FieldConstraint(pattern=r"^\d{13}$")),
-        FieldSchema(name="price", field_type=FieldType.FLOAT,
-                    constraints=FieldConstraint(ge=0.0)),
-        FieldSchema(name="genre", field_type=FieldType.ENUM,
-                    constraints=FieldConstraint(
-                        enum_values=["fiction", "non-fiction", "sci-fi", "mystery", "biography"]
-                    )),
+        FieldSchema(
+            name="isbn", field_type=FieldType.STRING, unique=True, constraints=FieldConstraint(pattern=r"^\d{13}$")
+        ),
+        FieldSchema(name="price", field_type=FieldType.FLOAT, constraints=FieldConstraint(ge=0.0)),
+        FieldSchema(
+            name="genre",
+            field_type=FieldType.ENUM,
+            constraints=FieldConstraint(enum_values=["fiction", "non-fiction", "sci-fi", "mystery", "biography"]),
+        ),
         FieldSchema(name="published_date", field_type=FieldType.DATE, nullable=True),
         FieldSchema(name="in_stock", field_type=FieldType.BOOLEAN, default=True),
     ],
@@ -68,12 +72,12 @@ order = EntitySchema(
     fields=[
         FieldSchema(name="id", field_type=FieldType.UUID, primary_key=True),
         FieldSchema(name="customer_id", field_type=FieldType.UUID, indexed=True),
-        FieldSchema(name="total", field_type=FieldType.FLOAT,
-                    constraints=FieldConstraint(ge=0.0)),
-        FieldSchema(name="status", field_type=FieldType.ENUM,
-                    constraints=FieldConstraint(
-                        enum_values=["pending", "confirmed", "shipped", "delivered", "cancelled"]
-                    )),
+        FieldSchema(name="total", field_type=FieldType.FLOAT, constraints=FieldConstraint(ge=0.0)),
+        FieldSchema(
+            name="status",
+            field_type=FieldType.ENUM,
+            constraints=FieldConstraint(enum_values=["pending", "confirmed", "shipped", "delivered", "cancelled"]),
+        ),
         FieldSchema(name="created_at", field_type=FieldType.DATETIME),
     ],
 )
@@ -86,15 +90,17 @@ review = EntitySchema(
         FieldSchema(name="id", field_type=FieldType.UUID, primary_key=True),
         FieldSchema(name="book_id", field_type=FieldType.UUID, indexed=True),
         FieldSchema(name="customer_id", field_type=FieldType.UUID, indexed=True),
-        FieldSchema(name="rating", field_type=FieldType.INTEGER,
-                    constraints=FieldConstraint(ge=1, le=5)),
-        FieldSchema(name="text", field_type=FieldType.TEXT,
-                    description="Free-text review body — vectorized for semantic search.",
-                    embedding=EmbeddingConfig(
-                        model="text-embedding-3-small",
-                        dimensions=1536,
-                        chunk_strategy="paragraph",
-                    )),
+        FieldSchema(name="rating", field_type=FieldType.INTEGER, constraints=FieldConstraint(ge=1, le=5)),
+        FieldSchema(
+            name="text",
+            field_type=FieldType.TEXT,
+            description="Free-text review body — vectorized for semantic search.",
+            embedding=EmbeddingConfig(
+                model="text-embedding-3-small",
+                dimensions=1536,
+                chunk_strategy="paragraph",
+            ),
+        ),
         FieldSchema(name="created_at", field_type=FieldType.DATETIME),
     ],
 )
@@ -187,7 +193,9 @@ commerce_domain = DomainSchema(
 
 print(f"\n✅ Domains defined: {len([catalog_domain, commerce_domain])}")
 for d in [catalog_domain, commerce_domain]:
-    print(f"   {d.name}: entities={d.entities}, model={d.agent_config.model_name}, reasoning={d.agent_config.reasoning_level.value}")
+    print(
+        f"   {d.name}: entities={d.entities}, model={d.agent_config.model_name}, reasoning={d.agent_config.reasoning_level.value}"
+    )
 
 # ---------------------------------------------------------------------------
 # 4. Assemble the Full Schema

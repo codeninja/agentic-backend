@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
 import yaml
 from ninja_core.schema.project import AgenticSchema
-from ninja_deploy.helm_generator import ENV_PROFILES, INFRA_CHART_MAP, HelmGenerator, PlaceholderCredentialError
+from ninja_deploy.helm_generator import ENV_PROFILES, INFRA_CHART_MAP, HelmGenerator
 
 
 class TestHelmGeneratorChart:
